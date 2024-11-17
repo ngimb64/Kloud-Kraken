@@ -26,7 +26,7 @@ var END_TRANSFER_MARKER = []byte("<END_TRANSFER>")
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
-// - waitGroup:  Used to synchronize the Goroutines running
+// - waitGroup:  Acts as a barrier for the Goroutines running
 func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup) {
 	// Decrements the wait group counter upon function exit
 	defer waitGroup.Done()
@@ -146,8 +146,8 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			file.Close()
 			// Send the file name through a channel to process it
 			channel <- fileName
+		// Otherwise print error
 		} else if err != nil {
-			// Otherwise print error
 			fmt.Println("Error reading data from server:", err)
 			return
 		}
@@ -171,7 +171,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			}
 
 			// Set a file path with the received file name
-			filePath := path.Join("/tmp", string(fileName))
+			filePath := path.Join(STORAGE_PATH, string(fileName))
 			// Reset the buffer to optimal size based on expected file size
 			buffer = make([]byte, getOptimalBufferSize(fileSize))
 
@@ -203,8 +203,6 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // Parameters:
 // - connection:  The TCP socket connection utilized for transferring data
 func handleConnection(connection net.Conn) {
-	defer connection.Close()
-
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
 
@@ -234,6 +232,7 @@ func connectRemote(address string) {
 		fmt.Println("Error connecting to server:", err)
 		return
 	}
+	// Close connection existing connection
 	defer connection.Close()
 
 	handleConnection(connection)
