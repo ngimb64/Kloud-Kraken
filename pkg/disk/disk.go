@@ -26,7 +26,7 @@ var START_TRANSFER_SUFFIX = []byte(">")
 // - A integer file size
 // - Either nil on success or a string error message on failure
 //
-func getFileInfo(readData []byte) ([]byte, int, any) {
+func GetFileInfo(readData []byte) ([]byte, int, any) {
 	// Trim the delimiters around the file info
 	readData = bytes.TrimPrefix(readData, START_TRANSFER_PREFIX)
 	readData = bytes.TrimSuffix(readData, START_TRANSFER_SUFFIX)
@@ -49,7 +49,7 @@ func getFileInfo(readData []byte) ([]byte, int, any) {
 
 
 // GetDiskSpace gets the total and available space on the root disk.
-func getDiskSpace() (total uint64, free uint64, err error) {
+func GetDiskSpace() (total uint64, free uint64, err error) {
     var statfs unix.Statfs_t
 
     // Get the stats of the root filesystem ("/")
@@ -67,12 +67,12 @@ func getDiskSpace() (total uint64, free uint64, err error) {
 }
 
 
-func diskCheck() (uint64) {
+func DiskCheck() (uint64) {
 	// Reserved space for the OS (10GB)
 	var OSReservedSpace uint64 = 10 * GB
 
 	// Get the total and available disk space
-	total, free, err := getDiskSpace()
+	total, free, err := GetDiskSpace()
 	if err != nil {
 		fmt.Println("Error getting disk space:", err)
 		os.Exit(1)

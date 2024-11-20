@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/config"
+	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 )
 
 // Package level variables
@@ -98,6 +99,88 @@ func getOptimalBufferSize(fileSize int) int {
 }
 
 
+func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
+					 transferComplete bool) {
+	var fileName []byte
+	var file *os.File
+
+	// Send the transfer request message to initiate file transfer
+	_, err := connection.Write(TRANSFER_REQUEST_MARKER)
+	// If there was an error sending the transfer request
+	if err != nil {
+		println("Error sending the transfer request to brain server")
+		os.Exit(1)
+	}
+
+	// Wait for the brain server to send the start transfer message
+	_, err = connection.Read(buffer)
+	// If there was an error reading data from the socket
+	if err != nil {
+		fmt.Println("Error reading data from server:", err)
+		os.Exit(1)
+	}
+
+	// If the brain has completed transferring all data
+	if bytes.Contains(buffer, END_TRANSFER_MARKER) {
+		// Send finished message to other Goroutine
+		channel <- END_TRANSFER_MARKER
+		transferComplete = true
+		return
+	}
+
+	// If the read data starts with special delimiter and ends with a closed bracket
+	if bytes.HasPrefix(buffer, START_TRANSFER_PREFIX)&&
+	bytes.HasSuffix(buffer, START_TRANSFER_SUFFIX) {
+		// Extract the file name and size from the initial transfer message
+		fileName, fileSize, err := disk.GetFileInfo(buffer)
+		// If there was an error converting the file size to int
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		// Set a file path with the received file name
+		filePath := path.Join(STORAGE_PATH, string(fileName))
+		// Reset the buffer to optimal size based on expected file size
+		buffer = make([]byte, getOptimalBufferSize(fileSize))
+
+		// Open the file for writing
+		file, err := os.Create(filePath)
+		// If the file failed to open
+		if err != nil {
+			fmt.Println("Error creating file:", err)
+			return
+		}
+
+		// Close file when the function exits
+		defer file.Close()
+	// If unexpected behavior occurred
+	} else {
+		fmt.Println("[*] Unusual behavior detected processTransfer method")
+		os.Exit(1)
+	}
+
+	for {
+		// Read data into the buffer
+		bytesRead, err := connection.Read(buffer)
+		// If the EOF has been reached
+		if err == io.EOF {
+			// Send the file name through a channel to process it
+			channel <- fileName
+			break
+		}
+
+		// Write the data to the file
+		_, err = file.Write(buffer[:bytesRead])
+		// If there was an error writig data to the file
+		if err != nil {
+			fmt.Println("Error writing to file:", err)
+			return
+		}
+	}
+}
+
+
 // Concurrently reads data from TCP socket connection until entire file has been
 // transferred. Afterwards the file name is passed through a channel to the process
 // data Goroutine to load the file into data processing.
@@ -113,78 +196,24 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 	// Decrements the wait group counter upon function exit
 	defer waitGroup.Done()
 
-	var file *os.File
-	var fileName []byte
+	transferComplete := false
 	// Set the initial buffer size
 	buffer := make([]byte, 512)
 
 	// Read data from the connection in chunks and write to the file
 	for {
 		// Get the remaining available disk space
-		remainingSpace := diskCheck()
+		remainingSpace := disk.DiskCheck()
 
 		// If there is enough disk space to store the max file size
 		if remainingSpace > appConfig.MaxFileSizeInt {
-
+			// Call function to process the transfer of a file
+			processTransfer(connection, channel, buffer, transferComplete)
 		}
 
-
-
-
-		// Read data into the buffer
-		bytesRead, err := connection.Read(buffer)
-		// If the EOF has been reached
-		if err == io.EOF {
-			// Close the file descriptor
-			file.Close()
-			// Send the file name through a channel to process it
-			channel <- fileName
-		// Otherwise print error
-		} else if err != nil {
-			fmt.Println("Error reading data from server:", err)
-			return
-		}
-
-		// If the brain has completed transferring all data
-		if bytes.Contains(buffer, END_TRANSFER_MARKER) {
-			// Send finished message to other Goroutine
-			channel <- END_TRANSFER_MARKER
+		// If the transfer is complete exit the data receiving loop
+		if transferComplete {
 			break
-		}
-
-		// If the read data starts with special delimiter and ends with a closed bracket
-		if bytes.HasPrefix(buffer, START_TRANSFER_PREFIX)&&
-		bytes.HasSuffix(buffer, START_TRANSFER_SUFFIX) {
-			// Extract the file name and size from the initial transfer message
-			fileName, fileSize, err := getFileInfo(buffer)
-			// If there was an error converting the file size to int
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			// Set a file path with the received file name
-			filePath := path.Join(STORAGE_PATH, string(fileName))
-			// Reset the buffer to optimal size based on expected file size
-			buffer = make([]byte, getOptimalBufferSize(fileSize))
-
-			// Open the file for writing
-			file, err := os.Create(filePath)
-			// If the file failed to open
-			if err != nil {
-				fmt.Println("Error creating file:", err)
-				return
-			}
-
-			continue
-		}
-
-		// Write the data to the file
-		_, err = file.Write(buffer[:bytesRead])
-		// If there was an error writig data to the file
-		if err != nil {
-			fmt.Println("Error writing to file:", err)
-			return
 		}
 	}
 }
