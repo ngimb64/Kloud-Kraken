@@ -1,0 +1,34 @@
+# Go binaries and executable files
+*.exe
+*.exe~
+*.out
+*.test
+
+# Go workspace (module) and vendor directories
+/bin/
+/obj/
+/vendor/
+
+# Go test coverage files
+*.coverage
+*.coverprofile
+
+# Go module dependency files
+go.sum
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Cache files
+*.swp

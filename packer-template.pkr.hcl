@@ -32,8 +32,8 @@ variable "aws_security_group_id" {
     default     = null
 }
 
-# EBS based EC2 builder with latest Apline Linux image
-builder "amazon-ebs" {
+# Instance store based EC2 builder with latest Alpine Linux image
+builder "amazon-instance" {
     access_key        = var.aws_access_key
     secret_key        = var.aws_secret_key
     region            = var.aws_region

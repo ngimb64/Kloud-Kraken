@@ -1,0 +1,37 @@
+How the client goroutines interact with the brain server
+---
+
+- Client connects back to server
+
+loop:
+    - Client checks disk space to ensure there is room for transfer
+        - If there is not, wait until there is available room
+
+    - Client sends message to server to initiate transfer
+
+    - Server responds to the client:
+        - With the start transfer message
+        OR
+        - With the end transfer message because all available data has been sent
+        - The client will also send the end transfer message through the channel
+        - exit loop
+
+    loop:
+        - A file is transferred from the Server to the client in chunks
+
+    - When complete the client sends the filename through a channel to another goroutine for processing
+
+---
+
+loop:
+    - The channel receives
+        - The filename
+        OR
+        - The end transfer message
+        - exit loop
+
+    - The filename is passed into command execution as argument
+
+    - The execution results are formatted and returned from the client to the server
+
+    - The processing goroutine goes back to waiting for data input from the channel

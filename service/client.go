@@ -1,5 +1,6 @@
 package main
 
+// Built-in packages
 import (
 	"bytes"
 	"flag"
@@ -9,24 +10,30 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strconv"
 	"sync"
+
+	"github.com/ngimb64/Kloud-Kraken/internal/config"
 )
 
 // Package level variables
-var STORAGE_PATH = "/tmp"
+const STORAGE_PATH = "/tmp"
+const GB = 1024 * 1024 * 1024
 var COLON_DELIMITER = []byte(":")
+var TRANSFER_REQUEST_MARKER = []byte("<TRANSFER_REQUEST>")
 var START_TRANSFER_PREFIX = []byte("<START_TRANSFER:")
 var START_TRANSFER_SUFFIX = []byte(">")
 var END_TRANSFER_MARKER = []byte("<END_TRANSFER>")
 
 
-// Reads data from channel connected to reader Goroutine. ADD MORE
+// Reads data (filename or end transfer message) from channel connected to reader Goroutine,
+// takes the received filename and passes it into command execution method for processing,
+// and the result is formatted and sent back to the brain server.
 //
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Acts as a barrier for the Goroutines running
+//
 func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup) {
 	// Decrements the wait group counter upon function exit
 	defer waitGroup.Done()
@@ -42,14 +49,17 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			break
 		}
 
-		// Execute command as background process
+		// Register a command with file path gathered from channel
 		cmd := exec.Command("command", "-flag", filePath)
-		// Save the command stdout and stderr output
+		// Execute and save the command stdout and stderr output
 		output, err := cmd.CombinedOutput()
+		// If there was an error exe
 		if err != nil {
 			fmt.Printf("Error executing command: %v\n", err)
 			return
 		}
+
+		// TODO:  add code to format the command output to optimal format
 
 		// Send the processing result
 		_, err = connection.Write(output)
@@ -69,6 +79,7 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 //
 // Returns:
 // - An optimal integer buffer size
+//
 func getOptimalBufferSize(fileSize int) int {
 	switch {
 	// If the file is less than or equal to 1 MB
@@ -87,38 +98,6 @@ func getOptimalBufferSize(fileSize int) int {
 }
 
 
-// Parse out the file name and size from the delimiter
-// sent from remote brain server.
-//
-// Parameters:
-// - readData:  The data read from socket buffer to be parsed.
-//
-// Returns:
-// - The byte slice with the file name
-// - A integer file size
-// - Either nil on success or a string error message on failure
-func getFileInfo(readData []byte) ([]byte, int, any) {
-	// Trim the delimiters around the file info
-	readData = bytes.TrimPrefix(readData, START_TRANSFER_PREFIX)
-	readData = bytes.TrimSuffix(readData, START_TRANSFER_SUFFIX)
-	// Split the string by the colon delimiter
-	dataBits := bytes.Split(readData, COLON_DELIMITER)
-	// Extract the filename and size from bits
-	fileName := dataBits[0]
-	fileSizeStr := dataBits[1]
-
-	// Convert the size string to an integr
-	fileSize, err := strconv.Atoi(string(fileSizeStr))
-	// If the string integer failed to convert back to its native type
-	if err != nil {
-		fmt.Println("Error converting size string to int:", err)
-		return fileName, fileSize, "Error occured during file size coversion"
-	}
-
-	return fileName, fileSize, nil
-}
-
-
 // Concurrently reads data from TCP socket connection until entire file has been
 // transferred. Afterwards the file name is passed through a channel to the process
 // data Goroutine to load the file into data processing.
@@ -127,7 +106,10 @@ func getFileInfo(readData []byte) ([]byte, int, any) {
 // - connection:  Active socket connection for reading data to be stored and processed
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Used to synchronize the Goroutines running
-func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup) {
+// - appConfig:  Pointer to the program configuration struct
+//
+func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup,
+				 appConfig *config.AppConfig) {
 	// Decrements the wait group counter upon function exit
 	defer waitGroup.Done()
 
@@ -138,6 +120,17 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 	// Read data from the connection in chunks and write to the file
 	for {
+		// Get the remaining available disk space
+		remainingSpace := diskCheck()
+
+		// If there is enough disk space to store the max file size
+		if remainingSpace > appConfig.MaxFileSizeInt {
+
+		}
+
+
+
+
 		// Read data into the buffer
 		bytesRead, err := connection.Read(buffer)
 		// If the EOF has been reached
@@ -202,7 +195,9 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 //
 // Parameters:
 // - connection:  The TCP socket connection utilized for transferring data
-func handleConnection(connection net.Conn) {
+// - appConfig:  Pointer to the program configuration struct
+//
+func handleConnection(connection net.Conn, appConfig *config.AppConfig) {
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
 
@@ -212,7 +207,7 @@ func handleConnection(connection net.Conn) {
 	waitGroup.Add(2)
 
 	// Start the goroutine to write data to the file
-	go receiveData(connection, channel, &waitGroup)
+	go receiveData(connection, channel, &waitGroup, appConfig)
 	// Start the goroutine to process the file (this can start immediately)
 	go processData(connection, channel, &waitGroup)
 
@@ -225,9 +220,14 @@ func handleConnection(connection net.Conn) {
 // remote brain server, then pass the connection to Goroutine handler.
 //
 // Parameters:
-// - address:  The IP address and port formatted like "<ip_address>:<port>"
-func connectRemote(address string) {
-	connection, err := net.Dial("tcp", address)
+// - appConfig:  Pointer to the program configuration struct
+//
+func connectRemote(appConfig *config.AppConfig) {
+	// Define the address of the server to connect to
+	serverAddress := fmt.Sprintf("%s:%s", appConfig.IpAddress, appConfig.Port)
+
+	// Make a connection to the remote brain server
+	connection, err := net.Dial("tcp", serverAddress)
 	if err != nil {
 		fmt.Println("Error connecting to server:", err)
 		return
@@ -235,22 +235,26 @@ func connectRemote(address string) {
 	// Close connection existing connection
 	defer connection.Close()
 
-	handleConnection(connection)
+	handleConnection(connection, appConfig)
 }
 
 
 func main() {
-	var ipAddr string
-	var port string
-
 	// Define command line flags with default values and descriptions
-	flag.StringVar(&ipAddr, "ipAddr", "localhost", "IP address of brain server to connect to")
-	flag.StringVar(&port, "port", "6969", "TCP port to connect to")
+	var ipAddr = flag.String("ipAddr", "localhost", "IP address of brain server to connect to")
+	var port = flag.Int("port", 6969, "TCP port to connect to on brain server")
+	var maxFileSize = flag.String("maxFileSize", "", "The max size for file to be transmitted at once")
 	// Parse the command line flags
 	flag.Parse()
 
-	// Define the address of the server to connect to
-	serverAddress := fmt.Sprintf("%s:%s", ipAddr, port)
+	// Create an instance of AppConfig with the parsed flags
+	appConfig := config.NewAppConfig(*ipAddr, *port, *maxFileSize)
+	// Validate the parsed arguments in AppConfig struct
+	if err := config.Validate(appConfig); err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+
 	// Connect to remote server to begin receiving data for processing
-	connectRemote(serverAddress)
+	connectRemote(appConfig)
 }
