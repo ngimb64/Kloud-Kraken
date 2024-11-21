@@ -11,19 +11,15 @@ import (
 	"os/exec"
 	"path"
 	"sync"
+	"time"
 
-	"github.com/ngimb64/Kloud-Kraken/internal/config"
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 )
 
 // Package level variables
-const STORAGE_PATH = "/tmp"
-const GB = 1024 * 1024 * 1024
-var COLON_DELIMITER = []byte(":")
-var TRANSFER_REQUEST_MARKER = []byte("<TRANSFER_REQUEST>")
-var START_TRANSFER_PREFIX = []byte("<START_TRANSFER:")
-var START_TRANSFER_SUFFIX = []byte(">")
-var END_TRANSFER_MARKER = []byte("<END_TRANSFER>")
+const StoragePath = "/tmp"
 
 
 // Reads data (filename or end transfer message) from channel connected to reader Goroutine,
@@ -36,17 +32,17 @@ var END_TRANSFER_MARKER = []byte("<END_TRANSFER>")
 // - waitGroup:  Acts as a barrier for the Goroutines running
 //
 func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup) {
-	// Decrements the wait group counter upon function exit
+	// Decrements the wait group counter upon local exit
 	defer waitGroup.Done()
 
 	for {
 		// Get the filename of the data to process from channel
 		fileName := <-channel
 		// Format the filename in to the path where data is stored
-		filePath := path.Join(STORAGE_PATH, string(fileName))
+		filePath := path.Join(StoragePath, string(fileName))
 
 		// If the channel contains end transfer message
-		if bytes.Contains(fileName, END_TRANSFER_MARKER) {
+		if bytes.Contains(fileName, globals.END_TRANSFER_MARKER) {
 			break
 		}
 
@@ -69,68 +65,44 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			fmt.Printf("Error sending command result: %v\n", err)
 			return
 		}
-	}
-}
 
-
-// Adjust buffer to optimal size based on file size to be received.
-//
-// Parameters:
-// - fileSize:  The size of the file to be received
-//
-// Returns:
-// - An optimal integer buffer size
-//
-func getOptimalBufferSize(fileSize int) int {
-	switch {
-	// If the file is less than or equal to 1 MB
-	case fileSize <= 1 * 1024 * 1024:
-		// 512 byte buffer
-		return 512
-	// If the file is less than or equal to 100 MB
-	case fileSize <= 100 * 1024 * 1024:
-		// 8 KB buffer
-		return 8 * 1024
-	// If the file is greater than 100 MB
-	default:
-		// 1 MB buffer
-		return 1024 * 1024
+		// TODO: add code to delete the file after processing is complete
 	}
 }
 
 
 func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
-					 transferComplete bool) {
+					 transferComplete *bool) {
 	var fileName []byte
 	var file *os.File
 
 	// Send the transfer request message to initiate file transfer
-	_, err := connection.Write(TRANSFER_REQUEST_MARKER)
+	_, err := connection.Write(globals.TRANSFER_REQUEST_MARKER)
 	// If there was an error sending the transfer request
 	if err != nil {
 		println("Error sending the transfer request to brain server")
-		os.Exit(1)
+		return
 	}
 
 	// Wait for the brain server to send the start transfer message
 	_, err = connection.Read(buffer)
 	// If there was an error reading data from the socket
 	if err != nil {
-		fmt.Println("Error reading data from server:", err)
-		os.Exit(1)
+		fmt.Println("Error start transfer message from server:", err)
+		return
 	}
 
 	// If the brain has completed transferring all data
-	if bytes.Contains(buffer, END_TRANSFER_MARKER) {
+	if bytes.Contains(buffer, globals.END_TRANSFER_MARKER) {
 		// Send finished message to other Goroutine
-		channel <- END_TRANSFER_MARKER
-		transferComplete = true
+		channel <- globals.END_TRANSFER_MARKER
+		*transferComplete = true
 		return
 	}
 
 	// If the read data starts with special delimiter and ends with a closed bracket
-	if bytes.HasPrefix(buffer, START_TRANSFER_PREFIX)&&
-	bytes.HasSuffix(buffer, START_TRANSFER_SUFFIX) {
+	if bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX)&&
+	bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
 		// Extract the file name and size from the initial transfer message
 		fileName, fileSize, err := disk.GetFileInfo(buffer)
 		// If there was an error converting the file size to int
@@ -140,9 +112,9 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		}
 
 		// Set a file path with the received file name
-		filePath := path.Join(STORAGE_PATH, string(fileName))
+		filePath := path.Join(StoragePath, string(fileName))
 		// Reset the buffer to optimal size based on expected file size
-		buffer = make([]byte, getOptimalBufferSize(fileSize))
+		buffer = make([]byte, netio.GetOptimalBufferSize(fileSize))
 
 		// Open the file for writing
 		file, err := os.Create(filePath)
@@ -156,8 +128,8 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		defer file.Close()
 	// If unexpected behavior occurred
 	} else {
-		fmt.Println("[*] Unusual behavior detected processTransfer method")
-		os.Exit(1)
+		fmt.Println("[*] Unusual behavior detected with processTransfer method")
+		return
 	}
 
 	for {
@@ -192,8 +164,8 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 // - appConfig:  Pointer to the program configuration struct
 //
 func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup,
-				 appConfig *config.AppConfig) {
-	// Decrements the wait group counter upon function exit
+				 maxFileSizeInt uint64) {
+	// Decrements the wait group counter upon local exit
 	defer waitGroup.Done()
 
 	transferComplete := false
@@ -206,15 +178,20 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		remainingSpace := disk.DiskCheck()
 
 		// If there is enough disk space to store the max file size
-		if remainingSpace > appConfig.MaxFileSizeInt {
+		if remainingSpace >= maxFileSizeInt {
 			// Call function to process the transfer of a file
-			processTransfer(connection, channel, buffer, transferComplete)
+			processTransfer(connection, channel, buffer, &transferComplete)
 		}
 
 		// If the transfer is complete exit the data receiving loop
 		if transferComplete {
 			break
 		}
+
+		// Reset buffer to smallest size for message processing after transfer
+		buffer = make([]byte, 512)
+		// Sleep to avoid excessive syscalls in checking disk size
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -226,7 +203,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // - connection:  The TCP socket connection utilized for transferring data
 // - appConfig:  Pointer to the program configuration struct
 //
-func handleConnection(connection net.Conn, appConfig *config.AppConfig) {
+func handleConnection(connection net.Conn, maxFileSizeInt uint64) {
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
 
@@ -236,8 +213,8 @@ func handleConnection(connection net.Conn, appConfig *config.AppConfig) {
 	waitGroup.Add(2)
 
 	// Start the goroutine to write data to the file
-	go receiveData(connection, channel, &waitGroup, appConfig)
-	// Start the goroutine to process the file (this can start immediately)
+	go receiveData(connection, channel, &waitGroup, maxFileSizeInt)
+	// Start the goroutine to process the file
 	go processData(connection, channel, &waitGroup)
 
 	// Wait for both goroutines to finish
@@ -251,9 +228,9 @@ func handleConnection(connection net.Conn, appConfig *config.AppConfig) {
 // Parameters:
 // - appConfig:  Pointer to the program configuration struct
 //
-func connectRemote(appConfig *config.AppConfig) {
+func connectRemote(ipAddr string, port int, maxFileSizeInt uint64) {
 	// Define the address of the server to connect to
-	serverAddress := fmt.Sprintf("%s:%s", appConfig.IpAddress, appConfig.Port)
+	serverAddress := fmt.Sprintf("%s:%s", ipAddr, port)
 
 	// Make a connection to the remote brain server
 	connection, err := net.Dial("tcp", serverAddress)
@@ -261,29 +238,27 @@ func connectRemote(appConfig *config.AppConfig) {
 		fmt.Println("Error connecting to server:", err)
 		return
 	}
-	// Close connection existing connection
+	// Close connection on local exit
 	defer connection.Close()
 
-	handleConnection(connection, appConfig)
+	handleConnection(connection, maxFileSizeInt)
 }
 
 
 func main() {
+	var ipAddr string
+	var port int
+	var maxFileSizeInt uint64
+
 	// Define command line flags with default values and descriptions
-	var ipAddr = flag.String("ipAddr", "localhost", "IP address of brain server to connect to")
-	var port = flag.Int("port", 6969, "TCP port to connect to on brain server")
-	var maxFileSize = flag.String("maxFileSize", "", "The max size for file to be transmitted at once")
+	flag.StringVar(&ipAddr, "ipAddr", "localhost",
+				   "IP address of brain server to connect to")
+	flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
+	flag.Uint64Var(&maxFileSizeInt, "maxFileSizeInt", 0,
+				  "The max size for file to be transmitted at once")
 	// Parse the command line flags
 	flag.Parse()
 
-	// Create an instance of AppConfig with the parsed flags
-	appConfig := config.NewAppConfig(*ipAddr, *port, *maxFileSize)
-	// Validate the parsed arguments in AppConfig struct
-	if err := config.Validate(appConfig); err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
-	}
-
 	// Connect to remote server to begin receiving data for processing
-	connectRemote(appConfig)
+	connectRemote(ipAddr, port, maxFileSizeInt)
 }

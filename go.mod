@@ -7,4 +7,7 @@ require (
 	golang.org/x/sys v0.27.0
 )
 
-require github.com/jmespath/go-jmespath v0.4.0 // indirect
+require (
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
