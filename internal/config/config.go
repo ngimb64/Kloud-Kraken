@@ -23,8 +23,8 @@ type LocalConfig struct {
 
 // ClientConfig contains the configuration for the client settings
 type ClientConfig struct {
-	MaxFileSize    string `yaml:"max_file_size"`
-	MaxFileSizeInt uint64 `yaml:"-"`			 // Parsed later
+	MaxFileSize    	 string `yaml:"max_file_size"`
+	MaxFileSizeInt64 int64 `yaml:"-"`  			   // Parsed later
 }
 
 
@@ -38,8 +38,8 @@ func NewAppConfig(listenerPort int, maxConnections int, clientPort int,
 			LoadDir:		loadDir,
 		},
 		ClientConfig: ClientConfig{
-			MaxFileSize: 	maxFileSize,
-			MaxFileSizeInt: 0,
+			MaxFileSize: 	  maxFileSize,
+			MaxFileSizeInt64: 0,
 		},
 	}
 }
@@ -49,7 +49,6 @@ func NewAppConfig(listenerPort int, maxConnections int, clientPort int,
 func LoadConfig(filePath string) (*AppConfig, error) {
 	// Open the YAML file
 	file, err := os.Open(filePath)
-	// If there is an error opening the YAML file
 	if err != nil {
 		return nil, fmt.Errorf("could not open YAML file: %v", err)
 	}
@@ -110,8 +109,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 	//		  to only occur is the data type is string
 
 	// Convert the max file size string to integer
-	numberConversion, err := strconv.ParseUint(maxFileSize, 10, 64)
-	// If there is an error converting string number to unsigned integer
+	numberConversion, err := strconv.ParseInt(maxFileSize, 10, 64)
 	if err != nil {
 		fmt.Println("Error converting max_file_size:", err)
 		os.Exit(1)
@@ -124,7 +122,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 	}
 
 	// Assign the converted max file size to struct key
-	clientConfig.MaxFileSizeInt = numberConversion
+	clientConfig.MaxFileSizeInt64 = numberConversion
 
 	return nil
 }

@@ -4,4 +4,4 @@ local_config:
   load_dir: ""
 
 client_config:
-  max_file_size: "1 GB"
+  max_file_size: "1GB"

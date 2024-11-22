@@ -8,7 +8,7 @@ package netio
 // Returns:
 // - An optimal integer buffer size
 //
-func GetOptimalBufferSize(fileSize int) int {
+func GetOptimalBufferSize(fileSize int64) int {
 	switch {
 	// If the file is less than or equal to 1 MB
 	case fileSize <= 1 * 1024 * 1024:

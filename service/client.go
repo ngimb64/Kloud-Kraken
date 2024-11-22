@@ -1,6 +1,5 @@
 package main
 
-// Built-in packages
 import (
 	"bytes"
 	"flag"
@@ -10,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"sync"
 	"time"
 
@@ -19,7 +19,7 @@ import (
 )
 
 // Package level variables
-const StoragePath = "/tmp"
+const StoragePath = "/tmp"	// Path where received files are stored
 
 
 // Reads data (filename or end transfer message) from channel connected to reader Goroutine,
@@ -50,35 +50,68 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		cmd := exec.Command("command", "-flag", filePath)
 		// Execute and save the command stdout and stderr output
 		output, err := cmd.CombinedOutput()
-		// If there was an error exe
 		if err != nil {
 			fmt.Printf("Error executing command: %v\n", err)
 			return
 		}
 
+		// TODO: put everything below in separate goroutine
+
 		// TODO:  add code to format the command output to optimal format
 
 		// Send the processing result
 		_, err = connection.Write(output)
-		// If there was an error sending the result to brain
 		if err != nil {
 			fmt.Printf("Error sending command result: %v\n", err)
 			return
 		}
 
-		// TODO: add code to delete the file after processing is complete
+		// TODO: add code to delete the file
 	}
+}
+
+
+// Parse out the file name and size from the delimiter
+// sent from remote brain server.
+//
+// Parameters:
+// - readData:  The data read from socket buffer to be parsed.
+//
+// Returns:
+// - The byte slice with the file name
+// - A integer file size
+// - Either nil on success or a string error message on failure
+//
+func getFileInfo(readData []byte) ([]byte, int64, error) {
+	prefix := globals.START_TRANSFER_PREFIX
+	suffix := globals.START_TRANSFER_SUFFIX
+	// Trim the delimiters around the file info
+	readData = readData[len(prefix):len(readData)-len(suffix)]
+	// Get the position of the colon delimiter
+	colonPos := bytes.IndexByte(readData, ':')
+	// If the colon separator is missing
+	if colonPos == -1 {
+		return []byte(""), 0, fmt.Errorf("Invalid message structure, colon missing")
+	}
+
+	// Extract the file path and size
+	fileName := readData[:colonPos]
+	fileSizeStr := string(readData[colonPos+1:])
+
+	// Convert the size string to an 64 bit integr
+	fileSize, err := strconv.ParseInt(string(fileSizeStr), 10, 64)
+	if err != nil {
+		return fileName, fileSize, err
+	}
+
+	return fileName, fileSize, nil
 }
 
 
 func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 					 transferComplete *bool) {
-	var fileName []byte
-	var file *os.File
-
 	// Send the transfer request message to initiate file transfer
 	_, err := connection.Write(globals.TRANSFER_REQUEST_MARKER)
-	// If there was an error sending the transfer request
 	if err != nil {
 		println("Error sending the transfer request to brain server")
 		return
@@ -86,7 +119,6 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 
 	// Wait for the brain server to send the start transfer message
 	_, err = connection.Read(buffer)
-	// If there was an error reading data from the socket
 	if err != nil {
 		fmt.Println("Error start transfer message from server:", err)
 		return
@@ -100,37 +132,34 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		return
 	}
 
-	// If the read data starts with special delimiter and ends with a closed bracket
-	if bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX)&&
-	bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
-		// Extract the file name and size from the initial transfer message
-		fileName, fileSize, err := disk.GetFileInfo(buffer)
-		// If there was an error converting the file size to int
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		// Set a file path with the received file name
-		filePath := path.Join(StoragePath, string(fileName))
-		// Reset the buffer to optimal size based on expected file size
-		buffer = make([]byte, netio.GetOptimalBufferSize(fileSize))
-
-		// Open the file for writing
-		file, err := os.Create(filePath)
-		// If the file failed to open
-		if err != nil {
-			fmt.Println("Error creating file:", err)
-			return
-		}
-
-		// Close file when the function exits
-		defer file.Close()
-	// If unexpected behavior occurred
-	} else {
+	// If the read data does not start with special delimiter or end with closed bracket
+	if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
+	!bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
 		fmt.Println("[*] Unusual behavior detected with processTransfer method")
 		return
 	}
+
+	// Extract the file name and size from the initial transfer message
+	fileName, fileSize, err := getFileInfo(buffer)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Set a file path with the received file name
+	filePath := path.Join(StoragePath, string(fileName))
+	// Reset the buffer to optimal size based on expected file size
+	buffer = make([]byte, netio.GetOptimalBufferSize(fileSize))
+
+	// Open the file for writing
+	file, err := os.Create(filePath)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+
+	// Close file when the function exits
+	defer file.Close()
 
 	for {
 		// Read data into the buffer
@@ -144,7 +173,6 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 
 		// Write the data to the file
 		_, err = file.Write(buffer[:bytesRead])
-		// If there was an error writig data to the file
 		if err != nil {
 			fmt.Println("Error writing to file:", err)
 			return
@@ -164,7 +192,7 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 // - appConfig:  Pointer to the program configuration struct
 //
 func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup,
-				 maxFileSizeInt uint64) {
+				 maxFileSizeInt64 int64) {
 	// Decrements the wait group counter upon local exit
 	defer waitGroup.Done()
 
@@ -178,7 +206,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		remainingSpace := disk.DiskCheck()
 
 		// If there is enough disk space to store the max file size
-		if remainingSpace >= maxFileSizeInt {
+		if remainingSpace >= maxFileSizeInt64 {
 			// Call function to process the transfer of a file
 			processTransfer(connection, channel, buffer, &transferComplete)
 		}
@@ -203,7 +231,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // - connection:  The TCP socket connection utilized for transferring data
 // - appConfig:  Pointer to the program configuration struct
 //
-func handleConnection(connection net.Conn, maxFileSizeInt uint64) {
+func handleConnection(connection net.Conn, maxFileSizeInt64 int64) {
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
 
@@ -213,7 +241,7 @@ func handleConnection(connection net.Conn, maxFileSizeInt uint64) {
 	waitGroup.Add(2)
 
 	// Start the goroutine to write data to the file
-	go receiveData(connection, channel, &waitGroup, maxFileSizeInt)
+	go receiveData(connection, channel, &waitGroup, maxFileSizeInt64)
 	// Start the goroutine to process the file
 	go processData(connection, channel, &waitGroup)
 
@@ -228,7 +256,7 @@ func handleConnection(connection net.Conn, maxFileSizeInt uint64) {
 // Parameters:
 // - appConfig:  Pointer to the program configuration struct
 //
-func connectRemote(ipAddr string, port int, maxFileSizeInt uint64) {
+func connectRemote(ipAddr string, port int, maxFileSizeInt64 int64) {
 	// Define the address of the server to connect to
 	serverAddress := fmt.Sprintf("%s:%s", ipAddr, port)
 
@@ -241,24 +269,24 @@ func connectRemote(ipAddr string, port int, maxFileSizeInt uint64) {
 	// Close connection on local exit
 	defer connection.Close()
 
-	handleConnection(connection, maxFileSizeInt)
+	handleConnection(connection, maxFileSizeInt64)
 }
 
 
 func main() {
 	var ipAddr string
 	var port int
-	var maxFileSizeInt uint64
+	var maxFileSizeInt64 int64
 
 	// Define command line flags with default values and descriptions
 	flag.StringVar(&ipAddr, "ipAddr", "localhost",
 				   "IP address of brain server to connect to")
 	flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
-	flag.Uint64Var(&maxFileSizeInt, "maxFileSizeInt", 0,
+	flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
 				  "The max size for file to be transmitted at once")
 	// Parse the command line flags
 	flag.Parse()
 
 	// Connect to remote server to begin receiving data for processing
-	connectRemote(ipAddr, port, maxFileSizeInt)
+	connectRemote(ipAddr, port, maxFileSizeInt64)
 }
