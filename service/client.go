@@ -128,7 +128,7 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string, f
 // sent from remote brain server.
 //
 // Parameters:
-// - readData:  The data read from socket buffer to be parsed.
+// - readData:  The data read from socket buffer to be parsed
 //
 // Returns:
 // - The byte slice with the file name

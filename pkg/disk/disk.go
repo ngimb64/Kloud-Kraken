@@ -56,6 +56,58 @@ func GetDiskSpace() (total int64, free int64, err error) {
 }
 
 
+// Checks if the file or directory exists and ensure directories
+// have contents in them based on file size or entries in dir
+//
+// Parameters:
+// - The path to check for existence
+//
+// Returns:
+// - Boolean for the item existing and having content
+// - Boolean for if the item is a directory
+// - Error return handler
+//
+func PathExists(filePath string) (bool, bool, error) {
+	// Get item info on passed in path
+	itemInfo, err := os.Stat(filePath)
+	if err != nil {
+		// If the item does not exist
+		if os.IsNotExist(err) {
+			return false, false, nil
+		}
+		// If unexpected error getting item info
+		return false, false, fmt.Errorf("error checking file existence: %v", err)
+	}
+
+	// If the path is a file, and has data in it
+	if !itemInfo.IsDir() && itemInfo.Size() > 0 {
+		return true, false, nil
+	}
+
+	// Open the directory
+	dir, err := os.Open(filePath)
+	if err != nil {
+		return false, true, fmt.Errorf("Error opening directory: %v", err)
+	}
+	// Close the directory on local exit
+	defer dir.Close()
+
+	// Attempt to read the first entry in the dir
+	entries, err := dir.ReadDir(1)
+	if err != nil {
+		return false, true, fmt.Errorf("Error reading directory: %v", err)
+	}
+
+	// If there is an entry, the dir is not empty
+	if len(entries) > 0 {
+		return true, true, nil
+	}
+
+	// If no entries the directory is empty
+	return false, true, nil
+}
+
+
 // Function for each goroutine to walk the directory and select a file
 func SelectFile(rootDir string) (string, int64, error) {
 	var returnPath string
@@ -63,7 +115,7 @@ func SelectFile(rootDir string) (string, int64, error) {
 	done := false
 
 	// Walking through the directory tree
-	err := filepath.Walk(rootDir, func(path string, fileInfo os.FileInfo, err error) error {
+	err := filepath.Walk(rootDir, func(path string, itemInfo os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -74,13 +126,14 @@ func SelectFile(rootDir string) (string, int64, error) {
 		}
 
 		// If the current item is not a directory, meaning a file
-		if !fileInfo.IsDir() {
+		if !itemInfo.IsDir() {
 			// Lock selection process to ensure a single goroutine selects the file
 			fileSelectionLock.Lock()
 			// Unlock selection process on local exit
 			defer fileSelectionLock.Unlock()
 
-			// Check if the file has already been selected by another goroutine
+			// Check if the file has already been selected by another goroutine,
+			// otherwise store the file path in the sync map
 			_, loaded := selectedFiles.LoadOrStore(path, true)
 			// The file was already selected, so skip it
 			if loaded {
@@ -90,7 +143,7 @@ func SelectFile(rootDir string) (string, int64, error) {
 			// Set the current file path as return path
 			returnPath = path
 			// Set the current file size as return size
-			returnSize = fileInfo.Size()
+			returnSize = itemInfo.Size()
 			// Set the complete flag to true
 			done = true
 		}

@@ -1,0 +1,8 @@
+- Figure out handling conversions (if applicable) and validations for file size arg in config.go
+- Handle the initial hash file transfer from server to client
+- Set up optional logging system with local, CloudWatch, or both .. (local functionality sends back log files)
+- Set up logic in client to predict disk space towards next transfer based on current space and file size to be transferred
+- Handle formatting and sending the results from client back to server
+- Data compression and encryption
+- Write unit tests
+- Figure exact command syntax for Hashcat

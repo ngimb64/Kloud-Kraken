@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,7 +93,16 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 		return fmt.Errorf("max_connections must be a positive integer")
 	}
 
-	// Add validation logic for load_dir to ensure it exists and has files
+	// Check to see if the load directory exists and has files in it
+	exists, isDir, err := disk.PathExists(localConfig.LoadDir)
+	if err != nil {
+		return err
+	}
+
+	// If the path does not exist or is not a directory
+	if !exists || !isDir {
+		return fmt.Errorf("Path does not exist or is a file")
+	}
 
 	return nil
 }
@@ -111,14 +121,12 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 	// Convert the max file size string to integer
 	numberConversion, err := strconv.ParseInt(maxFileSize, 10, 64)
 	if err != nil {
-		fmt.Println("Error converting max_file_size:", err)
-		os.Exit(1)
+		fmt.Errorf("Error converting max_file_size: %v", err)
 	}
 
 	// If the converted max file size is less than or equal to 0
 	if numberConversion <= 0 {
-		fmt.Println("Converted max_file_size is less than or equal to 0")
-		os.Exit(1)
+		fmt.Errorf("Converted max_file_size is less than or equal to 0")
 	}
 
 	// Assign the converted max file size to struct key
