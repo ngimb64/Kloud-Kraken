@@ -21,57 +21,13 @@ import (
 var CurrentConnections int32	// Tracks current active connections
 
 
-func handleTransfer(connection net.Conn, transferComplete *bool, buffer []byte,
-				    appConfig *config.AppConfig) {
-	// Select the next avaible file in the load dir from YAML data
-	filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir)
-	if err != nil {
-		fmt.Println("Error selecting the next avaible file for transfer:", err)
-	}
-
-	// If there are no more files available to be transfered
-	if filePath == "" {
-		// Send the end transfer message then exit function
-		_, err = connection.Write(globals.END_TRANSFER_MARKER)
-		if err != nil {
-			fmt.Println("Error sending transfer message:", err)
-		}
-
-		return
-	}
-
-	// Initial bytes buffer for message
-	var byteBuffer bytes.Buffer
-	// Format the transfer reply message
-	byteBuffer.Write(globals.START_TRANSFER_PREFIX)
-	byteBuffer.Write([]byte(filePath))
-	byteBuffer.Write(globals.COLON_DELIMITER)
-	byteBuffer.Write([]byte(strconv.FormatInt(fileSize, 10)))
-	byteBuffer.Write(globals.START_TRANSFER_SUFFIX)
-
-	// Send the transfer request reply with file name and size
-	_, err = connection.Write(byteBuffer.Bytes())
-	if err != nil {
-		fmt.Println("Error sending the transfer reply:", err)
-		return
-	}
-
-	// Reset the buffer to optimal size based on expected file size
-	buffer = make([]byte, netio.GetOptimalBufferSize(fileSize))
-
-	// Open the file
-	file, err := os.Open(filePath)
-	if err != nil {
-		fmt.Println("Error opening the file to be transferred:", err)
-		return
-	}
-
+func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File) {
 	// Close the file on local exit
 	defer file.Close()
 
 	for {
 		// Read buffer size from file
-		bytesRead, err := file.Read(buffer)
+		_, err := file.Read(transferBuffer)
 		if err != nil {
 			// If the error was not EOF
 			if err != io.EOF {
@@ -81,17 +37,72 @@ func handleTransfer(connection net.Conn, transferComplete *bool, buffer []byte,
 		}
 
 		// Write the read bytes to the client
-		_, writeErr := connection.Write(buffer[:bytesRead])
-		if writeErr != nil {
-			fmt.Println("Error sending data:", writeErr)
+		_, err = netio.WriteHandler(connection, &transferBuffer)
+		if err != nil {
+			fmt.Println("Error sending data:", err)
 			break
 		}
 	}
+}
 
-	// Delete file in separate routine after transfer
-	go func (path string)  {
-		os.Remove(path)
-	}(filePath)
+
+func transferFile(connection net.Conn, filePath string, fileSize int64) {
+	// Create buffer to optimal size based on expected file size
+	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
+
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Println("Error opening the file to be transferred:", err)
+		return
+	}
+
+	// Read the file chunk by chunk and send to client
+	fileToSocketHandler(connection, transferBuffer, file)
+
+	// Delete the transfered file
+	err = os.Remove(filePath)
+	if err != nil {
+		fmt.Println("Error deleting the file:", err)
+		return
+	}
+}
+
+
+func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig) {
+	// Select the next avaible file in the load dir from YAML data
+	filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir)
+	if err != nil {
+		fmt.Println("Error selecting the next avaible file for transfer:", err)
+		return
+	}
+
+	// If there are no more files available to be transfered
+	if filePath == "" {
+		// Send the end transfer message then exit function
+		_, err = netio.WriteHandler(connection, &globals.END_TRANSFER_MARKER)
+		if err != nil {
+			fmt.Println("Error sending transfer message:", err)
+		}
+		return
+	}
+
+	// Clear the buffer before building transfer reply
+	*buffer = (*buffer)[:0]
+	// Append the transfer reply piece by piece in buffer
+	*buffer = append(globals.START_TRANSFER_PREFIX, []byte(filePath)...)
+	*buffer = append(*buffer, globals.COLON_DELIMITER...)
+	*buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
+	*buffer = append(*buffer, globals.START_TRANSFER_SUFFIX...)
+
+	// Send the transfer reply with file name and size
+	_, err = netio.WriteHandler(connection, buffer)
+	if err != nil {
+		fmt.Println("Error sending the transfer reply:", err)
+		return
+	}
+
+	go transferFile(connection, filePath, fileSize)
 }
 
 
@@ -101,33 +112,31 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 	defer connection.Close()
 	defer waitGroup.Done()
 
-	transferComplete := false
-	//Set initial buffer size
-	buffer := make([]byte, 512)
+	// TODO:  add code to upload hash file to client
+
+	// Set message buffer size
+	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
 	for {
 		// Read data from connected client
-		_, err := connection.Read(buffer)
+		_, err := netio.ReadHandler(connection, &buffer)
 		if err != nil {
 			fmt.Print("[*] Error occured reading data from socket")
 			return
 		}
 
-		// TODO: add logic to receive and handle report data Goroutine
+		// If the read data contains the processing complete message
+		if bytes.Contains(buffer, globals.PROCESSING_COMPLETE) {
+			break
+		}
+
+		// TODO:  add logic to handle report data in Goroutine if detected
 
 		// If the read data contains transfer request message
 		if bytes.Contains(buffer, globals.TRANSFER_REQUEST_MARKER) {
 			// Call method to handle file transfer based
-			handleTransfer(connection, &transferComplete, buffer, appConfig)
-
-			// If all available files have beed transfered, exit socket loop
-			if transferComplete {
-				break
-			}
+			handleTransfer(connection, &buffer, appConfig)
 		}
-
-		// Reset buffer to smallest size for message processing after transfer
-		buffer = make([]byte, 512)
 	}
 
 	// Decrement the active connection count
@@ -157,8 +166,7 @@ func startServer(appConfig *config.AppConfig) {
 	for {
 		// If the current number of connection is greater than or equal to the allowed max
 		if atomic.LoadInt32(&CurrentConnections) >= int32(appConfig.LocalConfig.MaxConnections) {
-			fmt.Println("[*] Maximum number of connections reached",
-						".. no more new connections")
+			fmt.Println("[*] All remote clients are connected")
 			break
 		}
 

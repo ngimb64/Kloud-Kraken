@@ -117,7 +117,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 
 	// If the converted max file size is less than or equal to 0
 	if numberConversion <= 0 {
-		fmt.Println("Error converting")
+		fmt.Println("Converted max_file_size is less than or equal to 0")
 		os.Exit(1)
 	}
 

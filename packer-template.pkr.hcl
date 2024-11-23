@@ -53,6 +53,11 @@ builder "amazon-instance" {
         owners      = ["951157211495"]  # Owner ID for Alpine Linux
         most_recent = true              # Ensures most recent version is used
     }
+
+    # Set custom tag
+    tags {
+        "Name" = "Kloud-Kraken-AMI-${timestamp()}"
+    }
 }
 
 # Inital shell provisioner to update and setup image

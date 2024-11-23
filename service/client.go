@@ -22,6 +22,21 @@ import (
 const StoragePath = "/tmp"	// Path where received files are stored
 
 
+func sendAndRemove(connection net.Conn, filePath string, output []byte) {
+	// TODO:  add code to format the command output to optimal format
+
+	// Send the processing result
+	_, err := netio.WriteHandler(connection, &output)
+	if err != nil {
+		fmt.Printf("Error sending command result: %v\n", err)
+		return
+	}
+
+	// Delete the processed file
+	os.Remove(filePath)
+}
+
+
 // Reads data (filename or end transfer message) from channel connected to reader Goroutine,
 // takes the received filename and passes it into command execution method for processing,
 // and the result is formatted and sent back to the brain server.
@@ -43,8 +58,19 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 		// If the channel contains end transfer message
 		if bytes.Contains(fileName, globals.END_TRANSFER_MARKER) {
+			// Sleep a little to ensure all processing results have been sent
+			time.Sleep(10 * time.Second)
+
+			// Send the processing complete message
+			_, err := netio.WriteHandler(connection, &globals.PROCESSING_COMPLETE)
+			if err != nil {
+				fmt.Println("Error sending processing complete message:", err)
+				return
+			}
 			break
 		}
+
+		// TODO:  put actual command syntax below
 
 		// Register a command with file path gathered from channel
 		cmd := exec.Command("command", "-flag", filePath)
@@ -55,18 +81,45 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			return
 		}
 
-		// TODO: put everything below in separate goroutine
+		// In a separate goroutine, format the output, send it,
+		// and delete the processed data
+		go sendAndRemove(connection, filePath, output)
+	}
+}
 
-		// TODO:  add code to format the command output to optimal format
 
-		// Send the processing result
-		_, err = connection.Write(output)
-		if err != nil {
-			fmt.Printf("Error sending command result: %v\n", err)
-			return
+func handleTransfer(connection net.Conn, channel chan []byte, fileName string, fileSize int64) {
+	// Set a file path with the received file name
+	filePath := path.Join(StoragePath, fileName)
+	//  Create buffer to optimal size based on expected file size
+	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
+
+	// Open the file for writing
+	file, err := os.Create(filePath)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+
+	// Close file when the function exits
+	defer file.Close()
+
+	for {
+		// Read data into the buffer
+		_, err := netio.ReadHandler(connection, &transferBuffer)
+		// If the EOF has been reached
+		if err == io.EOF {
+			// Send the file name through a channel to process it
+			channel <- transferBuffer
+			break
 		}
 
-		// TODO: add code to delete the file
+		// Write the data to the file
+		_, err = file.Write(transferBuffer)
+		if err != nil {
+			fmt.Println("Error writing to file:", err)
+			return
+		}
 	}
 }
 
@@ -111,14 +164,14 @@ func getFileInfo(readData []byte) ([]byte, int64, error) {
 func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 					 transferComplete *bool) {
 	// Send the transfer request message to initiate file transfer
-	_, err := connection.Write(globals.TRANSFER_REQUEST_MARKER)
+	_, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
 	if err != nil {
 		println("Error sending the transfer request to brain server")
 		return
 	}
 
 	// Wait for the brain server to send the start transfer message
-	_, err = connection.Read(buffer)
+	_, err = netio.ReadHandler(connection, &buffer)
 	if err != nil {
 		fmt.Println("Error start transfer message from server:", err)
 		return
@@ -146,38 +199,7 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		return
 	}
 
-	// Set a file path with the received file name
-	filePath := path.Join(StoragePath, string(fileName))
-	// Reset the buffer to optimal size based on expected file size
-	buffer = make([]byte, netio.GetOptimalBufferSize(fileSize))
-
-	// Open the file for writing
-	file, err := os.Create(filePath)
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
-	}
-
-	// Close file when the function exits
-	defer file.Close()
-
-	for {
-		// Read data into the buffer
-		bytesRead, err := connection.Read(buffer)
-		// If the EOF has been reached
-		if err == io.EOF {
-			// Send the file name through a channel to process it
-			channel <- fileName
-			break
-		}
-
-		// Write the data to the file
-		_, err = file.Write(buffer[:bytesRead])
-		if err != nil {
-			fmt.Println("Error writing to file:", err)
-			return
-		}
-	}
+	go handleTransfer(connection, channel, string(fileName), fileSize)
 }
 
 
@@ -198,26 +220,27 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 	transferComplete := false
 	// Set the initial buffer size
-	buffer := make([]byte, 512)
+	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
 	// Read data from the connection in chunks and write to the file
 	for {
 		// Get the remaining available disk space
 		remainingSpace := disk.DiskCheck()
 
+		// TODO:  add logic to processTransfer to return file size and predict whether there will be disk
+		//		  space for another tranfer before the async transfer finishes based on max file size
+
 		// If there is enough disk space to store the max file size
 		if remainingSpace >= maxFileSizeInt64 {
 			// Call function to process the transfer of a file
 			processTransfer(connection, channel, buffer, &transferComplete)
+			// If the transfer is complete exit the data receiving loop
+			if transferComplete {
+				break
+			}
+			continue
 		}
 
-		// If the transfer is complete exit the data receiving loop
-		if transferComplete {
-			break
-		}
-
-		// Reset buffer to smallest size for message processing after transfer
-		buffer = make([]byte, 512)
 		// Sleep to avoid excessive syscalls in checking disk size
 		time.Sleep(5 * time.Second)
 	}
@@ -232,9 +255,10 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // - appConfig:  Pointer to the program configuration struct
 //
 func handleConnection(connection net.Conn, maxFileSizeInt64 int64) {
+	// TODO:  add code to receive hash file from server
+
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
-
 	// Establish a wait group
 	var waitGroup sync.WaitGroup
 	// Add two goroutines to the wait group
@@ -266,9 +290,10 @@ func connectRemote(ipAddr string, port int, maxFileSizeInt64 int64) {
 		fmt.Println("Error connecting to server:", err)
 		return
 	}
+
 	// Close connection on local exit
 	defer connection.Close()
-
+	// Set up goroutines for receiving and processing data
 	handleConnection(connection, maxFileSizeInt64)
 }
 
