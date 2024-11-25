@@ -1,8 +1,9 @@
-- Figure out handling conversions (if applicable) and validations for file size arg in config.go
-- Handle the initial hash file transfer from server to client
-- Set up optional logging system with local, CloudWatch, or both .. (local functionality sends back log files)
 - Set up logic in client to predict disk space towards next transfer based on current space and file size to be transferred
+- Handle the initial hash file transfer from server to client
+- Set up optional logging system with local, CloudWatch, or both .. (local functionality sends back log files upon EC2 termination)
+	- Ask chatgpt about using an interface for this
+- Figure exact command syntax for Hashcat
 - Handle formatting and sending the results from client back to server
 - Data compression and encryption
+	- Ask chatgpt about using an interface for current socket functions with encryption integrated
 - Write unit tests
-- Figure exact command syntax for Hashcat

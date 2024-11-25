@@ -58,7 +58,7 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 		// If the channel contains end transfer message
 		if bytes.Contains(fileName, globals.END_TRANSFER_MARKER) {
-			// Sleep a little to ensure all processing results have been sent
+			// Sleep a bit to ensure all processing results have been sent
 			time.Sleep(10 * time.Second)
 
 			// Send the processing complete message
@@ -200,6 +200,8 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 	}
 
 	go handleTransfer(connection, channel, string(fileName), fileSize)
+
+	// TODO:  add logic to return disk space for outer scope for prediction
 }
 
 
@@ -227,7 +229,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		// Get the remaining available disk space
 		remainingSpace := disk.DiskCheck()
 
-		// TODO:  add logic to processTransfer to return file size and predict whether there will be disk
+		// TODO:  add logic to below to return file size and predict whether there will be disk
 		//		  space for another tranfer before the async transfer finishes based on max file size
 
 		// If there is enough disk space to store the max file size

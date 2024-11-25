@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"gopkg.in/yaml.v3"
 )
@@ -109,28 +112,41 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 
 
 func ValidateClientConfig(clientConfig *ClientConfig) error {
-	// Save string max file size to local variable
-	maxFileSize := clientConfig.MaxFileSize
+	var byteSize int64
+	var err error
+	// Save string max file size to local variable ensuring
+	// any units are lowercase (MB, GB, etc.)
+	maxFileSize := strings.ToLower(clientConfig.MaxFileSize)
+	// Check to see if the max files size contains a conversion unit
+	sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
 
-	// TODO:  add logic to validate MaxFile Size and implement system to support
-	//		  raw bytes, KB, MB, and GB (convert all to raw bytes)
-
-	// TODO:  after above logic is implemented, adjust below string-int conversion
-	//		  to only occur is the data type is string
-
-	// Convert the max file size string to integer
-	numberConversion, err := strconv.ParseInt(maxFileSize, 10, 64)
-	if err != nil {
-		fmt.Errorf("Error converting max_file_size: %v", err)
+	// If the slice contains a data unit to be converted to raw bytes
+	if sliceContains {
+		// Split the size from the unit type
+		size, unit, err := data.ParseFileSizeType(maxFileSize)
+		if err != nil {
+			fmt.Println("Error:", err)
+			os.Exit(1)
+		}
+		// Pass the size and unit to calculate to raw bytes
+		byteSize = data.ToBytes(size, unit)
+	// If the file size seems to already be in bytes
+	} else {
+		// Attempt to convert it straight to int64
+		byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
+		if err != nil {
+			fmt.Println("Error converting string to int64:", err)
+			os.Exit(1)
+		}
 	}
 
 	// If the converted max file size is less than or equal to 0
-	if numberConversion <= 0 {
+	if byteSize <= 0 {
 		fmt.Errorf("Converted max_file_size is less than or equal to 0")
 	}
 
 	// Assign the converted max file size to struct key
-	clientConfig.MaxFileSizeInt64 = numberConversion
+	clientConfig.MaxFileSizeInt64 = byteSize
 
 	return nil
 }
