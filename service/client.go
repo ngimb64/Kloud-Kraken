@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strconv"
 	"sync"
 	"time"
 
@@ -88,7 +87,8 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 }
 
 
-func handleTransfer(connection net.Conn, channel chan []byte, fileName string, fileSize int64) {
+func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
+					fileSize int64, sendChannel bool) {
 	// Set a file path with the received file name
 	filePath := path.Join(StoragePath, fileName)
 	//  Create buffer to optimal size based on expected file size
@@ -109,8 +109,11 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string, f
 		_, err := netio.ReadHandler(connection, &transferBuffer)
 		// If the EOF has been reached
 		if err == io.EOF {
-			// Send the file name through a channel to process it
-			channel <- transferBuffer
+			// If specified with toggle, send file name through
+			// the channel for processing
+			if sendChannel {
+				channel <- transferBuffer
+			}
 			break
 		}
 
@@ -124,57 +127,20 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string, f
 }
 
 
-// Parse out the file name and size from the delimiter
-// sent from remote brain server.
-//
-// Parameters:
-// - readData:  The data read from socket buffer to be parsed
-//
-// Returns:
-// - The byte slice with the file name
-// - A integer file size
-// - Either nil on success or a string error message on failure
-//
-func getFileInfo(readData []byte) ([]byte, int64, error) {
-	prefix := globals.START_TRANSFER_PREFIX
-	suffix := globals.START_TRANSFER_SUFFIX
-	// Trim the delimiters around the file info
-	readData = readData[len(prefix):len(readData)-len(suffix)]
-	// Get the position of the colon delimiter
-	colonPos := bytes.IndexByte(readData, ':')
-	// If the colon separator is missing
-	if colonPos == -1 {
-		return []byte(""), 0, fmt.Errorf("Invalid message structure, colon missing")
-	}
-
-	// Extract the file path and size
-	fileName := readData[:colonPos]
-	fileSizeStr := string(readData[colonPos+1:])
-
-	// Convert the size string to an 64 bit integr
-	fileSize, err := strconv.ParseInt(string(fileSizeStr), 10, 64)
-	if err != nil {
-		return fileName, fileSize, err
-	}
-
-	return fileName, fileSize, nil
-}
-
-
 func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
-					 transferComplete *bool) {
+					 transferComplete *bool) int64 {
 	// Send the transfer request message to initiate file transfer
 	_, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
 	if err != nil {
 		println("Error sending the transfer request to brain server")
-		return
+		return 0
 	}
 
 	// Wait for the brain server to send the start transfer message
 	_, err = netio.ReadHandler(connection, &buffer)
 	if err != nil {
 		fmt.Println("Error start transfer message from server:", err)
-		return
+		return 0
 	}
 
 	// If the brain has completed transferring all data
@@ -182,26 +148,56 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		// Send finished message to other Goroutine
 		channel <- globals.END_TRANSFER_MARKER
 		*transferComplete = true
-		return
+		return 0
 	}
 
 	// If the read data does not start with special delimiter or end with closed bracket
 	if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
 	!bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
-		fmt.Println("[*] Unusual behavior detected with processTransfer method")
-		return
+		fmt.Println("Unusual behavior detected with processTransfer method")
+		return 0
 	}
 
 	// Extract the file name and size from the initial transfer message
-	fileName, fileSize, err := getFileInfo(buffer)
+	fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX,
+										   		 globals.START_TRANSFER_SUFFIX)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return 0
 	}
 
-	go handleTransfer(connection, channel, string(fileName), fileSize)
+	// Now that synchronized messages are complete, handle transfer in routine
+	go handleTransfer(connection, channel, string(fileName), fileSize, true)
 
-	// TODO:  add logic to return disk space for outer scope for prediction
+	return fileSize
+}
+
+
+func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte) {
+	// Wait for the brain server to send the start transfer message
+	_, err := netio.ReadHandler(connection, &buffer)
+	if err != nil {
+		fmt.Println("Error start transfer message from server:", err)
+		os.Exit(1)
+	}
+
+	// If the read data does not start with special delimiter or end with closed bracket
+	if !bytes.HasPrefix(buffer, globals.HASHES_TRANSFER_PREFIX) ||
+	!bytes.HasSuffix(buffer, globals.HASHES_TRANSFER_SUFFIX) {
+		fmt.Println("Error: unusual behavior detected with receiveHashFile method")
+		os.Exit(1)
+	}
+
+	// Extract the file name and size from the initial transfer message
+	fileName, fileSize, err := netio.GetFileInfo(buffer, globals.HASHES_TRANSFER_PREFIX,
+												 globals.HASHES_TRANSFER_SUFFIX)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Now that synchronized messages are complete, handle transfer in routine
+	go handleTransfer(connection, channel, string(fileName), fileSize, false)
 }
 
 
@@ -220,22 +216,24 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 	// Decrements the wait group counter upon local exit
 	defer waitGroup.Done()
 
+	var lastTransferSize int64 = 0
 	transferComplete := false
-	// Set the initial buffer size
+	// Set the message buffer size
 	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+	// Receive the hash file from the server
+	receiveHashFile(connection, channel, buffer)
 
 	// Read data from the connection in chunks and write to the file
 	for {
 		// Get the remaining available disk space
 		remainingSpace := disk.DiskCheck()
 
-		// TODO:  add logic to below to return file size and predict whether there will be disk
-		//		  space for another tranfer before the async transfer finishes based on max file size
-
-		// If there is enough disk space to store the max file size
-		if remainingSpace >= maxFileSizeInt64 {
-			// Call function to process the transfer of a file
-			processTransfer(connection, channel, buffer, &transferComplete)
+		// If there is enough disk space for the first transfer or there is enough disk
+		// space with included calculation of the file size from the last transfer
+		if ((remainingSpace >= maxFileSizeInt64) && (lastTransferSize == 0)) ||
+		((remainingSpace - lastTransferSize) >= maxFileSizeInt64) {
+			// Process the transfer of a file and return file size for the next
+			lastTransferSize = processTransfer(connection, channel, buffer, &transferComplete)
 			// If the transfer is complete exit the data receiving loop
 			if transferComplete {
 				break
@@ -243,7 +241,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			continue
 		}
 
-		// Sleep to avoid excessive syscalls in checking disk size
+		// Sleep to avoid excessive syscalls during idle activity
 		time.Sleep(5 * time.Second)
 	}
 }
@@ -257,8 +255,6 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // - appConfig:  Pointer to the program configuration struct
 //
 func handleConnection(connection net.Conn, maxFileSizeInt64 int64) {
-	// TODO:  add code to receive hash file from server
-
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
 	// Establish a wait group

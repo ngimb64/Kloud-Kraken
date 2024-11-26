@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 
@@ -12,14 +12,14 @@ import (
 )
 
 // GetPublicIP fetches the public IP of the executing machine by querying ipify.org
-func GetPublicIP() (string, error) {
+func getPublicIP() (string, error) {
 	response, err := http.Get("https://api.ipify.org")
 	if err != nil {
 		return "", err
 	}
 	defer response.Body.Close()
 
-	ip, err := ioutil.ReadAll(response.Body)
+	ip, err := io.ReadAll(response.Body)
 	if err != nil {
 		return "", err
 	}
@@ -41,8 +41,7 @@ func createEC2Instance(publicIP string) (*ec2.Instance, error) {
 	svc := ec2.New(sess)
 
 	// User data script to pass the public IP to the EC2 instance
-	userData := fmt.Sprintf(`#cloud-config
-#!/bin/bash
+	userData := fmt.Sprintf(`#!/bin/bash
 echo "Public IP of the local machine: %s" > /opt/provisioning/ip_address.txt
 /opt/provisioning/Client --ip %s
 `, publicIP, publicIP)
@@ -64,9 +63,9 @@ echo "Public IP of the local machine: %s" > /opt/provisioning/ip_address.txt
 }
 
 
-func main() {
+func test() {
 	// Get the public IP of the local machine
-	publicIP, err := GetPublicIP()
+	publicIP, err := getPublicIP()
 	if err != nil {
 		log.Fatal(err)
 	}

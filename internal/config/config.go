@@ -23,6 +23,7 @@ type LocalConfig struct {
 	ListenerPort   int    `yaml:"listener_port"`
 	MaxConnections int    `yaml:"max_connections"`
 	LoadDir	   	   string `yaml:"load_dir"`
+	HashFilePath   string `yaml:"hash_file_path"`
 }
 
 // ClientConfig contains the configuration for the client settings
@@ -33,13 +34,14 @@ type ClientConfig struct {
 
 
 // NewAppConfig creates and returns a new AppConfig nested structure
-func NewAppConfig(listenerPort int, maxConnections int, clientPort int,
-				  ipAddress string, maxFileSize string, loadDir string) *AppConfig {
+func NewAppConfig(listenerPort int, maxConnections int, loadDir string,
+				  hashFilePath string, maxFileSize string) *AppConfig {
 	return &AppConfig{
 		LocalConfig: LocalConfig{
 			ListenerPort:   listenerPort,
 			MaxConnections: maxConnections,
 			LoadDir:		loadDir,
+			HashFilePath:   hashFilePath,
 		},
 		ClientConfig: ClientConfig{
 			MaxFileSize: 	  maxFileSize,
@@ -54,7 +56,7 @@ func LoadConfig(filePath string) (*AppConfig, error) {
 	// Open the YAML file
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("could not open YAML file: %v", err)
+		return nil, fmt.Errorf("could not open YAML file => %v", err)
 	}
 	// Close file on local exit
 	defer file.Close()
@@ -66,19 +68,19 @@ func LoadConfig(filePath string) (*AppConfig, error) {
 	decoder := yaml.NewDecoder(file)
 	err = decoder.Decode(&config)
 	if err != nil {
-		return nil, fmt.Errorf("could not decode YAML into AppConfig: %v", err)
+		return nil, fmt.Errorf("could not decode YAML into AppConfig => %v", err)
 	}
 
 	// Validate local config section of YAML data
 	err = ValidateLocalConfig(&config.LocalConfig)
 	if err != nil {
-		return nil, fmt.Errorf("invalid local config: %v", err)
+		return nil, fmt.Errorf("invalid local config => %v", err)
 	}
 
 	// Validate client config section of YAML data
 	err = ValidateClientConfig(&config.ClientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("invalid client config: %v", err)
+		return nil, fmt.Errorf("invalid client config => %v", err)
 	}
 
 	return &config, nil
@@ -102,9 +104,20 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 		return err
 	}
 
-	// If the path does not exist or is not a directory
+	// If the load dir path does not exist or is not a directory
 	if !exists || !isDir {
-		return fmt.Errorf("Path does not exist or is a file")
+		return fmt.Errorf("load dir path does not exist or is a file")
+	}
+
+	// Check to see if the hash file exists
+	exists, isDir, err = disk.PathExists(localConfig.HashFilePath)
+	if err != nil {
+		return err
+	}
+
+	// If the hash file path does not exist
+	if !exists {
+		return fmt.Errorf("hash file path does not exist")
 	}
 
 	return nil

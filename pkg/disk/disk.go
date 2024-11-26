@@ -16,9 +16,6 @@ var fileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
 
 
 func DiskCheck() (int64) {
-	// Reserved space for the OS (10GB)
-	var OSReservedSpace int64 = 10 * globals.GB
-
 	// Get the total and available disk space
 	total, free, err := GetDiskSpace()
 	if err != nil {
@@ -31,7 +28,7 @@ func DiskCheck() (int64) {
 	fmt.Printf("Free disk space: %d GB\n", free/globals.GB)
 
 	// Subtract reserved space (for OS) from free space
-	remainingSpace := free - OSReservedSpace
+	remainingSpace := free - globals.OS_RESERVED_SPACE
 
 	return remainingSpace
 }
@@ -109,13 +106,13 @@ func PathExists(filePath string) (bool, bool, error) {
 
 
 // Function for each goroutine to walk the directory and select a file
-func SelectFile(rootDir string) (string, int64, error) {
+func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
 	var returnPath string
 	var returnSize int64
 	done := false
 
-	// Walking through the directory tree
-	err := filepath.Walk(rootDir, func(path string, itemInfo os.FileInfo, err error) error {
+	// Iterate through the file and folders in the load directory
+	err := filepath.Walk(loadDir, func(path string, itemInfo os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -131,6 +128,11 @@ func SelectFile(rootDir string) (string, int64, error) {
 			fileSelectionLock.Lock()
 			// Unlock selection process on local exit
 			defer fileSelectionLock.Unlock()
+
+			// If the current file size is greater than the max file size set in YAML
+			if itemInfo.Size() > maxFileSizeInt64 {
+				return nil
+			}
 
 			// Check if the file has already been selected by another goroutine,
 			// otherwise store the file path in the sync map

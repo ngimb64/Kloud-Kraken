@@ -18,7 +18,7 @@ import (
 )
 
 // Package level variables
-var CurrentConnections int32	// Tracks current active connections
+var CurrentConnections atomic.Int32		// Tracks current active connections
 
 
 func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File) {
@@ -71,7 +71,8 @@ func transferFile(connection net.Conn, filePath string, fileSize int64) {
 
 func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig) {
 	// Select the next avaible file in the load dir from YAML data
-	filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir)
+	filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
+											   appConfig.ClientConfig.MaxFileSizeInt64)
 	if err != nil {
 		fmt.Println("Error selecting the next avaible file for transfer:", err)
 		return
@@ -106,16 +107,47 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 }
 
 
+func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig) {
+	filePath := appConfig.LocalConfig.HashFilePath
+
+	// Get the hash file size based on saved path in config
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
+
+	fileSize := fileInfo.Size()
+
+	// Clear the buffer before building transfer reply
+	*buffer = (*buffer)[:0]
+	// Append the hash file transfer request piece by piece in buffer
+	*buffer = append(globals.HASHES_TRANSFER_PREFIX, []byte(filePath)...)
+	*buffer = append(*buffer, globals.COLON_DELIMITER...)
+	*buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
+	*buffer = append(*buffer, globals.HASHES_TRANSFER_SUFFIX...)
+
+	// Send the hash file transfer request with file name and size
+	_, err = netio.WriteHandler(connection, buffer)
+	if err != nil {
+		fmt.Println("Error sending the transfer reply:", err)
+		os.Exit(1)
+	}
+
+	go transferFile(connection, filePath, fileSize)
+}
+
+
 func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 					  appConfig *config.AppConfig) {
 	// Close connection and decrement waitGroup counter on local exit
 	defer connection.Close()
 	defer waitGroup.Done()
 
-	// TODO:  add code to upload hash file to client
-
 	// Set message buffer size
 	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+	// Upload the hash file to connection client
+	uploadHashFile(connection, &buffer, appConfig)
 
 	for {
 		// Read data from connected client
@@ -140,10 +172,10 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 	}
 
 	// Decrement the active connection count
-	atomic.AddInt32(&CurrentConnections, -1)
+	CurrentConnections.Add(-1)
 
 	fmt.Printf("[!] Connection handled, active connections: %d\n",
-			   atomic.LoadInt32(&CurrentConnections))
+			   CurrentConnections.Load())
 }
 
 
@@ -165,8 +197,8 @@ func startServer(appConfig *config.AppConfig) {
 
 	for {
 		// If the current number of connection is greater than or equal to the allowed max
-		if atomic.LoadInt32(&CurrentConnections) >= int32(appConfig.LocalConfig.MaxConnections) {
-			fmt.Println("[*] All remote clients are connected")
+		if CurrentConnections.Load() >= int32(appConfig.LocalConfig.MaxConnections) {
+			fmt.Println("[!] All remote clients are connected")
 			break
 		}
 
@@ -178,10 +210,10 @@ func startServer(appConfig *config.AppConfig) {
 		}
 
 		// Increment the active connection count
-		atomic.AddInt32(&CurrentConnections, 1)
+		CurrentConnections.Add(1)
 
 		fmt.Printf("[+] New connection accepted, active connections: %d\n",
-				   atomic.LoadInt32(&CurrentConnections))
+				   CurrentConnections.Load())
 
 		// Increment wait group and handle connection in separate Goroutine
 		waitGroup.Add(1)

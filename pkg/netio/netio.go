@@ -1,9 +1,47 @@
 package netio
 
 import (
+	"bytes"
 	"fmt"
 	"net"
+	"strconv"
 )
+
+// Parse out the file name and size from the delimiter
+// sent from remote brain server.
+//
+// Parameters:
+// - readData:  The data read from socket buffer to be parsed
+//
+// Returns:
+// - The byte slice with the file name
+// - A integer file size
+// - Either nil on success or a string error message on failure
+//
+func GetFileInfo(readData []byte, messagePrefix []byte,
+				 messageSuffix []byte) ([]byte, int64, error) {
+	// Trim the delimiters around the file info
+	readData = readData[len(messagePrefix):len(readData)-len(messageSuffix)]
+	// Get the position of the colon delimiter
+	colonPos := bytes.IndexByte(readData, ':')
+	// If the colon separator is missing
+	if colonPos == -1 {
+		return []byte(""), 0, fmt.Errorf("invalid message structure, colon missing")
+	}
+
+	// Extract the file path and size
+	fileName := readData[:colonPos]
+	fileSizeStr := string(readData[colonPos+1:])
+
+	// Convert the size string to an 64 bit integr
+	fileSize, err := strconv.ParseInt(string(fileSizeStr), 10, 64)
+	if err != nil {
+		return fileName, fileSize, err
+	}
+
+	return fileName, fileSize, nil
+}
+
 
 // Adjust buffer to optimal size based on file size to be received.
 //

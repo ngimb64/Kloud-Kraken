@@ -2,6 +2,7 @@ local_config:
   listener_port: 6969
   max_connections: 1
   load_dir: ""
+  hash_file_path: ""
 
 client_config:
   max_file_size: "1GB"

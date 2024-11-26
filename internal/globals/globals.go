@@ -2,8 +2,11 @@ package globals
 
 const GB = 1024 * 1024 * 1024
 const MESSAGE_BUFFER_SIZE = 256
+const OS_RESERVED_SPACE = 10 * GB
 
 var COLON_DELIMITER = []byte(":")
+var HASHES_TRANSFER_PREFIX = []byte("<TRANSFER_HASHES:")
+var HASHES_TRANSFER_SUFFIX = []byte(">")
 var TRANSFER_REQUEST_MARKER = []byte("<TRANSFER_REQUEST>")
 var START_TRANSFER_PREFIX = []byte("<START_TRANSFER:")
 var START_TRANSFER_SUFFIX = []byte(">")
