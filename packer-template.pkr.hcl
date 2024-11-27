@@ -56,7 +56,7 @@ builder "amazon-instance" {
 
     # Set custom tag
     tags {
-        "Name" = "Kloud-Kraken-AMI-${timestamp()}"
+        "Name" = "Kloud-Kraken-AMI-Latest"
     }
 }
 
@@ -79,5 +79,4 @@ provisioner "shell" {
     script            = "scripts/init.sh"    # Local script location
     environment_vars  = ["HOSTNAME=test"]    # Enviroment variables used in script
     remote_folder     = "/opt/provisioning"  # Folder where the script will reside on the AMI
-    skip_clean        = true                 # File will not be removed by packer
 }

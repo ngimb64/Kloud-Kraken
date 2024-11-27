@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 )
@@ -21,7 +22,8 @@ import (
 const StoragePath = "/tmp"	// Path where received files are stored
 
 
-func sendAndRemove(connection net.Conn, filePath string, output []byte) {
+func sendAndRemove(connection net.Conn, filePath string, output []byte,
+				   transferManager *data.TransferManager) {
 	// TODO:  add code to format the command output to optimal format
 
 	// Send the processing result
@@ -31,8 +33,17 @@ func sendAndRemove(connection net.Conn, filePath string, output []byte) {
 		return
 	}
 
+	// Get the file size for transfer manager subtraction after removal
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		println("Error occurred getting file information:", err)
+		os.Exit(1)
+	}
+
 	// Delete the processed file
 	os.Remove(filePath)
+	// Remove the file size from transfer manager after deletion
+	transferManager.RemoveTransferSize(fileInfo.Size())
 }
 
 
@@ -45,7 +56,8 @@ func sendAndRemove(connection net.Conn, filePath string, output []byte) {
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Acts as a barrier for the Goroutines running
 //
-func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup) {
+func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup,
+				 transferManager *data.TransferManager) {
 	// Decrements the wait group counter upon local exit
 	defer waitGroup.Done()
 
@@ -82,25 +94,13 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 		// In a separate goroutine, format the output, send it,
 		// and delete the processed data
-		go sendAndRemove(connection, filePath, output)
+		go sendAndRemove(connection, filePath, output, transferManager)
 	}
 }
 
 
-func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
-					fileSize int64, sendChannel bool) {
-	// Set a file path with the received file name
-	filePath := path.Join(StoragePath, fileName)
-	//  Create buffer to optimal size based on expected file size
-	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
-
-	// Open the file for writing
-	file, err := os.Create(filePath)
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
-	}
-
+func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bool,
+						transferBuffer []byte, file *os.File) {
 	// Close file when the function exits
 	defer file.Close()
 
@@ -127,20 +127,39 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
 }
 
 
+func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
+					fileSize int64, sendChannel bool) {
+	// Set a file path with the received file name
+	filePath := path.Join(StoragePath, fileName)
+	//  Create buffer to optimal size based on expected file size
+	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
+
+	// Open the file for writing
+	file, err := os.Create(filePath)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+
+	// Read data from the socket and write to the file path
+	socketToFileHander(connection, channel, sendChannel, transferBuffer, file)
+}
+
+
 func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
-					 transferComplete *bool) int64 {
+					 transferManager *data.TransferManager, transferComplete *bool) {
 	// Send the transfer request message to initiate file transfer
 	_, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
 	if err != nil {
 		println("Error sending the transfer request to brain server")
-		return 0
+		return
 	}
 
 	// Wait for the brain server to send the start transfer message
 	_, err = netio.ReadHandler(connection, &buffer)
 	if err != nil {
 		fmt.Println("Error start transfer message from server:", err)
-		return 0
+		return
 	}
 
 	// If the brain has completed transferring all data
@@ -148,14 +167,14 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		// Send finished message to other Goroutine
 		channel <- globals.END_TRANSFER_MARKER
 		*transferComplete = true
-		return 0
+		return
 	}
 
 	// If the read data does not start with special delimiter or end with closed bracket
 	if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
 	!bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
 		fmt.Println("Unusual behavior detected with processTransfer method")
-		return 0
+		return
 	}
 
 	// Extract the file name and size from the initial transfer message
@@ -163,13 +182,14 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 										   		 globals.START_TRANSFER_SUFFIX)
 	if err != nil {
 		fmt.Println(err)
-		return 0
+		return
 	}
+
+	// Add the file size of the file to be transfered to transfer manager
+	transferManager.AddTransferSize(fileSize)
 
 	// Now that synchronized messages are complete, handle transfer in routine
 	go handleTransfer(connection, channel, string(fileName), fileSize, true)
-
-	return fileSize
 }
 
 
@@ -212,11 +232,10 @@ func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte) {
 // - appConfig:  Pointer to the program configuration struct
 //
 func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup,
-				 maxFileSizeInt64 int64) {
+				 transferManager *data.TransferManager, maxFileSizeInt64 int64) {
 	// Decrements the wait group counter upon local exit
 	defer waitGroup.Done()
 
-	var lastTransferSize int64 = 0
 	transferComplete := false
 	// Set the message buffer size
 	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
@@ -227,13 +246,15 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 	for {
 		// Get the remaining available disk space
 		remainingSpace := disk.DiskCheck()
+		// Get the ongoing transfer size from transfer manager
+		ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
 		// If there is enough disk space for the first transfer or there is enough disk
-		// space with included calculation of the file size from the last transfer
-		if ((remainingSpace >= maxFileSizeInt64) && (lastTransferSize == 0)) ||
-		((remainingSpace - lastTransferSize) >= maxFileSizeInt64) {
+		// space with included calculation of the ongoing file transfers
+		if ((remainingSpace >= maxFileSizeInt64) && (ongoingTransferSize == 0)) ||
+		((remainingSpace - ongoingTransferSize) >= maxFileSizeInt64) {
 			// Process the transfer of a file and return file size for the next
-			lastTransferSize = processTransfer(connection, channel, buffer, &transferComplete)
+			processTransfer(connection, channel, buffer, transferManager, &transferComplete)
 			// If the transfer is complete exit the data receiving loop
 			if transferComplete {
 				break
@@ -255,6 +276,9 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // - appConfig:  Pointer to the program configuration struct
 //
 func handleConnection(connection net.Conn, maxFileSizeInt64 int64) {
+	// Initialize a transfer mananager used to track the size of active file transfers
+	transferManager := data.TransferManager{}
+
 	// Create a channel for the goroutines to communicate
 	channel := make(chan []byte)
 	// Establish a wait group
@@ -263,9 +287,9 @@ func handleConnection(connection net.Conn, maxFileSizeInt64 int64) {
 	waitGroup.Add(2)
 
 	// Start the goroutine to write data to the file
-	go receiveData(connection, channel, &waitGroup, maxFileSizeInt64)
+	go receiveData(connection, channel, &waitGroup, &transferManager, maxFileSizeInt64)
 	// Start the goroutine to process the file
-	go processData(connection, channel, &waitGroup)
+	go processData(connection, channel, &waitGroup, &transferManager)
 
 	// Wait for both goroutines to finish
 	waitGroup.Wait()

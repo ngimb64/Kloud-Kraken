@@ -1,4 +1,3 @@
-- Heavily review prediction logic for disk free space on client associated with transfer requests
 - Set up optional logging system with local, CloudWatch, or both .. (local functionality sends back log files upon EC2 termination)
 	- Ask ChatGPT about using an interface for this
 	- Fix all error handling logic throughout code base

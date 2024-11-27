@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 )
@@ -77,4 +78,30 @@ func ToBytes(size float64, unit string) int64 {
 
     // Convert the result to int64 and return
     return int64(byteSize)
+}
+
+
+// TransferManager tracks the size of ongoing transfers.
+type TransferManager struct {
+	OngoingTransfersSize int64 // Total size of all ongoing transfers
+}
+
+// NewTransferManager initializes and returns a new TransferManager instance.
+func NewTransferManager() *TransferManager {
+	return &TransferManager{}
+}
+
+// AddTransferSize adds the specified size to the ongoing transfers.
+func (tm *TransferManager) AddTransferSize(size int64) {
+	atomic.AddInt64(&tm.OngoingTransfersSize, size)
+}
+
+// RemoveTransferSize subtracts the specified size from the ongoing transfers.
+func (tm *TransferManager) RemoveTransferSize(size int64) {
+	atomic.AddInt64(&tm.OngoingTransfersSize, -size)
+}
+
+// GetOngoingTransfersSize returns the current total size of ongoing transfers.
+func (tm *TransferManager) GetOngoingTransfersSize() int64 {
+	return atomic.LoadInt64(&tm.OngoingTransfersSize)
 }

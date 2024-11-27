@@ -110,7 +110,7 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 	}
 
 	// Check to see if the hash file exists
-	exists, isDir, err = disk.PathExists(localConfig.HashFilePath)
+	exists, _, err = disk.PathExists(localConfig.HashFilePath)
 	if err != nil {
 		return err
 	}
