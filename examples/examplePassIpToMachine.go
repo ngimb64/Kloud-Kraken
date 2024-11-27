@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
 // GetPublicIP fetches the public IP of the executing machine by querying ipify.org

@@ -235,5 +235,7 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
+	// TODO:  set up a local logger to file
+
 	startServer(appConfig)
 }

@@ -324,6 +324,7 @@ func main() {
 	var ipAddr string
 	var port int
 	var maxFileSizeInt64 int64
+	var logMode string
 
 	// Define command line flags with default values and descriptions
 	flag.StringVar(&ipAddr, "ipAddr", "localhost",
@@ -331,8 +332,12 @@ func main() {
 	flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
 	flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
 				  "The max size for file to be transmitted at once")
+	flag.StringVar(&logMode, "logMode", "local",
+				   "The mode of logging, which support local, CloudWatch, or both")
 	// Parse the command line flags
 	flag.Parse()
+
+	// TODO:  validate the logging and integrate logging through the program
 
 	// Connect to remote server to begin receiving data for processing
 	connectRemote(ipAddr, port, maxFileSizeInt64)

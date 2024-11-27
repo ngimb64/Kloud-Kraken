@@ -30,12 +30,13 @@ type LocalConfig struct {
 type ClientConfig struct {
 	MaxFileSize    	 string `yaml:"max_file_size"`
 	MaxFileSizeInt64 int64 `yaml:"-"`  			   // Parsed later
+	LogMode			 string `yaml:"log_mode"`
 }
 
 
 // NewAppConfig creates and returns a new AppConfig nested structure
 func NewAppConfig(listenerPort int, maxConnections int, loadDir string,
-				  hashFilePath string, maxFileSize string) *AppConfig {
+				  hashFilePath string, maxFileSize string, logMode string) *AppConfig {
 	return &AppConfig{
 		LocalConfig: LocalConfig{
 			ListenerPort:   listenerPort,
@@ -46,6 +47,7 @@ func NewAppConfig(listenerPort int, maxConnections int, loadDir string,
 		ClientConfig: ClientConfig{
 			MaxFileSize: 	  maxFileSize,
 			MaxFileSizeInt64: 0,
+			LogMode: 		  logMode,
 		},
 	}
 }
