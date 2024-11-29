@@ -15,7 +15,7 @@ var selectedFiles sync.Map		  // Global map to track selected files
 var fileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
 
 
-func DiskCheck() (int64) {
+func DiskCheck() (int64, int64) {
 	// Get the total and available disk space
 	total, free, err := GetDiskSpace()
 	if err != nil {
@@ -23,14 +23,10 @@ func DiskCheck() (int64) {
 		os.Exit(1)
 	}
 
-	// TODO:  log this instead of print it
-	fmt.Printf("Total disk space: %d GB\n", total/globals.GB)
-	fmt.Printf("Free disk space: %d GB\n", free/globals.GB)
-
 	// Subtract reserved space (for OS) from free space
 	remainingSpace := free - globals.OS_RESERVED_SPACE
 
-	return remainingSpace
+	return remainingSpace, total
 }
 
 

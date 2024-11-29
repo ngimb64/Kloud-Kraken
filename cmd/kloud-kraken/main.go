@@ -21,6 +21,13 @@ import (
 var CurrentConnections atomic.Int32		// Tracks current active connections
 
 
+// Handle reading data from the passed in file descriptor and write to the socket to client.
+//
+// Params:
+// - connection:  The active TCP socket connection to transmit data
+// - transferBuffer:  The buffer used to store file data that is transferred
+// - file:  A pointer to the open file descriptor
+//
 func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File) {
 	// Close the file on local exit
 	defer file.Close()
@@ -29,7 +36,7 @@ func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
 		// Read buffer size from file
 		_, err := file.Read(transferBuffer)
 		if err != nil {
-			// If the error was not EOF
+			// If the error was not the end of file
 			if err != io.EOF {
 				fmt.Println("Error reading file:", err)
 			}
@@ -205,7 +212,7 @@ func startServer(appConfig *config.AppConfig) {
 		// Wait for an incoming connection
 		connection, err := listener.Accept()
 		if err != nil {
-			log.Println("[*] Error accepting connection:", err)
+			fmt.Println("[*] Error accepting connection:", err)
 			continue
 		}
 
