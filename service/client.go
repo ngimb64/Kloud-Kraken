@@ -33,7 +33,7 @@ func sendAndRemove(connection net.Conn, filePath string, output []byte,
 	// Send the processing result
 	_, err := netio.WriteHandler(connection, &output)
 	if err != nil {
-		fmt.Printf("Error sending command result: %v\n", err)
+		kloudlogs.LogMessage(logMan, "error", "Error sending processing result back:  %v", err)
 		return
 	}
 
@@ -81,7 +81,7 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			// Send the processing complete message
 			_, err := netio.WriteHandler(connection, &globals.PROCESSING_COMPLETE)
 			if err != nil {
-				fmt.Println("Error sending processing complete message:", err)
+				kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %v", err)
 				return
 			}
 			break
@@ -94,7 +94,7 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		// Execute and save the command stdout and stderr output
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			fmt.Printf("Error executing command: %v\n", err)
+			kloudlogs.LogMessage(logMan, "error", "Error executing command:  %v", err)
 			return
 		}
 
@@ -126,7 +126,7 @@ func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bo
 		// Write the data to the file
 		_, err = file.Write(transferBuffer)
 		if err != nil {
-			fmt.Println("Error writing to file:", err)
+			kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %v", err)
 			return
 		}
 	}
@@ -140,10 +140,13 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
 	//  Create buffer to optimal size based on expected file size
 	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
 
+	kloudlogs.LogMessage(logMan, "info",
+						 "Filename to be tranfered:  %s | File size to be transfered:  %d", fileName, fileSize)
+
 	// Open the file for writing
 	file, err := os.Create(filePath)
 	if err != nil {
-		fmt.Println("Error creating file:", err)
+		kloudlogs.LogMessage(logMan, "error", "Error creating the file %s:  %v", fileName, err)
 		return
 	}
 
@@ -158,14 +161,14 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 	// Send the transfer request message to initiate file transfer
 	_, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
 	if err != nil {
-		println("Error sending the transfer request to brain server")
+		kloudlogs.LogMessage(logMan, "error", "Error sending the transfer request to brain server:  %v", err)
 		return
 	}
 
 	// Wait for the brain server to send the start transfer message
 	_, err = netio.ReadHandler(connection, &buffer)
 	if err != nil {
-		fmt.Println("Error start transfer message from server:", err)
+		kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %v", err)
 		return
 	}
 
@@ -180,7 +183,7 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 	// If the read data does not start with special delimiter or end with closed bracket
 	if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
 	!bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
-		fmt.Println("Unusual behavior detected with processTransfer method")
+		kloudlogs.LogMessage(logMan, "error", "Unusual format in receieved start transfer message")
 		return
 	}
 
@@ -188,13 +191,13 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 	fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX,
 										   		 globals.START_TRANSFER_SUFFIX)
 	if err != nil {
-		fmt.Println(err)
+		kloudlogs.LogMessage(logMan, "error",
+							 "Error extracting the file name and size from start transfer message:  %v", err)
 		return
 	}
 
 	// Add the file size of the file to be transfered to transfer manager
 	transferManager.AddTransferSize(fileSize)
-
 	// Now that synchronized messages are complete, handle transfer in routine
 	go handleTransfer(connection, channel, string(fileName), fileSize, true, logMan)
 }
@@ -205,23 +208,24 @@ func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte,
 	// Wait for the brain server to send the start transfer message
 	_, err := netio.ReadHandler(connection, &buffer)
 	if err != nil {
-		fmt.Println("Error start transfer message from server:", err)
-		os.Exit(1)
+		kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %v", err)
+		os.Exit(2)
 	}
 
 	// If the read data does not start with special delimiter or end with closed bracket
 	if !bytes.HasPrefix(buffer, globals.HASHES_TRANSFER_PREFIX) ||
 	!bytes.HasSuffix(buffer, globals.HASHES_TRANSFER_SUFFIX) {
-		fmt.Println("Error: unusual behavior detected with receiveHashFile method")
-		os.Exit(1)
+		kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved hashes transfer message")
+		os.Exit(2)
 	}
 
 	// Extract the file name and size from the initial transfer message
 	fileName, fileSize, err := netio.GetFileInfo(buffer, globals.HASHES_TRANSFER_PREFIX,
 												 globals.HASHES_TRANSFER_SUFFIX)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		kloudlogs.LogMessage(logMan, "fatal",
+							 "Error extracting the file name and size from hashes transfer message:  %v", err)
+		os.Exit(2)
 	}
 
 	// Now that synchronized messages are complete, handle transfer in routine
@@ -286,8 +290,8 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 //
 // Parameters:
 // - connection:  The TCP socket connection utilized for transferring data
-
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+// - maxFileSize:  The maximum allowed size for a file to be transferred
 //
 func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
 	// Initialize a transfer mananager used to track the size of active file transfers
@@ -319,7 +323,7 @@ func connectRemote(ipAddr string, port int, maxFileSizeInt64 int64, logMan *klou
 	// Make a connection to the remote brain server
 	connection, err := net.Dial("tcp", serverAddress)
 	if err != nil {
-		kloudlogs.LogMessage(logMan, "error", "Error connecting to remote server:  %v", err)
+		kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %v", err)
 		return
 	}
 
