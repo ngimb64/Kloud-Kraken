@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"sync"
 	"time"
 
@@ -33,10 +34,11 @@ const StoragePath = "/tmp"	// Path where received files are stored
 // - connection:  Active socket connection for reading data to be stored and processed
 // - filePath:  The path to the file to remove after the results are transfered back
 // - output:  The raw output of the data processing to formatted and transferred
+// - fileSize:  The size of the to be stored on disk from read socket data
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func sendAndRemove(connection net.Conn, filePath string, output []byte,
+func sendAndRemove(connection net.Conn, filePath string, output []byte, fileSize int64,
 				   transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
 	// TODO:  add code to format the command output to optimal format
 
@@ -47,17 +49,10 @@ func sendAndRemove(connection net.Conn, filePath string, output []byte,
 		return
 	}
 
-	// Get the file size for transfer manager subtraction after removal
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		kloudlogs.LogMessage(logMan, "error", "Error occurred getting file informaton:  %v", err)
-		os.Exit(3)
-	}
-
 	// Delete the processed file
 	os.Remove(filePath)
 	// Remove the file size from transfer manager after deletion
-	transferManager.RemoveTransferSize(fileInfo.Size())
+	transferManager.RemoveTransferSize(fileSize)
 }
 
 
@@ -79,7 +74,14 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 	for {
 		// Get the filename of the data to process from channel
-		fileName := <-channel
+		channelData := <-channel
+		// Parse file name/size from received data via channel from processing routine
+		fileName, fileSize, err := netio.GetFileInfo(channelData)
+		if err != nil {
+			kloudlogs.LogMessage(logMan, "error", "Error parsing file name and size from channel data:  %v", err)
+			continue
+		}
+
 		// Format the filename in to the path where data is stored
 		filePath := path.Join(StoragePath, string(fileName))
 
@@ -108,9 +110,9 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 			return
 		}
 
-		// In a separate goroutine, format the output, send it,
+		// In a separate goroutine, which will format the output, send it,
 		// and delete the processed data
-		go sendAndRemove(connection, filePath, output, transferManager, logMan)
+		go sendAndRemove(connection, filePath, output, fileSize, transferManager, logMan)
 	}
 }
 
@@ -124,22 +126,31 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 // - sendChannel:  boolean toggle that is to signify whether the file name should be sent
 //				   through the channel prior to completion of data processing
 // - transferBuffer:  Buffer allocated for file transfer based on file size
+// - fileName:  The name of the file to be stored on disk from read socket data
+// - fileSize:  The size of the to be stored on disk from read socket data
 // - file:  The open file descriptor of where the data to be processed will be stored
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bool,
-						transferBuffer []byte, file *os.File, logMan *kloudlogs.LoggerManager) {
+						transferBuffer []byte, fileName string, fileSize int64, file *os.File,
+						logMan *kloudlogs.LoggerManager) {
 	// Close file on local exit
 	defer file.Close()
+	// Make a local buffer for formatting the file name and size to be sent via channel
+	channelBuffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
 	for {
 		// Read data into the buffer
 		_, err := netio.ReadHandler(connection, &transferBuffer)
 		// If the EOF has been reached
 		if err == io.EOF {
-			// If toggle specified, send file name through channel for processing
+			// If toggle specified, send file name and size through channel for processing
 			if sendChannel {
-				channel <- transferBuffer
+				// Format the channel message like "<fileName>:<fileSize>"
+				channelBuffer = []byte(fileName)
+				channelBuffer = append(channelBuffer, byte(':'))
+				channelBuffer = append(channelBuffer, []byte(strconv.FormatInt(fileSize, 10))...)
+				channel <- channelBuffer
 			}
 			break
 		}
@@ -184,7 +195,8 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
 	}
 
 	// Read data from the socket and write to the file path
-	socketToFileHander(connection, channel, sendChannel, transferBuffer, file, logMan)
+	socketToFileHander(connection, channel, sendChannel, transferBuffer,
+					   fileName, fileSize, file, logMan)
 }
 
 
@@ -231,9 +243,10 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		return
 	}
 
-	// Extract the file name and size from the initial transfer message
-	fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX,
-										   		 globals.START_TRANSFER_SUFFIX)
+	// Trim the delimiters around the file info
+	buffer = buffer[len(globals.START_TRANSFER_PREFIX) : len(buffer) - len(globals.START_TRANSFER_SUFFIX)]
+	// Extract the file name and size from the stripped initial transfer message
+	fileName, fileSize, err := netio.GetFileInfo(buffer)
 	if err != nil {
 		kloudlogs.LogMessage(logMan, "error",
 							 "Error extracting the file name and size from start transfer message:  %v", err)
@@ -271,9 +284,10 @@ func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte,
 		os.Exit(2)
 	}
 
+	// Trim the delimiters around the file info
+	buffer = buffer[len(globals.HASHES_TRANSFER_PREFIX) : len(buffer) - len(globals.HASHES_TRANSFER_SUFFIX)]
 	// Extract the file name and size from the initial transfer message
-	fileName, fileSize, err := netio.GetFileInfo(buffer, globals.HASHES_TRANSFER_PREFIX,
-												 globals.HASHES_TRANSFER_SUFFIX)
+	fileName, fileSize, err := netio.GetFileInfo(buffer)
 	if err != nil {
 		kloudlogs.LogMessage(logMan, "fatal",
 							 "Error extracting the file name and size from hashes transfer message:  %v", err)
@@ -309,7 +323,6 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 	// Receive the hash file from the server
 	receiveHashFile(connection, channel, buffer, logMan)
 
-	// Read data from the connection in chunks and write to the file
 	for {
 		// Get the remaining available and total disk space
 		remainingSpace, total := disk.DiskCheck()

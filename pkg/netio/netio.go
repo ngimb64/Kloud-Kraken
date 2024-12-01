@@ -7,31 +7,27 @@ import (
 	"strconv"
 )
 
-// Parse out the file name and size from the delimiter
-// sent from remote brain server.
+// Parse file name/size from buffer data based on colon separator
 //
 // Parameters:
-// - readData:  The data read from socket buffer to be parsed
+// - dataBuffer:  The data read from socket buffer to be parsed
 //
 // Returns:
 // - The byte slice with the file name
 // - A integer file size
 // - Either nil on success or a string error message on failure
 //
-func GetFileInfo(readData []byte, messagePrefix []byte,
-				 messageSuffix []byte) ([]byte, int64, error) {
-	// Trim the delimiters around the file info
-	readData = readData[len(messagePrefix):len(readData)-len(messageSuffix)]
+func GetFileInfo(dataBuffer []byte) ([]byte, int64, error) {
 	// Get the position of the colon delimiter
-	colonPos := bytes.IndexByte(readData, ':')
+	colonPos := bytes.IndexByte(dataBuffer, ':')
 	// If the colon separator is missing
 	if colonPos == -1 {
 		return []byte(""), 0, fmt.Errorf("invalid message structure, colon missing")
 	}
 
 	// Extract the file path and size
-	fileName := readData[:colonPos]
-	fileSizeStr := string(readData[colonPos+1:])
+	fileName := dataBuffer[:colonPos]
+	fileSizeStr := string(dataBuffer[colonPos+1:])
 
 	// Convert the size string to an 64 bit integr
 	fileSize, err := strconv.ParseInt(string(fileSizeStr), 10, 64)

@@ -1,7 +1,6 @@
-- Finish logging implementation and local logger for server and fix all logging logic
-
 - Figure exact command syntax for Hashcat
 - Handle formatting and sending the results from client back to server
+- Finish validation of added YAML data
 
 - Data compression and encryption
 	- Ask ChatGPT about using an interface for current socket functions with encryption integrated

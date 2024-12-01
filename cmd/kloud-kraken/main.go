@@ -96,7 +96,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 		// Send the end transfer message then exit function
 		_, err = netio.WriteHandler(connection, &globals.END_TRANSFER_MARKER)
 		if err != nil {
-			kloudlogs.LogMessage(logMan, "error", "Error sending the transfer message:  %v", err)
+			kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %v", err)
 		}
 		return
 	}
@@ -143,7 +143,7 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 	// Send the hash file transfer request with file name and size
 	_, err = netio.WriteHandler(connection, buffer)
 	if err != nil {
-		kloudlogs.LogMessage(logMan, "fatal", "Error sending the transfer reply:  %v", err)
+		kloudlogs.LogMessage(logMan, "fatal", "Error sending the hash file name and size:  %v", err)
 	}
 
 	go transferFile(connection, filePath, fileSize, logMan)
