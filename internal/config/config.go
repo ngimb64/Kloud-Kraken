@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -20,36 +21,21 @@ type AppConfig struct {
 
 // LocalConfig contains the configuration for local server settings
 type LocalConfig struct {
+	Region		   string `yaml:"region"`
 	ListenerPort   int    `yaml:"listener_port"`
 	MaxConnections int    `yaml:"max_connections"`
 	LoadDir	   	   string `yaml:"load_dir"`
 	HashFilePath   string `yaml:"hash_file_path"`
+	LogPath		   string `yaml:"log_path"`
 }
 
 // ClientConfig contains the configuration for the client settings
 type ClientConfig struct {
+	Region			 string `yaml:"region"`
 	MaxFileSize    	 string `yaml:"max_file_size"`
 	MaxFileSizeInt64 int64 `yaml:"-"`  			   // Parsed later
 	LogMode			 string `yaml:"log_mode"`
-}
-
-
-// NewAppConfig creates and returns a new AppConfig nested structure
-func NewAppConfig(listenerPort int, maxConnections int, loadDir string,
-				  hashFilePath string, maxFileSize string, logMode string) *AppConfig {
-	return &AppConfig{
-		LocalConfig: LocalConfig{
-			ListenerPort:   listenerPort,
-			MaxConnections: maxConnections,
-			LoadDir:		loadDir,
-			HashFilePath:   hashFilePath,
-		},
-		ClientConfig: ClientConfig{
-			MaxFileSize: 	  maxFileSize,
-			MaxFileSizeInt64: 0,
-			LogMode: 		  logMode,
-		},
-	}
+	LogPath			 string `yaml:"log_path"`
 }
 
 
@@ -90,6 +76,8 @@ func LoadConfig(filePath string) (*AppConfig, error) {
 
 
 func ValidateLocalConfig(localConfig *LocalConfig) error {
+	// TODO:  add logic to validate the aws region
+
 	// If the listener port is less than or equal to 1000
 	if localConfig.ListenerPort <= 1000 {
 		return fmt.Errorf("listener_port must greater than 1000")
@@ -127,6 +115,8 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 
 
 func ValidateClientConfig(clientConfig *ClientConfig) error {
+	// TODO:  add logic to validate the aws region
+
 	var byteSize int64
 	var err error
 	// Save string max file size to local variable ensuring
@@ -140,8 +130,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 		// Split the size from the unit type
 		size, unit, err := data.ParseFileSizeType(maxFileSize)
 		if err != nil {
-			fmt.Println("Error:", err)
-			os.Exit(1)
+			log.Fatalf("Error parsing file size unit:  %v", err)
 		}
 		// Pass the size and unit to calculate to raw bytes
 		byteSize = data.ToBytes(size, unit)
@@ -150,8 +139,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 		// Attempt to convert it straight to int64
 		byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
 		if err != nil {
-			fmt.Println("Error converting string to int64:", err)
-			os.Exit(1)
+			log.Fatalf("Error converting string to int64:  %v", err)
 		}
 	}
 
@@ -162,6 +150,8 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 
 	// Assign the converted max file size to struct key
 	clientConfig.MaxFileSizeInt64 = byteSize
+
+	// TODO:  add logic to validate the log mode
 
 	return nil
 }

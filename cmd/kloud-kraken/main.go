@@ -11,9 +11,12 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/config"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 )
 
@@ -28,7 +31,8 @@ var CurrentConnections atomic.Int32		// Tracks current active connections
 // - transferBuffer:  The buffer used to store file data that is transferred
 // - file:  A pointer to the open file descriptor
 //
-func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File) {
+func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File,
+						 logMan *kloudlogs.LoggerManager) {
 	// Close the file on local exit
 	defer file.Close()
 
@@ -38,7 +42,7 @@ func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
 		if err != nil {
 			// If the error was not the end of file
 			if err != io.EOF {
-				fmt.Println("Error reading file:", err)
+				kloudlogs.LogMessage(logMan, "error", "Error reading file:  %v", err)
 			}
 			break
 		}
@@ -46,42 +50,44 @@ func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
 		// Write the read bytes to the client
 		_, err = netio.WriteHandler(connection, &transferBuffer)
 		if err != nil {
-			fmt.Println("Error sending data:", err)
+			kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %v", err)
 			break
 		}
 	}
 }
 
 
-func transferFile(connection net.Conn, filePath string, fileSize int64) {
+func transferFile(connection net.Conn, filePath string, fileSize int64,
+				  logMan *kloudlogs.LoggerManager) {
 	// Create buffer to optimal size based on expected file size
 	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
 
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
-		fmt.Println("Error opening the file to be transferred:", err)
+		kloudlogs.LogMessage(logMan, "error", "Error opening the file to be transfered:  %v", err)
 		return
 	}
 
 	// Read the file chunk by chunk and send to client
-	fileToSocketHandler(connection, transferBuffer, file)
+	fileToSocketHandler(connection, transferBuffer, file, logMan)
 
 	// Delete the transfered file
 	err = os.Remove(filePath)
 	if err != nil {
-		fmt.Println("Error deleting the file:", err)
+		kloudlogs.LogMessage(logMan, "error", "Error deleting the file:  %v", err)
 		return
 	}
 }
 
 
-func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig) {
+func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
+					logMan *kloudlogs.LoggerManager) {
 	// Select the next avaible file in the load dir from YAML data
 	filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
 											   appConfig.ClientConfig.MaxFileSizeInt64)
 	if err != nil {
-		fmt.Println("Error selecting the next avaible file for transfer:", err)
+		kloudlogs.LogMessage(logMan, "error", "Error selecting the next available file to transfer:  %v", err)
 		return
 	}
 
@@ -90,7 +96,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 		// Send the end transfer message then exit function
 		_, err = netio.WriteHandler(connection, &globals.END_TRANSFER_MARKER)
 		if err != nil {
-			fmt.Println("Error sending transfer message:", err)
+			kloudlogs.LogMessage(logMan, "error", "Error sending the transfer message:  %v", err)
 		}
 		return
 	}
@@ -106,22 +112,22 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 	// Send the transfer reply with file name and size
 	_, err = netio.WriteHandler(connection, buffer)
 	if err != nil {
-		fmt.Println("Error sending the transfer reply:", err)
+		kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %v", err)
 		return
 	}
 
-	go transferFile(connection, filePath, fileSize)
+	go transferFile(connection, filePath, fileSize, logMan)
 }
 
 
-func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig) {
+func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
+					logMan *kloudlogs.LoggerManager) {
 	filePath := appConfig.LocalConfig.HashFilePath
 
 	// Get the hash file size based on saved path in config
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		kloudlogs.LogMessage(logMan, "fatal", "Error getting file size:  %v", err)
 	}
 
 	fileSize := fileInfo.Size()
@@ -137,16 +143,15 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 	// Send the hash file transfer request with file name and size
 	_, err = netio.WriteHandler(connection, buffer)
 	if err != nil {
-		fmt.Println("Error sending the transfer reply:", err)
-		os.Exit(1)
+		kloudlogs.LogMessage(logMan, "fatal", "Error sending the transfer reply:  %v", err)
 	}
 
-	go transferFile(connection, filePath, fileSize)
+	go transferFile(connection, filePath, fileSize, logMan)
 }
 
 
 func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
-					  appConfig *config.AppConfig) {
+					  appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 	// Close connection and decrement waitGroup counter on local exit
 	defer connection.Close()
 	defer waitGroup.Done()
@@ -154,13 +159,13 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 	// Set message buffer size
 	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 	// Upload the hash file to connection client
-	uploadHashFile(connection, &buffer, appConfig)
+	uploadHashFile(connection, &buffer, appConfig, logMan)
 
 	for {
 		// Read data from connected client
 		_, err := netio.ReadHandler(connection, &buffer)
 		if err != nil {
-			fmt.Print("[*] Error occured reading data from socket")
+			kloudlogs.LogMessage(logMan, "error", "Error occurred reading data from socket:  %v", err)
 			return
 		}
 
@@ -174,25 +179,25 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 		// If the read data contains transfer request message
 		if bytes.Contains(buffer, globals.TRANSFER_REQUEST_MARKER) {
 			// Call method to handle file transfer based
-			handleTransfer(connection, &buffer, appConfig)
+			handleTransfer(connection, &buffer, appConfig, logMan)
 		}
 	}
 
 	// Decrement the active connection count
 	CurrentConnections.Add(-1)
 
-	fmt.Printf("[!] Connection handled, active connections: %d\n",
-			   CurrentConnections.Load())
+	kloudlogs.LogMessage(logMan, "info", "Connection handled, active connections:  %v",
+						 CurrentConnections.Load())
 }
 
 
-func startServer(appConfig *config.AppConfig) {
+func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 	// Format listener port with parsed YAML data
 	listenerPort := fmt.Sprint(":%s", appConfig.LocalConfig.ListenerPort)
 	// Start listening on specified port
 	listener, err := net.Listen("tcp", listenerPort)
 	if err != nil {
-		log.Fatal("Error starting server:", err)
+		kloudlogs.LogMessage(logMan, "fatal", "Error starting server:  %v", err)
 	}
 
 	// Close listener on local exit
@@ -200,41 +205,43 @@ func startServer(appConfig *config.AppConfig) {
 	// Establish wait group for Goroutine synchronization
 	var waitGroup sync.WaitGroup
 
-	fmt.Println("[+] Server started, waiting for connections ..")
+	kloudlogs.LogMessage(logMan, "info", "Server started, waiting for connections ..")
 
 	for {
 		// If the current number of connection is greater than or equal to the allowed max
 		if CurrentConnections.Load() >= int32(appConfig.LocalConfig.MaxConnections) {
-			fmt.Println("[!] All remote clients are connected")
+			kloudlogs.LogMessage(logMan, "info", "All remote clients are connected")
 			break
 		}
 
 		// Wait for an incoming connection
 		connection, err := listener.Accept()
 		if err != nil {
-			fmt.Println("[*] Error accepting connection:", err)
+			kloudlogs.LogMessage(logMan, "error", "Error accepting connection:  %v", err)
 			continue
 		}
 
 		// Increment the active connection count
 		CurrentConnections.Add(1)
 
-		fmt.Printf("[+] New connection accepted, active connections: %d\n",
-				   CurrentConnections.Load())
+		kloudlogs.LogMessage(logMan, "info", "Connection accepted, active connections:  %d",
+							 CurrentConnections.Load())
 
 		// Increment wait group and handle connection in separate Goroutine
 		waitGroup.Add(1)
-		go handleConnection(connection, &waitGroup, appConfig)
+		go handleConnection(connection, &waitGroup, appConfig, logMan)
 	}
 
 	// Wait for all active Goroutines to finish before shutting down the server
 	waitGroup.Wait()
 
-	fmt.Println("[!] All connections handled .. server shutting down")
+	kloudlogs.LogMessage(logMan, "info", "All connections handled .. server shutting down")
 }
 
 
 func main() {
+	var awsConfig aws.Config
+
 	configFilePath := "config.yaml"
 	// Load the configuration from the YAML file
 	appConfig, err := config.LoadConfig(configFilePath)
@@ -242,7 +249,29 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
-	// TODO:  set up a local logger to file
+	// Get the AWS access and secret key environment variables
+	awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
+	awsSecretKey := os.Getenv("AWS_SECRET_KEY")
 
-	startServer(appConfig)
+	// If AWS access and secret key are present
+	if awsAccessKey == "" || awsSecretKey == "" {
+		log.Fatal("Missing either the access or the secret key for AWS")
+	}
+
+	// Set AWS config for CloudWatch logging
+	awsConfig = aws.Config {
+		Region:      appConfig.LocalConfig.Region,
+		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""),
+	}
+
+	// Initialize the LoggerManager based on the flags
+	logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig)
+	if err != nil {
+		log.Fatalf("Error initializing logger manager: %v", err)
+	}
+
+	// TODO:  After local testing add function calls for setting up AWS, packer AMI build (if not exist already),
+	//		  and spawning EC2 with user data executing service with params passed in
+
+	startServer(appConfig, logMan)
 }

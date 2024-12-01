@@ -26,6 +26,16 @@ import (
 const StoragePath = "/tmp"	// Path where received files are stored
 
 
+// Format the result of data processing, send the formatted result of the data processing to the
+// remote brain server, and delete the data prior to processing.
+//
+// Parameters:
+// - connection:  Active socket connection for reading data to be stored and processed
+// - filePath:  The path to the file to remove after the results are transfered back
+// - output:  The raw output of the data processing to formatted and transferred
+// - transferManager:  Manages calculating the amount of data being transferred locally
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
 func sendAndRemove(connection net.Conn, filePath string, output []byte,
 				   transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
 	// TODO:  add code to format the command output to optimal format
@@ -40,8 +50,8 @@ func sendAndRemove(connection net.Conn, filePath string, output []byte,
 	// Get the file size for transfer manager subtraction after removal
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
-		println("Error occurred getting file information:", err)
-		os.Exit(1)
+		kloudlogs.LogMessage(logMan, "error", "Error occurred getting file informaton:  %v", err)
+		os.Exit(3)
 	}
 
 	// Delete the processed file
@@ -105,6 +115,18 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 }
 
 
+// Reads data from the socket and write it to the passed in open file descriptor until end
+// of file has been reached or error occurs with socket operation.
+//
+// Parameters:
+// - connection:  Active socket connection for reading data to be stored and processed
+// - channel:  Channel to transmit filenames after transfer to initiate data processing
+// - sendChannel:  boolean toggle that is to signify whether the file name should be sent
+//				   through the channel prior to completion of data processing
+// - transferBuffer:  Buffer allocated for file transfer based on file size
+// - file:  The open file descriptor of where the data to be processed will be stored
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
 func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bool,
 						transferBuffer []byte, file *os.File, logMan *kloudlogs.LoggerManager) {
 	// Close file on local exit
@@ -115,8 +137,7 @@ func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bo
 		_, err := netio.ReadHandler(connection, &transferBuffer)
 		// If the EOF has been reached
 		if err == io.EOF {
-			// If specified with toggle, send file name through
-			// the channel for processing
+			// If toggle specified, send file name through channel for processing
 			if sendChannel {
 				channel <- transferBuffer
 			}
@@ -133,6 +154,18 @@ func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bo
 }
 
 
+// Takes the passed in file name and parses it to the file path to create the file where the
+// resulting file will be stored to lated be used for processing.
+//
+// Parameters:
+// - connection:  Active socket connection for reading data to be stored and processed
+// - channel:  Channel to transmit filenames after transfer to initiate data processing
+// - fileName:  The name of the file to be stored on disk from read socket data
+// - fileSize:  The size of the to be stored on disk from read socket data
+// - sendChannel:  boolean toggle that is to signify whether the file name should be sent
+//				   through the channel prior to completion of data processing
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
 func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
 					fileSize int64, sendChannel bool, logMan *kloudlogs.LoggerManager) {
 	// Set a file path with the received file name
@@ -155,6 +188,17 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
 }
 
 
+// Sends transfer message to the brain server, waits for transfer reply with file name and
+// size, and proceeds to call handle transfer method.
+//
+// Parameters:
+// - connection:  Active socket connection for reading data to be stored and processed
+// - channel:  Channel to transmit filenames after transfer to initiate data processing
+// - buffer:  The buffer used for processing socket messaging
+// - transferManager:  Manages calculating the amount of data being transferred locally
+// - transferComplete:  boolean toggle that is to signify when all files have been transfered
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
 func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 					 transferManager *data.TransferManager, transferComplete *bool,
 					 logMan *kloudlogs.LoggerManager) {
@@ -203,6 +247,14 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 }
 
 
+// Receives the file of hash to be cracked from the brain server.
+//
+// Parameters:
+// - connection:  Active socket connection for reading data to be stored and processed
+// - channel:  Channel to transmit filenames after transfer to initiate data processing
+// - buffer:  The buffer used for processing socket messaging
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
 func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte,
 					 logMan *kloudlogs.LoggerManager) {
 	// Wait for the brain server to send the start transfer message
@@ -316,7 +368,14 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager, maxF
 
 // Take the IP address & port argument and establish a connection to
 // remote brain server, then pass the connection to Goroutine handler.
-func connectRemote(ipAddr string, port int, maxFileSizeInt64 int64, logMan *kloudlogs.LoggerManager) {
+//
+// Parameters:
+// - ipAddr:  The ip address of the remote brain server
+// - port:  The TCP port to connect to on remote brain server
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+// - maxFileSize:  The maximum allowed size for a file to be transferred
+//
+func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
 	// Define the address of the server to connect to
 	serverAddress := fmt.Sprintf("%s:%s", ipAddr, port)
 
@@ -358,7 +417,7 @@ func main() {
 	flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
 	flag.StringVar(&logMode, "logMode", "local",
 				   "The mode of logging, which support local, CloudWatch, or both")
-	flag.StringVar(&logPath, "logPath", "KloudKraken.log", " File path to the log file")
+	flag.StringVar(&logPath, "logPath", "KloudKraken.log", "Path to the log file")
 	// Parse the command line flags
 	flag.Parse()
 
@@ -381,5 +440,5 @@ func main() {
 	}
 
 	// Connect to remote server to begin receiving data for processing
-	connectRemote(ipAddr, port, maxFileSizeInt64, logMan)
+	connectRemote(ipAddr, port, logMan, maxFileSizeInt64)
 }

@@ -229,12 +229,13 @@ func (logMan *LoggerManager) LogPanic(msg string, fields ...zap.Field) {
 
 // Logs fatal message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogFatal(msg string, fields ...zap.Field) {
-	if logMan.localLogger != nil {
-		logMan.localLogger.Fatal(msg, fields...)
-	}
-
+	// TODO:  implement special logic for here when working on cloudwatch logger above
 	if logMan.cloudLogger != nil {
 		logMan.cloudLogger.Fatal(msg, fields...)
+	}
+
+	if logMan.localLogger != nil {
+		logMan.localLogger.Fatal(msg, fields...)
 	}
 }
 

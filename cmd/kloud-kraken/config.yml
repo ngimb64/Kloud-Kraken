@@ -1,9 +1,13 @@
 local_config:
+  region: "us-east-1"
   listener_port: 6969
   max_connections: 1
   load_dir: ""
   hash_file_path: ""
+  log_path: "KloudKraken.log"
 
 client_config:
+  region: "us-east-1"
   max_file_size: "1GB"
   log_mode: "local"
+  log_path: "KloudKraken.log"
