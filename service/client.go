@@ -326,11 +326,11 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 	for {
 		// Get the remaining available and total disk space
 		remainingSpace, total := disk.DiskCheck()
-		// Get the ongoing transfer size from transfer manager
-		ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
 		kloudlogs.LogMessage(logMan, "info", "Remaining space left:  %d | Total space left:  %d",
 							 remainingSpace, total)
+		// Get the ongoing transfer size from transfer manager
+		ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
 		// If the remaining space minus the ongoing file transfers
 		// is greater than or equal to the max file size

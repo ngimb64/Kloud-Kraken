@@ -1,7 +1,7 @@
 local_config:
   region: "us-east-1"
   listener_port: 6969
-  max_connections: 1
+  number_instances: 1
   load_dir: ""
   hash_file_path: ""
   log_path: "KloudKraken.log"

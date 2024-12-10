@@ -4,12 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
-	"strings"
 
-	"github.com/ngimb64/Kloud-Kraken/internal/globals"
-	"github.com/ngimb64/Kloud-Kraken/pkg/data"
-	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,12 +17,12 @@ type AppConfig struct {
 
 // LocalConfig contains the configuration for local server settings
 type LocalConfig struct {
-	Region		   string `yaml:"region"`
-	ListenerPort   int    `yaml:"listener_port"`
-	MaxConnections int    `yaml:"max_connections"`
-	LoadDir	   	   string `yaml:"load_dir"`
-	HashFilePath   string `yaml:"hash_file_path"`
-	LogPath		   string `yaml:"log_path"`
+	Region		    string `yaml:"region"`
+	ListenerPort    int    `yaml:"listener_port"`
+	NumberInstances int    `yaml:"number_instances"`
+	LoadDir	   	    string `yaml:"load_dir"`
+	HashFilePath    string `yaml:"hash_file_path"`
+	LogPath		    string `yaml:"log_path"`
 }
 
 // ClientConfig contains the configuration for the client settings
@@ -40,11 +36,11 @@ type ClientConfig struct {
 
 
 // LoadConfig reads the YAML file and unmarshals it into AppConfig
-func LoadConfig(filePath string) (*AppConfig, error) {
+func LoadConfig(filePath string) *AppConfig {
 	// Open the YAML file
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("could not open YAML file => %v", err)
+		log.Fatalf("Could not open YAML file:  %v", err)
 	}
 	// Close file on local exit
 	defer file.Close()
@@ -56,102 +52,94 @@ func LoadConfig(filePath string) (*AppConfig, error) {
 	decoder := yaml.NewDecoder(file)
 	err = decoder.Decode(&config)
 	if err != nil {
-		return nil, fmt.Errorf("could not decode YAML into AppConfig => %v", err)
+		log.Fatalf("Could not decode YAML into AppConfig:  %v", err)
 	}
 
 	// Validate local config section of YAML data
 	err = ValidateLocalConfig(&config.LocalConfig)
 	if err != nil {
-		return nil, fmt.Errorf("invalid local config => %v", err)
+		log.Fatalf("Invalid local config:  %v", err)
 	}
 
 	// Validate client config section of YAML data
 	err = ValidateClientConfig(&config.ClientConfig)
 	if err != nil {
-		return nil, fmt.Errorf("invalid client config => %v", err)
+		log.Fatalf("Invalid client config:  %v", err)
 	}
 
-	return &config, nil
+	return &config
 }
 
 
 func ValidateLocalConfig(localConfig *LocalConfig) error {
-	// TODO:  add logic to validate the aws region
+	// Ensure a proper region was specified in the local config
+	if !validate.ValidateRegion(localConfig.Region) {
+		return fmt.Errorf("improper region specified in local config")
+	}
 
-	// If the listener port is less than or equal to 1000
-	if localConfig.ListenerPort <= 1000 {
+	// Ensure the listerner port is greater than 1000
+	if !validate.ValidateListenerPort(localConfig.ListenerPort) {
 		return fmt.Errorf("listener_port must greater than 1000")
 	}
 
-	// If the max connections is less than or equal to 0
-	if localConfig.MaxConnections <= 0 {
-		return fmt.Errorf("max_connections must be a positive integer")
+	// Ensure the number of instances is a positive integer
+	if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
+		return fmt.Errorf("number_instances must be a positive integer")
 	}
 
-	// Check to see if the load directory exists and has files in it
-	exists, isDir, err := disk.PathExists(localConfig.LoadDir)
+	// Ensure the load directory exists and has files in it
+	err := validate.ValidateLoadDir(localConfig.LoadDir)
 	if err != nil {
 		return err
 	}
 
-	// If the load dir path does not exist or is not a directory
-	if !exists || !isDir {
-		return fmt.Errorf("load dir path does not exist or is a file")
-	}
-
-	// Check to see if the hash file exists
-	exists, _, err = disk.PathExists(localConfig.HashFilePath)
+	// Ensure the hash file path exists
+	err = validate.ValidateHashFile(localConfig.HashFilePath)
 	if err != nil {
 		return err
 	}
 
-	// If the hash file path does not exist
-	if !exists {
-		return fmt.Errorf("hash file path does not exist")
+	// Ensure log path is of proper format
+	logPath, err := validate.ValidatePath(localConfig.LogPath)
+	if err != nil {
+		return fmt.Errorf("improper log_path specified in local config - %v", err)
 	}
+
+	// Reset the logging path with validated clean path
+	localConfig.LogPath = logPath
 
 	return nil
 }
 
 
 func ValidateClientConfig(clientConfig *ClientConfig) error {
-	// TODO:  add logic to validate the aws region
-
-	var byteSize int64
-	var err error
-	// Save string max file size to local variable ensuring
-	// any units are lowercase (MB, GB, etc.)
-	maxFileSize := strings.ToLower(clientConfig.MaxFileSize)
-	// Check to see if the max files size contains a conversion unit
-	sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
-
-	// If the slice contains a data unit to be converted to raw bytes
-	if sliceContains {
-		// Split the size from the unit type
-		size, unit, err := data.ParseFileSizeType(maxFileSize)
-		if err != nil {
-			log.Fatalf("Error parsing file size unit:  %v", err)
-		}
-		// Pass the size and unit to calculate to raw bytes
-		byteSize = data.ToBytes(size, unit)
-	// If the file size seems to already be in bytes
-	} else {
-		// Attempt to convert it straight to int64
-		byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
-		if err != nil {
-			log.Fatalf("Error converting string to int64:  %v", err)
-		}
+	// If an improper region was specified in client config
+	if !validate.ValidateRegion(clientConfig.Region) {
+		return fmt.Errorf("improper region specified in client config")
 	}
 
-	// If the converted max file size is less than or equal to 0
-	if byteSize <= 0 {
-		fmt.Errorf("Converted max_file_size is less than or equal to 0")
+	// Parse and convert the max file size to raw bytes from any units
+	fileSize, err := validate.ValidateMaxFileSize(clientConfig.MaxFileSize)
+	if err != nil {
+		return fmt.Errorf("improper max_file_size in client config - %v", err)
 	}
 
-	// Assign the converted max file size to struct key
-	clientConfig.MaxFileSizeInt64 = byteSize
+	// Prior to validation set the int64 max file size in client config
+	clientConfig.MaxFileSizeInt64 = fileSize
 
-	// TODO:  add logic to validate the log mode
+	// If an improper region was specified in client config
+	if !validate.ValidateLogMode(clientConfig.LogMode) {
+		return fmt.Errorf("improper log_mode specified in client config")
+	}
+
+	// Ensure log path is of proper format
+	logPath, err := validate.ValidatePath(clientConfig.LogPath)
+	if err != nil {
+		return fmt.Errorf("improper log_path specified in client config - %v", err)
+	}
+
+	// Reset the logging path with validated clean path
+	clientConfig.LogPath = logPath
 
 	return nil
 }

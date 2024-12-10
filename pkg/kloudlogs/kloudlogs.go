@@ -3,6 +3,7 @@ package kloudlogs
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -229,9 +230,13 @@ func (logMan *LoggerManager) LogPanic(msg string, fields ...zap.Field) {
 
 // Logs fatal message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogFatal(msg string, fields ...zap.Field) {
-	// TODO:  implement special logic for here when working on cloudwatch logger above
 	if logMan.cloudLogger != nil {
 		logMan.cloudLogger.Fatal(msg, fields...)
+
+		// If only CloudWatch logging is active
+		if logMan.localLogger == nil {
+			os.Exit(1)
+		}
 	}
 
 	if logMan.localLogger != nil {

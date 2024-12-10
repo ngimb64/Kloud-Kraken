@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -15,7 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/config"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 )
@@ -30,6 +33,7 @@ var CurrentConnections atomic.Int32		// Tracks current active connections
 // - connection:  The active TCP socket connection to transmit data
 // - transferBuffer:  The buffer used to store file data that is transferred
 // - file:  A pointer to the open file descriptor
+// - logMan:  The kloudlogs logger manager for local logging
 //
 func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File,
 						 logMan *kloudlogs.LoggerManager) {
@@ -208,8 +212,8 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 	kloudlogs.LogMessage(logMan, "info", "Server started, waiting for connections ..")
 
 	for {
-		// If the current number of connection is greater than or equal to the allowed max
-		if CurrentConnections.Load() >= int32(appConfig.LocalConfig.MaxConnections) {
+		// If current number of connection is greater than or equal to number of instances
+		if CurrentConnections.Load() >= int32(appConfig.LocalConfig.NumberInstances) {
 			kloudlogs.LogMessage(logMan, "info", "All remote clients are connected")
 			break
 		}
@@ -239,15 +243,45 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 }
 
 
+func parseArgs() *config.AppConfig {
+	var configFilePath string
+
+	// If the config file path was not passed in
+	if len(os.Args) < 2 {
+		// Prompt the user until proper path is passed in
+		validate.ValidateConfigPath(&configFilePath)
+	// If the config file path arg was passed in
+	} else {
+		// Set the provided arg as the config file path
+		configFilePath = os.Args[1]
+
+		// Check to see if the input path exists and is a file or dir
+		exists, isDir, err := disk.PathExists(configFilePath)
+		if err != nil {
+			log.Fatal("Error checking config file path existence: ", err)
+		}
+
+		// If the path does not exist or is a dir or is not YAML file
+		if !exists || isDir || !strings.HasSuffix(configFilePath, ".yml") {
+			fmt.Println("Provided YAML config file path invalid: ", configFilePath)
+			// Sleep for a few seconds and clear screen
+			display.ClearScreen(3)
+			// Prompt the user until proper path is passed in
+			validate.ValidateConfigPath(&configFilePath)
+		}
+	}
+
+	// Load the configuration from the YAML file
+	return config.LoadConfig(configFilePath)
+}
+
+
 func main() {
 	var awsConfig aws.Config
 
-	configFilePath := "config.yaml"
-	// Load the configuration from the YAML file
-	appConfig, err := config.LoadConfig(configFilePath)
-	if err != nil {
-		log.Fatalf("Error loading config: %v", err)
-	}
+	// Handle selecting the YAML file if no arg provided
+	// and load YAML data into struct configuration class
+	appConfig := parseArgs()
 
 	// Get the AWS access and secret key environment variables
 	awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
@@ -267,7 +301,7 @@ func main() {
 	// Initialize the LoggerManager based on the flags
 	logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig)
 	if err != nil {
-		log.Fatalf("Error initializing logger manager: %v", err)
+		log.Fatalf("Error initializing logger manager:  %v", err)
 	}
 
 	// TODO:  After local testing add function calls for setting up AWS, packer AMI build (if not exist already),
