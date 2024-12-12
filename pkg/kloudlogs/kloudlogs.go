@@ -257,6 +257,7 @@ func LogMessageWithFields(manager *LoggerManager, level string, message string, 
 
 	// Iterate through passed in arg list
 	for _, arg := range args {
+		// Case logic based on arg data type
 		switch argType := arg.(type) {
 		// If the arg type is a zap field, add it to the zap field list
 		case zap.Field:

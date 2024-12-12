@@ -3,9 +3,33 @@ package netio
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"net"
 	"strconv"
+
+	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 )
+
+
+func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32) {
+	var minPort int32 = 1001
+	var maxPort int32 = 65535
+
+	for {
+		// Select a random port inside min-max range
+		port := rand.Int31n(maxPort-minPort+1) + minPort
+
+		// Attempt to establish a local listener for incoming connect
+		testListener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		// If the listener was succefully established
+		if err == nil {
+			return testListener, port
+		}
+
+		kloudlogs.LogMessage(logMan, "info", "Port %d is not available .. attempting next port", port)
+	}
+}
+
 
 // Parse file name/size from buffer data based on colon separator
 //
@@ -36,6 +60,32 @@ func GetFileInfo(dataBuffer []byte) ([]byte, int64, error) {
 	}
 
 	return fileName, fileSize, nil
+}
+
+
+func GetIpPort(connection net.Conn) (string, int32, error) {
+	// Get the ip:port adress of the connected client
+	stringAddr := connection.RemoteAddr().String()
+	if stringAddr == "" {
+		return "", -1, fmt.Errorf("unable to retrieve client address from connection")
+	}
+
+	// Split the IP and port from address, saving IP in variable
+	ipAddr, strPort, err := net.SplitHostPort(stringAddr)
+	if err != nil {
+		return "", -1, fmt.Errorf("unable to split IP and port from client address:  %v", err)
+	}
+
+	// Convert the parsed string port to integer
+	port, err := strconv.Atoi(strPort)
+	if err != nil {
+		return "", -1, fmt.Errorf("unable to convert string address %s to port:  %v", strPort, err)
+	}
+
+	// Cast int port conversion to int32
+	port32 := int32(port)
+
+	return ipAddr, port32, nil
 }
 
 

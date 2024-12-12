@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -24,7 +25,22 @@ import (
 )
 
 // Package level variables
-const StoragePath = "/tmp"	// Path where received files are stored
+const StoragePath = "/tmp"		 // Path where received files are stored
+var BufferMutex = &sync.Mutex{}  // Mutex for message buffer synchronization
+
+
+func sendResult(connection net.Conn, output []byte, logMan *kloudlogs.LoggerManager) {
+	// Lock the mutex and ensure it unlocks on local exit
+	BufferMutex.Lock()
+	defer BufferMutex.Unlock()
+
+	// Send the processing result
+	_, err := netio.WriteHandler(connection, &output)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error sending processing result back:  %v", err)
+		return
+	}
+}
 
 
 // Format the result of data processing, send the formatted result of the data processing to the
@@ -38,21 +54,31 @@ const StoragePath = "/tmp"	// Path where received files are stored
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func sendAndRemove(connection net.Conn, filePath string, output []byte, fileSize int64,
-				   transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
+func formatSendRemove(connection net.Conn, filePath string, output []byte, fileSize int64,
+				      transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
 	// TODO:  add code to format the command output to optimal format
 
-	// Send the processing result
-	_, err := netio.WriteHandler(connection, &output)
-	if err != nil {
-		kloudlogs.LogMessage(logMan, "error", "Error sending processing result back:  %v", err)
-		return
-	}
-
+	// Send the formatted result to the server
+	sendResult(connection, output, logMan)
 	// Delete the processed file
 	os.Remove(filePath)
+
 	// Remove the file size from transfer manager after deletion
 	transferManager.RemoveTransferSize(fileSize)
+}
+
+
+func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager) {
+	// Lock the mutex and ensure it unlocks on local exit
+	BufferMutex.Lock()
+	defer BufferMutex.Unlock()
+
+	// Send the processing complete message
+	_, err := netio.WriteHandler(connection, &globals.PROCESSING_COMPLETE)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %v", err)
+		return
+	}
 }
 
 
@@ -89,13 +115,8 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		if bytes.Contains(fileName, globals.END_TRANSFER_MARKER) {
 			// Sleep a bit to ensure all processing results have been sent
 			time.Sleep(10 * time.Second)
-
-			// Send the processing complete message
-			_, err := netio.WriteHandler(connection, &globals.PROCESSING_COMPLETE)
-			if err != nil {
-				kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %v", err)
-				return
-			}
+			// Send the processing complete message to server
+			sendProcessingComplete(connection, logMan)
 			break
 		}
 
@@ -112,7 +133,7 @@ func processData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 
 		// In a separate goroutine, which will format the output, send it,
 		// and delete the processed data
-		go sendAndRemove(connection, filePath, output, fileSize, transferManager, logMan)
+		go formatSendRemove(connection, filePath, output, fileSize, transferManager, logMan)
 	}
 }
 
@@ -136,22 +157,29 @@ func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bo
 						logMan *kloudlogs.LoggerManager) {
 	// Close file on local exit
 	defer file.Close()
-	// Make a local buffer for formatting the file name and size to be sent via channel
-	channelBuffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
 	for {
 		// Read data into the buffer
 		_, err := netio.ReadHandler(connection, &transferBuffer)
-		// If the EOF has been reached
-		if err == io.EOF {
+		if err != nil {
+			// If the error is not End Of File reached
+			if err != io.EOF {
+				kloudlogs.LogMessage(logMan, "error", "Error reading from socket:  %v", err)
+				return
+			}
+
 			// If toggle specified, send file name and size through channel for processing
 			if sendChannel {
+				// Clear the transfer buffer for channel message
+				transferBuffer = transferBuffer[:0]
 				// Format the channel message like "<fileName>:<fileSize>"
-				channelBuffer = []byte(fileName)
-				channelBuffer = append(channelBuffer, byte(':'))
-				channelBuffer = append(channelBuffer, []byte(strconv.FormatInt(fileSize, 10))...)
-				channel <- channelBuffer
+				transferBuffer = []byte(fileName)
+				transferBuffer = append(transferBuffer, byte(':'))
+				transferBuffer = append(transferBuffer, []byte(strconv.FormatInt(fileSize, 10))...)
+				// Send channel message via channel to other goroutine
+				channel <- transferBuffer
 			}
+
 			break
 		}
 
@@ -170,6 +198,7 @@ func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bo
 //
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
+// - messagingPort:  Port reference of original TCP connection to server for messaging
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - fileName:  The name of the file to be stored on disk from read socket data
 // - fileSize:  The size of the to be stored on disk from read socket data
@@ -177,9 +206,30 @@ func socketToFileHander(connection net.Conn, channel chan []byte, sendChannel bo
 //				   through the channel prior to completion of data processing
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
-					fileSize int64, sendChannel bool, logMan *kloudlogs.LoggerManager) {
-	// Set a file path with the received file name
+func handleTransfer(connection net.Conn, messagingPort int32, channel chan []byte,
+					fileName string, fileSize int64, sendChannel bool,
+					logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
+	// If a waitgroup was passed in
+	if waitGroup != nil {
+		// Decrement wait group on local exit
+		defer waitGroup.Done()
+	}
+
+	// Get the IP address from the ip:port host address
+	_, port, err := netio.GetIpPort(connection)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %v", err)
+		return
+	}
+
+	// If the parsed port of the passed in connection does not
+	// match the original port used to manage messaging
+	if port != messagingPort {
+		// Ensure the transfer connection is closed upon local exit
+		defer connection.Close()
+	}
+
+	// Set a file path with the passed in file name
 	filePath := path.Join(StoragePath, fileName)
 	//  Create buffer to optimal size based on expected file size
 	transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
@@ -205,15 +255,20 @@ func handleTransfer(connection net.Conn, channel chan []byte, fileName string,
 //
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
+// - messagingPort:  Port reference of original TCP connection to server for messaging
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - buffer:  The buffer used for processing socket messaging
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - transferComplete:  boolean toggle that is to signify when all files have been transfered
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
-					 transferManager *data.TransferManager, transferComplete *bool,
-					 logMan *kloudlogs.LoggerManager) {
+func processTransfer(connection net.Conn, messagingPort int32, channel chan []byte, buffer []byte,
+					 waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
+					 transferComplete *bool, logMan *kloudlogs.LoggerManager) {
+	// Lock the mutex and ensure it unlocks on local exit
+	BufferMutex.Lock()
+	defer BufferMutex.Unlock()
+
 	// Send the transfer request message to initiate file transfer
 	_, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
 	if err != nil {
@@ -230,9 +285,9 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 
 	// If the brain has completed transferring all data
 	if bytes.Contains(buffer, globals.END_TRANSFER_MARKER) {
+		*transferComplete = true
 		// Send finished message to other Goroutine
 		channel <- globals.END_TRANSFER_MARKER
-		*transferComplete = true
 		return
 	}
 
@@ -253,10 +308,38 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 		return
 	}
 
+	// Make a small int32 buffer
+	int32Buffer := make([]byte, 4)
+	// Get random available port as a listener
+	listener, port := netio.GetAvailableListener(logMan)
+
+	// Convert int32 port to bytes and write it into the buffer
+	err = binary.Write(bytes.NewBuffer(int32Buffer), binary.BigEndian, port)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error occurred converting int32 port to byte array:  %v", err)
+		return
+	}
+
+	// Send the converted port bytes to server to notify open port to connect for transfer
+	_, err = netio.WriteHandler(connection, &int32Buffer)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error occurred sending converted int32 port to server:  %v", err)
+		return
+	}
+
+	// Wait for an incoming connection
+	transferConn, err := listener.Accept()
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %v", err)
+		return
+	}
+
+	// Increment wait group
+	waitGroup.Add(1)
 	// Add the file size of the file to be transfered to transfer manager
 	transferManager.AddTransferSize(fileSize)
-	// Now that synchronized messages are complete, handle transfer in routine
-	go handleTransfer(connection, channel, string(fileName), fileSize, true, logMan)
+	// Now synchronized messages are complete, handle transfer with new connection in routine
+	go handleTransfer(transferConn, messagingPort, channel, string(fileName), fileSize, true, logMan, waitGroup)
 }
 
 
@@ -264,12 +347,13 @@ func processTransfer(connection net.Conn, channel chan []byte, buffer []byte,
 //
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
+// - messagingPort:  Port reference of original TCP connection to server for messaging
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - buffer:  The buffer used for processing socket messaging
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte,
-					 logMan *kloudlogs.LoggerManager) {
+func receiveHashFile(connection net.Conn, messagingPort int32, channel chan []byte,
+					 buffer []byte, logMan *kloudlogs.LoggerManager) {
 	// Wait for the brain server to send the start transfer message
 	_, err := netio.ReadHandler(connection, &buffer)
 	if err != nil {
@@ -294,8 +378,8 @@ func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte,
 		os.Exit(2)
 	}
 
-	// Now that synchronized messages are complete, handle transfer in routine
-	go handleTransfer(connection, channel, string(fileName), fileSize, false, logMan)
+	// Receive the hash file from server
+	handleTransfer(connection, messagingPort, channel, string(fileName), fileSize, false, logMan, nil)
 }
 
 
@@ -305,15 +389,16 @@ func receiveHashFile(connection net.Conn, channel chan []byte, buffer []byte,
 //
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
+// - messagingPort:  Port reference of original TCP connection to server for messaging
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Used to synchronize the Goroutines running
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitGroup,
-				 transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager,
-				 maxFileSizeInt64 int64) {
+func receiveData(connection net.Conn, messagingPort int32, channel chan []byte,
+				 waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
+				 logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
 	// Decrements wait group counter upon local exit
 	defer waitGroup.Done()
 
@@ -321,7 +406,7 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 	// Set the message buffer size
 	buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 	// Receive the hash file from the server
-	receiveHashFile(connection, channel, buffer, logMan)
+	receiveHashFile(connection, messagingPort, channel, buffer, logMan)
 
 	for {
 		// Get the remaining available and total disk space
@@ -336,7 +421,8 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 		// is greater than or equal to the max file size
 		if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 {
 			// Process the transfer of a file and return file size for the next
-			processTransfer(connection, channel, buffer, transferManager, &transferComplete, logMan)
+			processTransfer(connection, messagingPort, channel, buffer, waitGroup,
+							transferManager, &transferComplete, logMan)
 			// If the transfer is complete exit the data receiving loop
 			if transferComplete {
 				break
@@ -355,10 +441,12 @@ func receiveData(connection net.Conn, channel chan []byte, waitGroup *sync.WaitG
 //
 // Parameters:
 // - connection:  The TCP socket connection utilized for transferring data
+// - messagingPort:  Port reference of original TCP connection to server for messaging
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
+func handleConnection(connection net.Conn, messagingPort int32, logMan *kloudlogs.LoggerManager,
+					  maxFileSizeInt64 int64) {
 	// Initialize a transfer mananager used to track the size of active file transfers
 	transferManager := data.TransferManager{}
 
@@ -370,7 +458,8 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager, maxF
 	waitGroup.Add(2)
 
 	// Start the goroutine to write data to the file
-	go receiveData(connection, channel, &waitGroup, &transferManager, logMan, maxFileSizeInt64)
+	go receiveData(connection, messagingPort, channel, &waitGroup,
+				   &transferManager, logMan, maxFileSizeInt64)
 	// Start the goroutine to process the file
 	go processData(connection, channel, &waitGroup, &transferManager, logMan)
 
@@ -388,7 +477,7 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager, maxF
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
+func connectRemote(ipAddr string, port int32, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
 	// Define the address of the server to connect to
 	serverAddress := fmt.Sprintf("%s:%s", ipAddr, port)
 
@@ -404,7 +493,7 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager, max
 	// Close connection on local exit
 	defer connection.Close()
 	// Set up goroutines for receiving and processing data
-	handleConnection(connection, logMan, maxFileSizeInt64)
+	handleConnection(connection, port, logMan, maxFileSizeInt64)
 }
 
 
@@ -434,6 +523,9 @@ func main() {
 	// Parse the command line flags
 	flag.Parse()
 
+	// Ensure parsed port is int32
+	port32 := int32(port)
+
 	// If AWS access and secret key are present
 	if awsAccessKey != "" && awsSecretKey != "" {
 		// Set AWS config for CloudWatch logging
@@ -453,5 +545,5 @@ func main() {
 	}
 
 	// Connect to remote server to begin receiving data for processing
-	connectRemote(ipAddr, port, logMan, maxFileSizeInt64)
+	connectRemote(ipAddr, port32, logMan, maxFileSizeInt64)
 }

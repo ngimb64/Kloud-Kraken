@@ -12,4 +12,4 @@
 
 - Double check Makefile
 
-- Add AWS code, double check unit test, and test with AWS
+- Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS

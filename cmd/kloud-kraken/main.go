@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -120,7 +121,34 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 		return
 	}
 
-	go transferFile(connection, filePath, fileSize, logMan)
+	// Get the IP address from the ip:port host address
+	ipAddr, _, err := netio.GetIpPort(connection)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %v", err)
+		return
+	}
+
+	var port int32
+	// Receive bytes of port of client port to connect to for file transfer
+	err = binary.Read(connection, binary.BigEndian, &port)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "error", "Error receiving client listener port:  %v", err)
+		return
+	}
+
+	// Format remote address with IP and port
+	remoteAddr := fmt.Sprintf("%s:%d", ipAddr, port)
+
+	// Make a connection to the remote brain server
+	transferConn, err := net.Dial("tcp", remoteAddr)
+	if err != nil {
+		kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %v", err)
+		return
+	}
+
+	kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
+
+	go transferFile(transferConn, filePath, fileSize, logMan)
 }
 
 
@@ -150,7 +178,8 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 		kloudlogs.LogMessage(logMan, "fatal", "Error sending the hash file name and size:  %v", err)
 	}
 
-	go transferFile(connection, filePath, fileSize, logMan)
+	// Transfer the hash file to client
+	transferFile(connection, filePath, fileSize, logMan)
 }
 
 
@@ -221,7 +250,7 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 		// Wait for an incoming connection
 		connection, err := listener.Accept()
 		if err != nil {
-			kloudlogs.LogMessage(logMan, "error", "Error accepting connection:  %v", err)
+			kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %v", err)
 			continue
 		}
 
