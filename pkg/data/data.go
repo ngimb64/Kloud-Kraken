@@ -11,26 +11,26 @@ import (
 
 
 func ParseFileSizeType(unitFileSize string) (float64, string, error) {
-	// Iterate through the string slice of file types
-	for _, unit := range globals.FILE_SIZE_TYPES {
-		// If the current unit is within passed in string
-		if strings.HasSuffix(unitFileSize, unit) {
-			// Remove the unit from the end of the string
-			sizeStr := strings.TrimSuffix(unitFileSize, unit)
+    // Iterate through the string slice of file types
+    for _, unit := range globals.FILE_SIZE_TYPES {
+        // If the current unit is within passed in string
+        if strings.HasSuffix(unitFileSize, unit) {
+            // Remove the unit from the end of the string
+            sizeStr := strings.TrimSuffix(unitFileSize, unit)
 
-			// Convert the remaining size string to 64-bit float
-			size, err := strconv.ParseFloat(sizeStr, 64)
-			if err != nil {
-				return 0, "", fmt.Errorf("error converting string to float64: %v", err)
-			}
+            // Convert the remaining size string to 64-bit float
+            size, err := strconv.ParseFloat(sizeStr, 64)
+            if err != nil {
+                return 0, "", fmt.Errorf("error converting string to float64: %v", err)
+            }
 
-			return size, unit, nil
-		}
-	}
+            return size, unit, nil
+        }
+    }
 
-	// If no units were found return error indicating unusual behavior, as this function
-	// should have not been called without file units present in arg string
-	return 0, "", fmt.Errorf("no valid unit found in arg file size string")
+    // If no units were found return error indicating unusual behavior, as this function
+    // should have not been called without file units present in arg string
+    return 0, "", fmt.Errorf("no valid unit found in arg file size string")
 }
 
 
@@ -38,8 +38,8 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
 func StringSliceContains(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
     for _, item := range slice {
-		// If the current unit is in the target string
-		if strings.Contains(target, item) {
+        // If the current unit is in the target string
+        if strings.Contains(target, item) {
             return true
         }
     }
@@ -83,25 +83,25 @@ func ToBytes(size float64, unit string) int64 {
 
 // TransferManager tracks the size of ongoing transfers.
 type TransferManager struct {
-	OngoingTransfersSize int64 // Total size of all ongoing transfers
+    OngoingTransfersSize int64 // Total size of all ongoing transfers
 }
 
 // NewTransferManager initializes and returns a new TransferManager instance.
 func NewTransferManager() *TransferManager {
-	return &TransferManager{}
+    return &TransferManager{}
 }
 
 // AddTransferSize adds the specified size to the ongoing transfers.
 func (tm *TransferManager) AddTransferSize(size int64) {
-	atomic.AddInt64(&tm.OngoingTransfersSize, size)
+    atomic.AddInt64(&tm.OngoingTransfersSize, size)
 }
 
 // RemoveTransferSize subtracts the specified size from the ongoing transfers.
 func (tm *TransferManager) RemoveTransferSize(size int64) {
-	atomic.AddInt64(&tm.OngoingTransfersSize, -size)
+    atomic.AddInt64(&tm.OngoingTransfersSize, -size)
 }
 
 // GetOngoingTransfersSize returns the current total size of ongoing transfers.
 func (tm *TransferManager) GetOngoingTransfersSize() int64 {
-	return atomic.LoadInt64(&tm.OngoingTransfersSize)
+    return atomic.LoadInt64(&tm.OngoingTransfersSize)
 }

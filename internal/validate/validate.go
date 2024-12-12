@@ -15,184 +15,184 @@ import (
 )
 
 func ValidateConfigPath(configFilePath *string) {
-	for {
-		fmt.Print("Enter the path of the YAML config file to use:  ")
-		// Read the YAML file path from user input
-		_, err := fmt.Scanln(configFilePath)
-		if err != nil {
-			fmt.Println("Error occurred reading user input path: ", err)
-			// Sleep for a few seconds and clear screen before re-prompt
-			display.ClearScreen(3)
-			continue
-		}
+    for {
+        fmt.Print("Enter the path of the YAML config file to use:  ")
+        // Read the YAML file path from user input
+        _, err := fmt.Scanln(configFilePath)
+        if err != nil {
+            fmt.Println("Error occurred reading user input path: ", err)
+            // Sleep for a few seconds and clear screen before re-prompt
+            display.ClearScreen(3)
+            continue
+        }
 
-		// Check to see if the input path exists and is a file or dir
-		exists, isDir, err := disk.PathExists(*configFilePath)
-		if err != nil {
-			fmt.Println("Error checking input path existence: ", err)
-			// Sleep for a few seconds and clear screen before re-prompt
-			display.ClearScreen(3)
-			continue
-		}
+        // Check to see if the input path exists and is a file or dir
+        exists, isDir, err := disk.PathExists(*configFilePath)
+        if err != nil {
+            fmt.Println("Error checking input path existence: ", err)
+            // Sleep for a few seconds and clear screen before re-prompt
+            display.ClearScreen(3)
+            continue
+        }
 
-		// If the path does not exist or is a dir or is not YAML file
-		if !exists || isDir || !strings.HasSuffix(*configFilePath, ".yml") {
-			fmt.Println("Input path does not exist or is a dir or not of YAML file type: ", configFilePath)
-			// Sleep for a few seconds and clear screen before re-prompt
-			display.ClearScreen(3)
-			continue
-		}
+        // If the path does not exist or is a dir or is not YAML file
+        if !exists || isDir || !strings.HasSuffix(*configFilePath, ".yml") {
+            fmt.Println("Input path does not exist or is a dir or not of YAML file type: ", configFilePath)
+            // Sleep for a few seconds and clear screen before re-prompt
+            display.ClearScreen(3)
+            continue
+        }
 
-		break
-	}
+        break
+    }
 }
 
 
 func ValidateHashFile(hashFilePath string) error {
-	// Check to see if the hash file exists
-	exists, isDir, err := disk.PathExists(hashFilePath)
-	if err != nil {
-		return err
-	}
+    // Check to see if the hash file exists
+    exists, isDir, err := disk.PathExists(hashFilePath)
+    if err != nil {
+        return err
+    }
 
-	// If the hash file path does not exist or is a directory
-	if !exists || isDir {
-		return fmt.Errorf("hash file path does not exist or is a directory")
-	}
+    // If the hash file path does not exist or is a directory
+    if !exists || isDir {
+        return fmt.Errorf("hash file path does not exist or is a directory")
+    }
 
-	return nil
+    return nil
 }
 
 
 func ValidateListenerPort(listenerPort int) bool {
-	// If the listener port is less than or equal to 1000
-	if listenerPort <= 1000 {
-		return false
-	}
+    // If the listener port is less than or equal to 1000
+    if listenerPort <= 1000 {
+        return false
+    }
 
-	return true
+    return true
 }
 
 
 func ValidateLoadDir(loadDirPath string) error {
-	// Validate and clense the load dir path
-	loadDirPath, err := ValidatePath(loadDirPath)
-	if err != nil {
-		fmt.Errorf("failed to validate load dir path - %v", err)
-	}
+    // Validate and clense the load dir path
+    loadDirPath, err := ValidatePath(loadDirPath)
+    if err != nil {
+        fmt.Errorf("failed to validate load dir path - %v", err)
+    }
 
-	// Check to see if the load directory exists and has files in it
-	exists, isDir, err := disk.PathExists(loadDirPath)
-	if err != nil {
-		return err
-	}
+    // Check to see if the load directory exists and has files in it
+    exists, isDir, err := disk.PathExists(loadDirPath)
+    if err != nil {
+        return err
+    }
 
-	// If the load dir path does not exist or is not a directory
-	if !exists || !isDir {
-		return fmt.Errorf("load dir path does not exist or is a file")
-	}
+    // If the load dir path does not exist or is not a directory
+    if !exists || !isDir {
+        return fmt.Errorf("load dir path does not exist or is a file")
+    }
 
-	return nil
+    return nil
 }
 
 
 func ValidateLogMode(logMode string) bool {
-	logModes := []string{"local", "cloudwatch", "both"}
+    logModes := []string{"local", "cloudwatch", "both"}
 
-	// Iterate through slice of logging modes
-	for _, mode := range logModes {
-		// If the current log mode matches arg
-		if mode == logMode {
-			return true
-		}
-	}
+    // Iterate through slice of logging modes
+    for _, mode := range logModes {
+        // If the current log mode matches arg
+        if mode == logMode {
+            return true
+        }
+    }
 
-	return false
+    return false
 }
 
 
 func ValidateMaxFileSize(maxFileSize string) (int64, error) {
-	var byteSize int64
-	var err error
+    var byteSize int64
+    var err error
 
-	// Save string max file size to local variable ensuring
-	// any units are lowercase (MB, GB, etc.)
-	maxFileSize = strings.ToLower(maxFileSize)
-	// Check to see if the max files size contains a conversion unit
-	sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
+    // Save string max file size to local variable ensuring
+    // any units are lowercase (MB, GB, etc.)
+    maxFileSize = strings.ToLower(maxFileSize)
+    // Check to see if the max files size contains a conversion unit
+    sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
 
-	// If the slice contains a data unit to be converted to raw bytes
-	if sliceContains {
-		// Split the size from the unit type
-		size, unit, err := data.ParseFileSizeType(maxFileSize)
-		if err != nil {
-			return 0, fmt.Errorf("error parsing file size unit => %v", err)
-		}
-		// Pass the size and unit to calculate to raw bytes
-		byteSize = data.ToBytes(size, unit)
-	// If the file size seems to already be in bytes
-	} else {
-		// Attempt to convert it straight to int64
-		byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
-		if err != nil {
-			return 0, fmt.Errorf("error converting string to int64 => %v", err)
-		}
-	}
+    // If the slice contains a data unit to be converted to raw bytes
+    if sliceContains {
+        // Split the size from the unit type
+        size, unit, err := data.ParseFileSizeType(maxFileSize)
+        if err != nil {
+            return 0, fmt.Errorf("error parsing file size unit => %v", err)
+        }
+        // Pass the size and unit to calculate to raw bytes
+        byteSize = data.ToBytes(size, unit)
+    // If the file size seems to already be in bytes
+    } else {
+        // Attempt to convert it straight to int64
+        byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
+        if err != nil {
+            return 0, fmt.Errorf("error converting string to int64 => %v", err)
+        }
+    }
 
-	// If the converted max file size is less than or equal to 0
-	if byteSize <= 0 {
-		return 0, fmt.Errorf("Converted max file size is less than or equal to 0")
-	}
+    // If the converted max file size is less than or equal to 0
+    if byteSize <= 0 {
+        return 0, fmt.Errorf("Converted max file size is less than or equal to 0")
+    }
 
-	return byteSize, nil
+    return byteSize, nil
 }
 
 
 func ValidateNumberInstances(numberInstances int) bool {
-	// If the max connections is less than or equal to 0
-	if numberInstances <= 0 {
-		return false
-	}
+    // If the max connections is less than or equal to 0
+    if numberInstances <= 0 {
+        return false
+    }
 
-	return true
+    return true
 }
 
 
 func ValidatePath(path string) (string, error) {
-	// Ensure the path is not empty
-	if path == "" {
-		return "", fmt.Errorf("path %s cannot be empty", path)
-	}
+    // Ensure the path is not empty
+    if path == "" {
+        return "", fmt.Errorf("path %s cannot be empty", path)
+    }
 
-	// Clean the path (removes redundant slashes, etc.)
-	cleanedPath := filepath.Clean(path)
-	// Check if the cleaned path contains any invalid characters
-	if strings.Contains(cleanedPath, "//") {
-		return "", fmt.Errorf("path %s contains double slashes", path)
-	}
+    // Clean the path (removes redundant slashes, etc.)
+    cleanedPath := filepath.Clean(path)
+    // Check if the cleaned path contains any invalid characters
+    if strings.Contains(cleanedPath, "//") {
+        return "", fmt.Errorf("path %s contains double slashes", path)
+    }
 
-	// Ensure the path does not end with slash unless its root directory
-	if cleanedPath != "/" && strings.HasSuffix(cleanedPath, "/") {
-		return "", fmt.Errorf("path %s cannot end with a slash unless it is the root directory", path)
-	}
+    // Ensure the path does not end with slash unless its root directory
+    if cleanedPath != "/" && strings.HasSuffix(cleanedPath, "/") {
+        return "", fmt.Errorf("path %s cannot end with a slash unless it is the root directory", path)
+    }
 
-	// Validate path format with regex
-	validPath := regexp.MustCompile(`^[a-zA-Z0-9\._\-\/]+$`).MatchString(cleanedPath)
-	if !validPath {
-		return "", fmt.Errorf("path %s contains invalid characters", path)
-	}
+    // Validate path format with regex
+    validPath := regexp.MustCompile(`^[a-zA-Z0-9\._\-\/]+$`).MatchString(cleanedPath)
+    if !validPath {
+        return "", fmt.Errorf("path %s contains invalid characters", path)
+    }
 
-	return cleanedPath, nil
+    return cleanedPath, nil
 }
 
 
 func ValidateRegion(region string) bool {
     // Iterate through the endpoint partitions
     for _, currPartitions := range endpoints.DefaultPartitions() {
-		// Iterate through the regions in the current partition
+        // Iterate through the regions in the current partition
         for _, currRegion := range currPartitions.Regions() {
             // It the current region ID matches arg string
-			if currRegion.ID() == region {
+            if currRegion.ID() == region {
                 return true
             }
         }

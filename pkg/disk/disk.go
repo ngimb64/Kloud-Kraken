@@ -16,17 +16,17 @@ var fileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
 
 
 func DiskCheck() (int64, int64) {
-	// Get the total and available disk space
-	total, free, err := GetDiskSpace()
-	if err != nil {
-		fmt.Println("Error getting disk space:", err)
-		os.Exit(1)
-	}
+    // Get the total and available disk space
+    total, free, err := GetDiskSpace()
+    if err != nil {
+        fmt.Println("Error getting disk space:", err)
+        os.Exit(1)
+    }
 
-	// Subtract reserved space (for OS) from free space
-	remainingSpace := free - globals.OS_RESERVED_SPACE
+    // Subtract reserved space (for OS) from free space
+    remainingSpace := free - globals.OS_RESERVED_SPACE
 
-	return remainingSpace, total
+    return remainingSpace, total
 }
 
 
@@ -61,97 +61,97 @@ func GetDiskSpace() (total int64, free int64, err error) {
 // - Error return handler
 //
 func PathExists(filePath string) (bool, bool, error) {
-	// Get item info on passed in path
-	itemInfo, err := os.Stat(filePath)
-	if err != nil {
-		// If the item does not exist
-		if os.IsNotExist(err) {
-			return false, false, nil
-		}
-		// If unexpected error getting item info
-		return false, false, fmt.Errorf("error checking file existence: %v", err)
-	}
+    // Get item info on passed in path
+    itemInfo, err := os.Stat(filePath)
+    if err != nil {
+        // If the item does not exist
+        if os.IsNotExist(err) {
+            return false, false, nil
+        }
+        // If unexpected error getting item info
+        return false, false, fmt.Errorf("error checking file existence: %v", err)
+    }
 
-	// If the path is a file, and has data in it
-	if !itemInfo.IsDir() && itemInfo.Size() > 0 {
-		return true, false, nil
-	}
+    // If the path is a file, and has data in it
+    if !itemInfo.IsDir() && itemInfo.Size() > 0 {
+        return true, false, nil
+    }
 
-	// Open the directory
-	dir, err := os.Open(filePath)
-	if err != nil {
-		return false, true, fmt.Errorf("Error opening directory: %v", err)
-	}
-	// Close the directory on local exit
-	defer dir.Close()
+    // Open the directory
+    dir, err := os.Open(filePath)
+    if err != nil {
+        return false, true, fmt.Errorf("Error opening directory: %v", err)
+    }
+    // Close the directory on local exit
+    defer dir.Close()
 
-	// Attempt to read the first entry in the dir
-	entries, err := dir.ReadDir(1)
-	if err != nil {
-		return false, true, fmt.Errorf("Error reading directory: %v", err)
-	}
+    // Attempt to read the first entry in the dir
+    entries, err := dir.ReadDir(1)
+    if err != nil {
+        return false, true, fmt.Errorf("Error reading directory: %v", err)
+    }
 
-	// If there is an entry, the dir is not empty
-	if len(entries) > 0 {
-		return true, true, nil
-	}
+    // If there is an entry, the dir is not empty
+    if len(entries) > 0 {
+        return true, true, nil
+    }
 
-	// If no entries the directory is empty
-	return false, true, nil
+    // If no entries the directory is empty
+    return false, true, nil
 }
 
 
 // Function for each goroutine to walk the directory and select a file
 func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
-	var returnPath string
-	var returnSize int64
-	done := false
+    var returnPath string
+    var returnSize int64
+    done := false
 
-	// Iterate through the file and folders in the load directory
-	err := filepath.Walk(loadDir, func(path string, itemInfo os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+    // Iterate through the file and folders in the load directory
+    err := filepath.Walk(loadDir, func(path string, itemInfo os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
 
-		// If a file has been already selected, skip to next iteration
-		if done {
-			return nil
-		}
+        // If a file has been already selected, skip to next iteration
+        if done {
+            return nil
+        }
 
-		// If the current item is not a directory, meaning a file
-		if !itemInfo.IsDir() {
-			// Lock selection process to ensure a single goroutine selects the file
-			fileSelectionLock.Lock()
-			// Unlock selection process on local exit
-			defer fileSelectionLock.Unlock()
+        // If the current item is not a directory, meaning a file
+        if !itemInfo.IsDir() {
+            // Lock selection process to ensure a single goroutine selects the file
+            fileSelectionLock.Lock()
+            // Unlock selection process on local exit
+            defer fileSelectionLock.Unlock()
 
-			// If the current file size is greater than the max file size set in YAML
-			if itemInfo.Size() > maxFileSizeInt64 {
-				return nil
-			}
+            // If the current file size is greater than the max file size set in YAML
+            if itemInfo.Size() > maxFileSizeInt64 {
+                return nil
+            }
 
-			// Check if the file has already been selected by another goroutine,
-			// otherwise store the file path in the sync map
-			_, loaded := selectedFiles.LoadOrStore(path, true)
-			// The file was already selected, so skip it
-			if loaded {
-				return nil
-			}
+            // Check if the file has already been selected by another goroutine,
+            // otherwise store the file path in the sync map
+            _, loaded := selectedFiles.LoadOrStore(path, true)
+            // The file was already selected, so skip it
+            if loaded {
+                return nil
+            }
 
-			// Set the current file path as return path
-			returnPath = path
-			// Set the current file size as return size
-			returnSize = itemInfo.Size()
-			// Set the complete flag to true
-			done = true
-		}
+            // Set the current file path as return path
+            returnPath = path
+            // Set the current file size as return size
+            returnSize = itemInfo.Size()
+            // Set the complete flag to true
+            done = true
+        }
 
-		return nil
-	})
+        return nil
+    })
 
-	if err != nil {
-		return "", 0, err
-	}
+    if err != nil {
+        return "", 0, err
+    }
 
-	return returnPath, returnSize, nil
+    return returnPath, returnSize, nil
 }
