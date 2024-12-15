@@ -62,8 +62,22 @@ func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
 }
 
 
-func transferFile(connection net.Conn, filePath string, fileSize int64,
+func transferFile(connection net.Conn, messagingPort int32, filePath string, fileSize int64,
                   logMan *kloudlogs.LoggerManager) {
+    // Get the IP address from the ip:port host address
+    _, port, err := netio.GetIpPort(connection)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %v", err)
+        return
+    }
+
+    // If the parsed port of the passed in connection does not
+    // match the original port used to manage messaging
+    if port != messagingPort {
+        // Ensure the transfer connection is closed upon local exit
+        defer connection.Close()
+    }
+
     // Create buffer to optimal size based on expected file size
     transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
 
@@ -148,7 +162,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 
     kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
 
-    go transferFile(transferConn, filePath, fileSize, logMan)
+    go transferFile(transferConn, appConfig.LocalConfig.ListenerPort, filePath, fileSize, logMan)
 }
 
 
@@ -179,7 +193,7 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     }
 
     // Transfer the hash file to client
-    transferFile(connection, filePath, fileSize, logMan)
+    transferFile(connection, appConfig.LocalConfig.ListenerPort, filePath, fileSize, logMan)
 }
 
 

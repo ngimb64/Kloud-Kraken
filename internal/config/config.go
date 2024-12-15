@@ -18,7 +18,7 @@ type AppConfig struct {
 // LocalConfig contains the configuration for local server settings
 type LocalConfig struct {
     Region		    string `yaml:"region"`
-    ListenerPort    int    `yaml:"listener_port"`
+    ListenerPort    int32    `yaml:"listener_port"`
     NumberInstances int    `yaml:"number_instances"`
     LoadDir	   	    string `yaml:"load_dir"`
     HashFilePath    string `yaml:"hash_file_path"`

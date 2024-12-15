@@ -64,7 +64,7 @@ func ValidateHashFile(hashFilePath string) error {
 }
 
 
-func ValidateListenerPort(listenerPort int) bool {
+func ValidateListenerPort(listenerPort int32) bool {
     // If the listener port is less than or equal to 1000
     if listenerPort <= 1000 {
         return false
