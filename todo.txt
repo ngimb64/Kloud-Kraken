@@ -1,7 +1,6 @@
-- Figure exact command syntax for Hashcat
 - Handle formatting and sending the results from client back to server
 
-- Test and get baseline working, then write and run unit tests
+- Write and run unit tests, then integration tests to get baseline working
 
 - Data compression and encryption
 	- Ask ChatGPT about using an interface for current socket functions with encryption integrated

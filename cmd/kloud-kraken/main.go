@@ -197,8 +197,8 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 }
 
 
-func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
-                      appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
+func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig *config.AppConfig,
+                      logMan *kloudlogs.LoggerManager) {
     // Close connection and decrement waitGroup counter on local exit
     defer connection.Close()
     defer waitGroup.Done()
@@ -221,14 +221,16 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
             break
         }
 
-        // TODO:  add logic to handle report data in Goroutine if detected
-
         // If the read data contains transfer request message
         if bytes.Contains(buffer, globals.TRANSFER_REQUEST_MARKER) {
             // Call method to handle file transfer based
             handleTransfer(connection, &buffer, appConfig, logMan)
         }
     }
+
+    // TODO:  add logic to receive cracked user hash file from client
+
+    // TODO:  add logic to receive log file from client
 
     // Decrement the active connection count
     CurrentConnections.Add(-1)

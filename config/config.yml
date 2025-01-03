@@ -11,3 +11,5 @@ client_config:
   max_file_size: "1GB"
   log_mode: "local"
   log_path: "KloudKraken.log"
+  cracking_mode: "0"
+  hash_type: "1000"

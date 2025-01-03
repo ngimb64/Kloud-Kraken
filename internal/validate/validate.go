@@ -14,6 +14,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 )
 
+
 func ValidateConfigPath(configFilePath *string) {
     for {
         fmt.Print("Enter the path of the YAML config file to use:  ")
@@ -99,12 +100,11 @@ func ValidateLoadDir(loadDirPath string) error {
 func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
 
-    // Iterate through slice of logging modes
-    for _, mode := range logModes {
-        // If the current log mode matches arg
-        if mode == logMode {
-            return true
-        }
+    // Check to see if the passed in mode is in preset list
+    hasMode := data.StringSliceContains(logModes, logMode)
+    // If the specified log mode is in preset list
+    if hasMode {
+        return true
     }
 
     return false
@@ -161,7 +161,7 @@ func ValidateNumberInstances(numberInstances int) bool {
 func ValidatePath(path string) (string, error) {
     // Ensure the path is not empty
     if path == "" {
-        return "", fmt.Errorf("path %s cannot be empty", path)
+        return "", fmt.Errorf("passed in path cannot be empty")
     }
 
     // Clean the path (removes redundant slashes, etc.)

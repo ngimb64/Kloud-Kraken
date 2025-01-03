@@ -18,7 +18,7 @@ type AppConfig struct {
 // LocalConfig contains the configuration for local server settings
 type LocalConfig struct {
     Region		    string `yaml:"region"`
-    ListenerPort    int32    `yaml:"listener_port"`
+    ListenerPort    int32  `yaml:"listener_port"`
     NumberInstances int    `yaml:"number_instances"`
     LoadDir	   	    string `yaml:"load_dir"`
     HashFilePath    string `yaml:"hash_file_path"`
@@ -29,9 +29,11 @@ type LocalConfig struct {
 type ClientConfig struct {
     Region			 string `yaml:"region"`
     MaxFileSize    	 string `yaml:"max_file_size"`
-    MaxFileSizeInt64 int64 `yaml:"-"`  			   // Parsed later
+    MaxFileSizeInt64 int64  `yaml:"-"`              // Parsed later
     LogMode			 string `yaml:"log_mode"`
     LogPath			 string `yaml:"log_path"`
+    CrackingMode     string `yaml:"cracking_mode"`
+    HashType         string `yaml:"hash_type"`
 }
 
 
@@ -140,6 +142,10 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 
     // Reset the logging path with validated clean path
     clientConfig.LogPath = logPath
+
+    // TODO:  validation methods for cracking_mode and hash_type
+
+
 
     return nil
 }
