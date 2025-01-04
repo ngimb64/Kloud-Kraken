@@ -26,10 +26,10 @@ import (
 
 // Package level variables
 const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
-const HashesPath = "/tmp/hashes"       // Path where hash file is stored
+const HashesPath = "/tmp/hashes"       // Path where hash files are stored
 var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
-var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path cracked hashes are temporarily stored post processing
-var Loot = filepath.Join(HashesPath, "loot.txt")        // Path cracked hashes are stored permanently
+var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes temporarily stored post processing
+var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
 var CrackingMode = ""  // Stores cracking mode arg
 var HashFilePath = ""  // Stores hash file path when received
 var HashType = ""      // Stores hash type to be cracked
@@ -68,15 +68,38 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
     // Send the processing complete message
     _, err := netio.WriteHandler(connection, &globals.PROCESSING_COMPLETE)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %w", err)
         return
     }
 }
 
 
-// TODO:  delete dummy function after below logic is fixed
-func getWordlist(wordlistPath string) (string, int64) {
-    return "", 0
+func getWordlist(wordlistPath string) (string, int64, error) {
+    fileName, fileSize, err := disk.CheckDirFiles(wordlistPath)
+    if err != nil {
+        return "", -1, err
+    }
+
+    // If the file
+    if fileName == "" {
+        return "", 0, nil
+    } else if fileSize > 0 {
+        return fileName, fileSize, nil
+    } else {
+        // Read the contents of the directory
+        files, err := os.ReadDir(wordlistPath)
+        if err != nil {
+            return "", -1, err
+        }
+
+        // Loop over the directory contents
+        for _, file := range files {
+            // TODO:  add logic to use tool to merge multiple wordlists together, replace dummy print
+            fmt.Print(file.Name())
+        }
+
+        return fileName, fileSize, nil
+    }
 }
 
 
@@ -92,16 +115,20 @@ func getWordlist(wordlistPath string) (string, int64) {
 //
 func processData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
                  transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
+    exitLoop := false
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
+    // Format file path arg where cracked hashes are stored
+    crackedOutfile := fmt.Sprintf("-o=%s", Cracked)
 
     for {
-
-        // TODO:  adjust logic to check directory until file exists and if more than one
-        //        file exists combine them together with module to fuse multiple wordlists
-        //        which will replace below dummy function
-
-        filePath, fileSize := getWordlist(WordlistPath)
+        // Attempt to get the next available wordlist, if more than one wordlist exist
+        // merge them together as one and return the combined result as new file
+        filePath, fileSize, err := getWordlist(WordlistPath)
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w", err,
+                                 zap.String("wordlist directory", WordlistPath))
+        }
 
         select {
         // Poll channel for transfer complete message
@@ -110,7 +137,7 @@ func processData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
             if isComplete && filePath == "" {
                 // Send the processing complete message to server
                 sendProcessingComplete(connection, logMan)
-                break
+                exitLoop = true
             }
         default:
             // If there was no wordlist available in designated directory
@@ -121,19 +148,29 @@ func processData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
             }
         }
 
+        if exitLoop {
+            break
+        }
+
         // Register a command with selected file path
-        cmd := exec.Command("hashcat", "-O", "--machine-readable", "--remove",
-                            fmt.Sprintf("-o=%s", Cracked), "-a", CrackingMode,
-                            "-m", HashType, "-w", "3", HashFilePath, filePath)
+        cmd := exec.Command("hashcat", "-O", "--machine-readable", "--remove", crackedOutfile,
+                            "-a", CrackingMode, "-m", HashType, "-w", "3", HashFilePath, filePath)
         // Execute and save the command stdout and stderr output
         output, err := cmd.CombinedOutput()
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error executing command:  %v", err)
+            kloudlogs.LogMessage(logMan, "error", "Error executing command:  %w", err)
             return
         }
 
-        // TODO:  after processing take the cracked hash file and append the data to a final hash file
-        //        so the data will not be lost next time hashcat runs
+        // If there is data in cracked user hash file prior to processing,
+        // append it to the final loot file
+        err = disk.AppendFile(Cracked, Loot)
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "error", "Error appending data to file:  %w", err,
+                                 zap.String("source file", Cracked),
+                                 zap.String("destination file", Loot))
+            return
+        }
 
         // In a separate goroutine, which will log the output and delete processed data
         go logAndRemove(filePath, output, fileSize, transferManager, logMan)
@@ -161,17 +198,16 @@ func socketToFileHander(connection net.Conn, transferBuffer []byte, file *os.Fil
         if err != nil {
             // If the error is not End Of File reached
             if err != io.EOF {
-                kloudlogs.LogMessage(logMan, "error", "Error reading from socket:  %v", err)
+                kloudlogs.LogMessage(logMan, "error", "Error reading from socket:  %w", err)
                 return
             }
-
             break
         }
 
         // Write the data to the file
         _, err = file.Write(transferBuffer)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %v", err)
+            kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %w", err)
             return
         }
     }
@@ -200,7 +236,7 @@ func handleTransfer(connection net.Conn, filePath string, fileSize int64,
     _, port, err := netio.GetIpPort(connection)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error occcurred spliting host address to get IP/port:  %v", err)
+                             "Error occcurred spliting host address to get IP/port:  %w", err)
         return
     }
 
@@ -220,7 +256,7 @@ func handleTransfer(connection net.Conn, filePath string, fileSize int64,
     // Open the file for writing
     file, err := os.Create(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error creating the file %s:  %v", filePath, err)
+        kloudlogs.LogMessage(logMan, "error", "Error creating the file %s:  %w", filePath, err)
         return
     }
 
@@ -249,14 +285,14 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Send the transfer request message to initiate file transfer
     _, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer request to brain server:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer request to brain server:  %w", err)
         return
     }
 
     // Wait for the brain server to send the start transfer message
     _, err = netio.ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %w", err)
         return
     }
 
@@ -279,7 +315,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     fileName, fileSize, err := netio.GetFileInfo(buffer)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error extracting the file name and size from start transfer message:  %v", err)
+                             "Error extracting the file name and size from start transfer message:  %w", err)
         return
     }
 
@@ -294,21 +330,21 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Convert int32 port to bytes and write it into the buffer
     err = binary.Write(bytes.NewBuffer(int32Buffer), binary.BigEndian, port)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occurred converting int32 port to byte array:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error occurred converting int32 port to byte array:  %w", err)
         return
     }
 
     // Send the converted port bytes to server to notify open port to connect for transfer
     _, err = netio.WriteHandler(connection, &int32Buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occurred sending converted int32 port to server:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error occurred sending converted int32 port to server:  %w", err)
         return
     }
 
     // Wait for an incoming connection
     transferConn, err := listener.Accept()
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %w", err)
         return
     }
 
@@ -332,7 +368,7 @@ func receiveHashFile(connection net.Conn, buffer []byte, logMan *kloudlogs.Logge
     // Wait for the brain server to send the start transfer message
     _, err := netio.ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %v", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %w", err)
         os.Exit(2)
     }
 
@@ -349,7 +385,7 @@ func receiveHashFile(connection net.Conn, buffer []byte, logMan *kloudlogs.Logge
     fileName, fileSize, err := netio.GetFileInfo(buffer)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
-                             "Error extracting the file name and size from hashes transfer message:  %v", err)
+                             "Error extracting the file name and size from hashes transfer message:  %w", err)
         os.Exit(2)
     }
 
@@ -386,7 +422,11 @@ func receiveData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
 
     for {
         // Get the remaining available and total disk space
-        remainingSpace, total := disk.DiskCheck()
+        remainingSpace, total, err := disk.DiskCheck()
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "error",
+                                 "Error checking disk space on client:  %w", err)
+        }
 
         kloudlogs.LogMessage(logMan, "info", "Client disk statistics queried",
                              zap.Int64("remaining space", remainingSpace),
@@ -402,6 +442,7 @@ func receiveData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
                             &transferComplete, logMan)
             // If all the transfers are complete exit the data receiving loop
             if transferComplete {
+                // Send finished inidicator to other goroutine processData()
                 channel <- true
                 break
             }
@@ -435,8 +476,8 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
     waitGroup.Add(2)
 
     // Start the goroutine to write data to the file
-    go receiveData(connection, channel, &waitGroup,
-                   &transferManager, logMan, maxFileSizeInt64)
+    go receiveData(connection, channel, &waitGroup, &transferManager, logMan,
+                   maxFileSizeInt64)
     // Start the goroutine to process the file
     go processData(connection, channel, &waitGroup, &transferManager, logMan)
 
@@ -464,11 +505,12 @@ func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeIn
     // Make a connection to the remote brain server
     connection, err := net.Dial("tcp", serverAddress)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %v", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %w", err)
         return
     }
 
-    kloudlogs.LogMessage(logMan, "info", "Connected remote server at %s on port %d", ipAddr, Port32)
+    kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
+                         zap.String("ip address", ipAddr), zap.Int32("port", Port32))
 
     // Close connection on local exit
     defer connection.Close()
@@ -511,13 +553,13 @@ func main() {
     // Ensure the wordlist directory exists
     err := os.MkdirAll(WordlistPath, os.ModePerm)
     if err != nil {
-        log.Fatalf("Error creating wordlist dir:  %v", err)
+        log.Fatalf("Error creating wordlist dir:  %w", err)
     }
 
     // Ensure the hashes directory exists
     err = os.MkdirAll(HashFilePath, os.ModePerm)
     if err != nil {
-        log.Fatalf("Error creating hashes dir:  %v", err)
+        log.Fatalf("Error creating hashes dir:  %w", err)
     }
 
     // If AWS access and secret key are present
@@ -535,7 +577,7 @@ func main() {
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, logPath, awsConfig)
     if err != nil {
-        log.Fatalf("Error initializing logger manager: %v", err)
+        log.Fatalf("Error initializing logger manager:  %w", err)
     }
 
     // Connect to remote server to begin receiving data for processing

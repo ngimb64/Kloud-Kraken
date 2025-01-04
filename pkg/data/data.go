@@ -21,7 +21,7 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
             // Convert the remaining size string to 64-bit float
             size, err := strconv.ParseFloat(sizeStr, 64)
             if err != nil {
-                return 0, "", fmt.Errorf("error converting string to float64: %v", err)
+                return 0, "", fmt.Errorf("error converting string to float64 - %w", err)
             }
 
             return size, unit, nil

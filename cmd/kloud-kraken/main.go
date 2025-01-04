@@ -22,6 +22,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
+	"go.uber.org/zap"
 )
 
 // Package level variables
@@ -47,7 +48,7 @@ func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
         if err != nil {
             // If the error was not the end of file
             if err != io.EOF {
-                kloudlogs.LogMessage(logMan, "error", "Error reading file:  %v", err)
+                kloudlogs.LogMessage(logMan, "error", "Error reading file:  %w", err)
             }
             break
         }
@@ -55,7 +56,7 @@ func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
         // Write the read bytes to the client
         _, err = netio.WriteHandler(connection, &transferBuffer)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %v", err)
+            kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %w", err)
             break
         }
     }
@@ -67,7 +68,7 @@ func transferFile(connection net.Conn, messagingPort int32, filePath string, fil
     // Get the IP address from the ip:port host address
     _, port, err := netio.GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %w", err)
         return
     }
 
@@ -84,7 +85,7 @@ func transferFile(connection net.Conn, messagingPort int32, filePath string, fil
     // Open the file
     file, err := os.Open(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error opening the file to be transfered:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error opening the file to be transfered:  %w", err)
         return
     }
 
@@ -94,7 +95,7 @@ func transferFile(connection net.Conn, messagingPort int32, filePath string, fil
     // Delete the transfered file
     err = os.Remove(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error deleting the file:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error deleting the file:  %w", err)
         return
     }
 }
@@ -106,7 +107,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
                                                appConfig.ClientConfig.MaxFileSizeInt64)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error selecting the next available file to transfer:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error selecting the next available file to transfer:  %w", err)
         return
     }
 
@@ -115,7 +116,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
         // Send the end transfer message then exit function
         _, err = netio.WriteHandler(connection, &globals.END_TRANSFER_MARKER)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %v", err)
+            kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %w", err)
         }
         return
     }
@@ -131,14 +132,14 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     // Send the transfer reply with file name and size
     _, err = netio.WriteHandler(connection, buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %w", err)
         return
     }
 
     // Get the IP address from the ip:port host address
     ipAddr, _, err := netio.GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %w", err)
         return
     }
 
@@ -146,7 +147,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     // Receive bytes of port of client port to connect to for file transfer
     err = binary.Read(connection, binary.BigEndian, &port)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error receiving client listener port:  %v", err)
+        kloudlogs.LogMessage(logMan, "error", "Error receiving client listener port:  %w", err)
         return
     }
 
@@ -156,7 +157,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     // Make a connection to the remote brain server
     transferConn, err := net.Dial("tcp", remoteAddr)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %v", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %w", err)
         return
     }
 
@@ -173,7 +174,7 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     // Get the hash file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error getting file size:  %v", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error getting file size:  %w", err)
     }
 
     fileSize := fileInfo.Size()
@@ -189,7 +190,7 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     // Send the hash file transfer request with file name and size
     _, err = netio.WriteHandler(connection, buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error sending the hash file name and size:  %v", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error sending the hash file name and size:  %w", err)
     }
 
     // Transfer the hash file to client
@@ -212,7 +213,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
         // Read data from connected client
         _, err := netio.ReadHandler(connection, &buffer)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error occurred reading data from socket:  %v", err)
+            kloudlogs.LogMessage(logMan, "error", "Error occurred reading data from socket:  %w", err)
             return
         }
 
@@ -235,18 +236,18 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
     // Decrement the active connection count
     CurrentConnections.Add(-1)
 
-    kloudlogs.LogMessage(logMan, "info", "Connection handled, active connections:  %v",
-                         CurrentConnections.Load())
+    kloudlogs.LogMessage(logMan, "info", "Connection processing handled",
+                         zap.Int32("remaining connections", CurrentConnections.Load()))
 }
 
 
 func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Format listener port with parsed YAML data
-    listenerPort := fmt.Sprint(":%s", appConfig.LocalConfig.ListenerPort)
+    listenerPort := fmt.Sprintf(":%v", appConfig.LocalConfig.ListenerPort)
     // Start listening on specified port
     listener, err := net.Listen("tcp", listenerPort)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error starting server:  %v", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error starting server:  %w", err)
     }
 
     // Close listener on local exit
@@ -266,15 +267,15 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
         // Wait for an incoming connection
         connection, err := listener.Accept()
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %v", err)
+            kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %w", err)
             continue
         }
 
         // Increment the active connection count
         CurrentConnections.Add(1)
 
-        kloudlogs.LogMessage(logMan, "info", "Connection accepted, active connections:  %d",
-                             CurrentConnections.Load())
+        kloudlogs.LogMessage(logMan, "info", "Connection accepted to remote client",
+                             zap.Int32("active connections", CurrentConnections.Load()))
 
         // Increment wait group and handle connection in separate Goroutine
         waitGroup.Add(1)

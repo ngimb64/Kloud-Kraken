@@ -42,7 +42,7 @@ func LoadConfig(filePath string) *AppConfig {
     // Open the YAML file
     file, err := os.Open(filePath)
     if err != nil {
-        log.Fatalf("Could not open YAML file:  %v", err)
+        log.Fatalf("Could not open YAML file:  %w", err)
     }
     // Close file on local exit
     defer file.Close()
@@ -54,19 +54,19 @@ func LoadConfig(filePath string) *AppConfig {
     decoder := yaml.NewDecoder(file)
     err = decoder.Decode(&config)
     if err != nil {
-        log.Fatalf("Could not decode YAML into AppConfig:  %v", err)
+        log.Fatalf("Could not decode YAML into AppConfig:  %w", err)
     }
 
     // Validate local config section of YAML data
     err = ValidateLocalConfig(&config.LocalConfig)
     if err != nil {
-        log.Fatalf("Invalid local config:  %v", err)
+        log.Fatalf("Invalid local config:  %w", err)
     }
 
     // Validate client config section of YAML data
     err = ValidateClientConfig(&config.ClientConfig)
     if err != nil {
-        log.Fatalf("Invalid client config:  %v", err)
+        log.Fatalf("Invalid client config:  %w", err)
     }
 
     return &config
@@ -104,7 +104,7 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
     // Ensure log path is of proper format
     logPath, err := validate.ValidatePath(localConfig.LogPath)
     if err != nil {
-        return fmt.Errorf("improper log_path specified in local config - %v", err)
+        return fmt.Errorf("improper log_path specified in local config - %w", err)
     }
 
     // Reset the logging path with validated clean path
@@ -123,7 +123,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
     // Parse and convert the max file size to raw bytes from any units
     fileSize, err := validate.ValidateMaxFileSize(clientConfig.MaxFileSize)
     if err != nil {
-        return fmt.Errorf("improper max_file_size in client config - %v", err)
+        return fmt.Errorf("improper max_file_size in client config - %w", err)
     }
 
     // Prior to validation set the int64 max file size in client config
@@ -137,14 +137,13 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
     // Ensure log path is of proper format
     logPath, err := validate.ValidatePath(clientConfig.LogPath)
     if err != nil {
-        return fmt.Errorf("improper log_path specified in client config - %v", err)
+        return fmt.Errorf("improper log_path specified in client config - %w", err)
     }
 
     // Reset the logging path with validated clean path
     clientConfig.LogPath = logPath
 
     // TODO:  validation methods for cracking_mode and hash_type
-
 
 
     return nil

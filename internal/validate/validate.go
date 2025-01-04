@@ -79,7 +79,7 @@ func ValidateLoadDir(loadDirPath string) error {
     // Validate and clense the load dir path
     loadDirPath, err := ValidatePath(loadDirPath)
     if err != nil {
-        fmt.Errorf("failed to validate load dir path - %v", err)
+        return fmt.Errorf("failed to validate load dir path - %w", err)
     }
 
     // Check to see if the load directory exists and has files in it
@@ -126,7 +126,7 @@ func ValidateMaxFileSize(maxFileSize string) (int64, error) {
         // Split the size from the unit type
         size, unit, err := data.ParseFileSizeType(maxFileSize)
         if err != nil {
-            return 0, fmt.Errorf("error parsing file size unit => %v", err)
+            return -1, fmt.Errorf("error parsing file size unit - %w", err)
         }
         // Pass the size and unit to calculate to raw bytes
         byteSize = data.ToBytes(size, unit)
@@ -135,13 +135,13 @@ func ValidateMaxFileSize(maxFileSize string) (int64, error) {
         // Attempt to convert it straight to int64
         byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
         if err != nil {
-            return 0, fmt.Errorf("error converting string to int64 => %v", err)
+            return -1, fmt.Errorf("error converting string to int64 - %w", err)
         }
     }
 
     // If the converted max file size is less than or equal to 0
     if byteSize <= 0 {
-        return 0, fmt.Errorf("Converted max file size is less than or equal to 0")
+        return -1, fmt.Errorf("converted max file size is less than or equal to 0")
     }
 
     return byteSize, nil

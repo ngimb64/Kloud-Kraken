@@ -17,7 +17,7 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
 
     for {
         // Select a random port inside min-max range
-        port := rand.Int31n(maxPort-minPort+1) + minPort
+        port := rand.Int31n(maxPort - minPort+1) + minPort
 
         // Attempt to establish a local listener for incoming connect
         testListener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -26,7 +26,8 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
             return testListener, port
         }
 
-        kloudlogs.LogMessage(logMan, "info", "Port %d is not available .. attempting next port", port)
+        kloudlogs.LogMessage(logMan, "info",
+                             "Port %d is not available .. attempting next port", port)
     }
 }
 
@@ -73,13 +74,13 @@ func GetIpPort(connection net.Conn) (string, int32, error) {
     // Split the IP and port from address, saving IP in variable
     ipAddr, strPort, err := net.SplitHostPort(stringAddr)
     if err != nil {
-        return "", -1, fmt.Errorf("unable to split IP and port from client address:  %v", err)
+        return "", -1, fmt.Errorf("unable to split IP and port from client address - %w", err)
     }
 
     // Convert the parsed string port to integer
     port, err := strconv.Atoi(strPort)
     if err != nil {
-        return "", -1, fmt.Errorf("unable to convert string address %s to port:  %v", strPort, err)
+        return "", -1, fmt.Errorf("unable to convert string address %s to port - %w", strPort, err)
     }
 
     // Cast int port conversion to int32
@@ -123,7 +124,7 @@ func ReadHandler(conn net.Conn, buffer *[]byte) (int, error) {
     // Perform the read operation
     bytesRead, err := conn.Read(*buffer)
     if err != nil {
-        return bytesRead, fmt.Errorf("error reading from connection: %w", err)
+        return bytesRead, fmt.Errorf("error reading from connection - %w", err)
     }
 
     return bytesRead, nil
@@ -135,7 +136,7 @@ func WriteHandler(conn net.Conn, buffer *[]byte) (int, error) {
     // Perform the write operation
     bytesWrote, err := conn.Write(*buffer)
     if err != nil {
-        return 0, fmt.Errorf("error writing to connection: %w", err)
+        return 0, fmt.Errorf("error writing to connection - %w", err)
     }
 
     // Clear the buffer to avoid leftover data
