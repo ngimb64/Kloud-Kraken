@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -27,79 +26,7 @@ import (
 
 // Package level variables
 var CurrentConnections atomic.Int32		// Tracks current active connections
-var ReceivedDir = "/tmp/received"
-
-
-// Handle reading data from the passed in file descriptor and write to the socket to client.
-//
-// Params:
-// - connection:  The active TCP socket connection to transmit data
-// - transferBuffer:  The buffer used to store file data that is transferred
-// - file:  A pointer to the open file descriptor
-// - logMan:  The kloudlogs logger manager for local logging
-//
-func fileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File,
-                         logMan *kloudlogs.LoggerManager) {
-    // Close the file on local exit
-    defer file.Close()
-
-    for {
-        // Read buffer size from file
-        _, err := file.Read(transferBuffer)
-        if err != nil {
-            // If the error was not the end of file
-            if err != io.EOF {
-                kloudlogs.LogMessage(logMan, "error", "Error reading file:  %w", err)
-            }
-            break
-        }
-
-        // Write the read bytes to the client
-        _, err = netio.WriteHandler(connection, &transferBuffer)
-        if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %w", err)
-            break
-        }
-    }
-}
-
-
-func transferFile(connection net.Conn, messagingPort int32, filePath string, fileSize int64,
-                  logMan *kloudlogs.LoggerManager) {
-    // Get the IP address from the ip:port host address
-    _, port, err := netio.GetIpPort(connection)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %w", err)
-        return
-    }
-
-    // If the parsed port of the passed in connection does not
-    // match the original port used to manage messaging
-    if port != messagingPort {
-        // Ensure the transfer connection is closed upon local exit
-        defer connection.Close()
-    }
-
-    // Create buffer to optimal size based on expected file size
-    transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
-
-    // Open the file
-    file, err := os.Open(filePath)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error opening the file to be transfered:  %w", err)
-        return
-    }
-
-    // Read the file chunk by chunk and send to client
-    fileToSocketHandler(connection, transferBuffer, file, logMan)
-
-    // Delete the transfered file
-    err = os.Remove(filePath)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error deleting the file:  %w", err)
-        return
-    }
-}
+var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client logs are stored
 
 
 func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
@@ -164,36 +91,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 
     kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
 
-    go transferFile(transferConn, appConfig.LocalConfig.ListenerPort, filePath, fileSize, logMan)
-}
-
-
-func uploadFile(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
-                logMan *kloudlogs.LoggerManager, filePath string) {
-    // Get the hash file size based on saved path in config
-    fileInfo, err := os.Stat(filePath)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error getting file size:  %w", err)
-    }
-
-    fileSize := fileInfo.Size()
-
-    // Clear the buffer before building transfer reply
-    *buffer = (*buffer)[:0]
-    // Append the hash file transfer request piece by piece in buffer
-    *buffer = append(globals.HASHES_TRANSFER_PREFIX, []byte(filePath)...)
-    *buffer = append(*buffer, globals.COLON_DELIMITER...)
-    *buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
-    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
-
-    // Send the hash file transfer request with file name and size
-    _, err = netio.WriteHandler(connection, buffer)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error sending the hash file name and size:  %w", err)
-    }
-
-    // Transfer the hash file to client
-    transferFile(connection, appConfig.LocalConfig.ListenerPort, filePath, fileSize, logMan)
+    go netio.TransferFile(transferConn, appConfig.LocalConfig.ListenerPort, filePath, fileSize, logMan)
 }
 
 
@@ -206,14 +104,14 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
     // Set message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Upload the hash file to connection client
-    uploadFile(connection, &buffer, appConfig, logMan,
-               appConfig.LocalConfig.HashFilePath)
+    netio.UploadFile(connection, &buffer, appConfig.LocalConfig.ListenerPort,
+                    logMan, appConfig.LocalConfig.HashFilePath)
 
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
         // Upload the ruleset file to connection client
-        uploadFile(connection, &buffer, appConfig, logMan,
-                   appConfig.LocalConfig.RulesetPath)
+        netio.UploadFile(connection, &buffer, appConfig.LocalConfig.ListenerPort,
+                         logMan, appConfig.LocalConfig.RulesetPath)
     }
 
     for {
@@ -236,9 +134,12 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
         }
     }
 
-    // TODO:  add logic to receive cracked user hash file from client
-
-    // TODO:  add logic to receive log file from client
+    // Receive cracked user hash file from client
+    netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort, logMan,
+                      ReceivedDir, globals.LOOT_TRANSFER_PREFIX, globals.TRANSFER_SUFFIX)
+    // Receive log file from client
+    netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort, logMan,
+                      ReceivedDir, globals.LOG_TRANSFER_PREFIX, globals.TRANSFER_SUFFIX)
 
     // Decrement the active connection count
     CurrentConnections.Add(-1)

@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -31,12 +30,13 @@ const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
 var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
 var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes stored post processing
 var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
-var CrackingMode = ""     // Stores cracking mode arg
-var HashFilePath = ""     // Stores hash file path when received
-var RulesetFilePath = ""  // Stores ruleset file when received
-var HashType = ""      // Stores hash type to be cracked
-var Port32 int32 = 0   // Initial port for messaging communication
-var HasRuleset bool    // Toggle for specifying whether ruleset is in use
+var CrackingMode = ""        // Stores cracking mode arg
+var HashFilePath = ""        // Stores hash file path when received
+var LogPath = ""             // Stores log file to be returned to client
+var RulesetFilePath = ""     // Stores ruleset file when received
+var HashType = ""            // Stores hash type to be cracked
+var MessagePort32 int32 = 0  // Initial port for messaging communication
+var HasRuleset bool          // Toggle for specifying whether ruleset is in use
 
 
 // Format the result of data processing, send the formatted result of the data processing to the
@@ -167,93 +167,6 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
 }
 
 
-// Reads data from the socket and write it to the passed in open file descriptor until end
-// of file has been reached or error occurs with socket operation.
-//
-// Parameters:
-// - connection:  Active socket connection for reading data to be stored and processed
-// - transferBuffer:  Buffer allocated for file transfer based on file size
-// - file:  The open file descriptor of where the data to be processed will be stored
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-//
-func socketToFileHander(connection net.Conn, transferBuffer []byte, file *os.File,
-                        logMan *kloudlogs.LoggerManager) {
-    // Close file on local exit
-    defer file.Close()
-
-    for {
-        // Read data into the buffer
-        _, err := netio.ReadHandler(connection, &transferBuffer)
-        if err != nil {
-            // If the error is not End Of File reached
-            if err != io.EOF {
-                kloudlogs.LogMessage(logMan, "error", "Error reading from socket:  %w", err)
-                return
-            }
-            break
-        }
-
-        // Write the data to the file
-        _, err = file.Write(transferBuffer)
-        if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %w", err)
-            return
-        }
-    }
-}
-
-
-// Takes the passed in file name and parses it to the file path to create the file where the
-// resulting file will be stored to lated be used for processing.
-//
-// Parameters:
-// - connection:  Active socket connection for reading data to be stored and processed
-// - filePath:  The path of the file to be stored on disk from read socket data
-// - fileSize:  The size of the to be stored on disk from read socket data
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-// - waitGroup:  Used to synchronize the Goroutines running
-//
-func handleTransfer(connection net.Conn, filePath string, fileSize int64,
-                    logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
-    // If a waitgroup was passed in
-    if waitGroup != nil {
-        // Decrement wait group on local exit
-        defer waitGroup.Done()
-    }
-
-    // Get the IP address from the ip:port host address
-    _, port, err := netio.GetIpPort(connection)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error occcurred spliting host address to get IP/port:  %w", err)
-        return
-    }
-
-    // If the parsed port of the passed in connection does not
-    // match the original port used to manage messaging
-    if port != Port32 {
-        // Ensure the transfer connection is closed upon local exit
-        defer connection.Close()
-    }
-
-    //  Create buffer to optimal size based on expected file size
-    transferBuffer := make([]byte, netio.GetOptimalBufferSize(fileSize))
-
-    kloudlogs.LogMessage(logMan, "info", "File transfer initiated", zap.String("file path", filePath),
-                         zap.Int64("file size", fileSize))
-
-    // Open the file for writing
-    file, err := os.Create(filePath)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error creating the file %s:  %w", filePath, err)
-        return
-    }
-
-    // Read data from the socket and write to the file path
-    socketToFileHander(connection, transferBuffer, file, logMan)
-}
-
-
 // Sends transfer message to the brain server, waits for transfer reply with file name and
 // size, and proceeds to call handle transfer method.
 //
@@ -341,46 +254,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Add the file size of the file to be transfered to transfer manager
     transferManager.AddTransferSize(fileSize)
     // Now synchronized messages are complete, handle transfer with new connection in routine
-    go handleTransfer(transferConn, filePath, fileSize, logMan, waitGroup)
-}
-
-
-// Receives the file from the remote brain server
-//
-// Parameters:
-// - connection:  Active socket connection for reading data to be stored and processed
-// - buffer:  The buffer used for processing socket messaging
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-//
-func receiveFile(connection net.Conn, buffer []byte, logMan *kloudlogs.LoggerManager,
-                 storePath string, prefix []byte, suffix []byte) string {
-    // Wait for the brain server to send the start transfer message
-    _, err := netio.ReadHandler(connection, &buffer)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %w", err)
-        os.Exit(2)
-    }
-
-    // If the read data does not start with special delimiter or end with closed bracket
-    if !bytes.HasPrefix(buffer, prefix) || !bytes.HasSuffix(buffer, suffix) {
-        kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved hashes transfer message")
-        os.Exit(2)
-    }
-
-    // Extract the file name and size from the initial transfer message
-    fileName, fileSize, err := netio.GetFileInfo(buffer, prefix, suffix)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error extracting the file name and size from hashes transfer message:  %w", err)
-        os.Exit(2)
-    }
-
-    // Format the hash file path based on received file name
-    filePath := fmt.Sprintf("%s/%s", storePath, fileName)
-    // Receive the hash file from server
-    handleTransfer(connection, filePath, fileSize, logMan, nil)
-
-    return filePath
+    go netio.HandleTransfer(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
 }
 
 
@@ -406,16 +280,15 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     // Set the message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Receive the hash file from the server
-    HashFilePath = receiveFile(connection, buffer, logMan, HashesPath,
-                               globals.HASHES_TRANSFER_PREFIX,
-                               globals.TRANSFER_SUFFIX)
-
+    HashFilePath = netio.ReceiveFile(connection, buffer, MessagePort32, logMan, HashesPath,
+                                     globals.HASHES_TRANSFER_PREFIX,
+                                     globals.TRANSFER_SUFFIX)
     // If a rule set was specified
     if HasRuleset {
         // Receive the ruleset from the server
-        RulesetFilePath = receiveFile(connection, buffer, logMan, RulesetPath,
-                                      globals.RULESET_TRANSFER_PREFIX,
-                                      globals.TRANSFER_SUFFIX)
+        RulesetFilePath = netio.ReceiveFile(connection, buffer, MessagePort32, logMan, RulesetPath,
+                                            globals.RULESET_TRANSFER_PREFIX,
+                                            globals.TRANSFER_SUFFIX)
     }
 
     for {
@@ -450,6 +323,11 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
         // Sleep to avoid excessive syscalls during idle activity
         time.Sleep(5 * time.Second)
     }
+
+    // Transfer the cracked user hash file to server
+    netio.UploadFile(connection, &buffer, MessagePort32, logMan, Loot)
+    // Transfer the log file to server
+    netio.UploadFile(connection, &buffer, MessagePort32, logMan, LogPath)
 }
 
 
@@ -481,10 +359,6 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 
     // Wait for both goroutines to finish
     waitGroup.Wait()
-
-    // TODO:  add logic to transfer cracker user hash file to server
-
-    // TODO:  add logic to transfer log file to server
 }
 
 
@@ -498,7 +372,7 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 //
 func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Define the address of the server to connect to
-    serverAddress := fmt.Sprintf("%s:%d", ipAddr, Port32)
+    serverAddress := fmt.Sprintf("%s:%d", ipAddr, MessagePort32)
 
     // Make a connection to the remote brain server
     connection, err := net.Dial("tcp", serverAddress)
@@ -508,7 +382,7 @@ func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeIn
     }
 
     kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
-                         zap.String("ip address", ipAddr), zap.Int32("port", Port32))
+                         zap.String("ip address", ipAddr), zap.Int32("port", MessagePort32))
 
     // Close connection on local exit
     defer connection.Close()
@@ -522,7 +396,6 @@ func main() {
     var port int
     var maxFileSizeInt64 int64
     var logMode string
-    var logPath string
     var awsRegion string
     var awsAccessKey string
     var awsSecretKey string
@@ -539,7 +412,7 @@ func main() {
     flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
-    flag.StringVar(&logPath, "logPath", "KloudKraken.log", "Path to the log file")
+    flag.StringVar(&LogPath, "logPath", "KloudKraken.log", "Path to the log file")
     flag.StringVar(&CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
     flag.StringVar(&HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
@@ -547,7 +420,7 @@ func main() {
     flag.Parse()
 
     // Ensure parsed port is int32
-    Port32 = int32(port)
+    MessagePort32 = int32(port)
 
     // Set the program directories
     programDirs := []string{WordlistPath, HashFilePath}
@@ -573,7 +446,7 @@ func main() {
     }
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager(logMode, logPath, awsConfig)
+    logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
