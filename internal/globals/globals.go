@@ -6,10 +6,10 @@ const OS_RESERVED_SPACE = 10 * GB
 
 var COLON_DELIMITER = []byte(":")
 var HASHES_TRANSFER_PREFIX = []byte("<TRANSFER_HASHES:")
-var HASHES_TRANSFER_SUFFIX = []byte(">")
+var RULESET_TRANSFER_PREFIX = []byte("<TRANSFER_RULESET:")
 var TRANSFER_REQUEST_MARKER = []byte("<TRANSFER_REQUEST>")
 var START_TRANSFER_PREFIX = []byte("<START_TRANSFER:")
-var START_TRANSFER_SUFFIX = []byte(">")
+var TRANSFER_SUFFIX = []byte(">")
 var END_TRANSFER_MARKER = []byte("<END_TRANSFER>")
 var PROCESSING_COMPLETE = []byte("<PROCESSING_COMPLETE>")
-var FILE_SIZE_TYPES = []string{"kb", "mb", "gb", "tb", "pb", "eb"}
+var FILE_SIZE_TYPES = []string{"kb", "mb", "gb"}

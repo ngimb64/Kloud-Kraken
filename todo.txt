@@ -1,11 +1,13 @@
 - Handle formatting and sending the results from client back to server
 
+- Add logic to control number of allowed file transfers simultaniously
+
+- Finish writing input validation routines for yaml data
+
 - Write and run unit tests, then integration tests to get baseline working
 
 - Data compression and encryption
 	- Ask ChatGPT about using an interface for current socket functions with encryption integrated
-
-- Write and run unit test for compression and encryption, then test
 
 - Build provisioner script for AMI with uploaded compiled client code
 

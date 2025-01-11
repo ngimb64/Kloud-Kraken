@@ -22,6 +22,7 @@ type LocalConfig struct {
     NumberInstances int    `yaml:"number_instances"`
     LoadDir	   	    string `yaml:"load_dir"`
     HashFilePath    string `yaml:"hash_file_path"`
+    RulesetPath     string `yaml:"ruleset_path"`
     LogPath		    string `yaml:"log_path"`
 }
 
@@ -42,7 +43,7 @@ func LoadConfig(filePath string) *AppConfig {
     // Open the YAML file
     file, err := os.Open(filePath)
     if err != nil {
-        log.Fatalf("Could not open YAML file:  %w", err)
+        log.Fatalf("Could not open YAML file:  %v", err)
     }
     // Close file on local exit
     defer file.Close()
@@ -54,19 +55,19 @@ func LoadConfig(filePath string) *AppConfig {
     decoder := yaml.NewDecoder(file)
     err = decoder.Decode(&config)
     if err != nil {
-        log.Fatalf("Could not decode YAML into AppConfig:  %w", err)
+        log.Fatalf("Could not decode YAML into AppConfig:  %v", err)
     }
 
     // Validate local config section of YAML data
     err = ValidateLocalConfig(&config.LocalConfig)
     if err != nil {
-        log.Fatalf("Invalid local config:  %w", err)
+        log.Fatalf("Invalid local config:  %v", err)
     }
 
     // Validate client config section of YAML data
     err = ValidateClientConfig(&config.ClientConfig)
     if err != nil {
-        log.Fatalf("Invalid client config:  %w", err)
+        log.Fatalf("Invalid client config:  %v", err)
     }
 
     return &config
@@ -100,6 +101,10 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
     if err != nil {
         return err
     }
+
+
+    // TODO:  add validation logic for ruleset file
+
 
     // Ensure log path is of proper format
     logPath, err := validate.ValidatePath(localConfig.LogPath)
@@ -142,6 +147,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 
     // Reset the logging path with validated clean path
     clientConfig.LogPath = logPath
+
 
     // TODO:  validation methods for cracking_mode and hash_type
 

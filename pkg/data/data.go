@@ -62,15 +62,6 @@ func ToBytes(size float64, unit string) int64 {
     // Gigabytes
     case "GB":
         byteSize = size * 1024 * 1024 * 1024
-    // Terabytes
-    case "TB":
-        byteSize = size * 1024 * 1024 * 1024 * 1024
-    // Petabytes
-    case "PB":
-        byteSize = size * 1024 * 1024 * 1024 * 1024 * 1024
-    // Exabytes
-    case "EB":
-        byteSize = size * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
     // Invalid unit
     default:
         return -1

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
+	"go.uber.org/zap"
 )
 
 
@@ -26,8 +27,8 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
             return testListener, port
         }
 
-        kloudlogs.LogMessage(logMan, "info",
-                             "Port %d is not available .. attempting next port", port)
+        kloudlogs.LogMessage(logMan, "info", "Unable to obtain listener port:  %v", err,
+                             zap.Int32("listener port", port))
     }
 }
 
@@ -35,24 +36,26 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
 // Parse file name/size from buffer data based on colon separator
 //
 // Parameters:
-// - dataBuffer:  The data read from socket buffer to be parsed
+// - buffer:  The data read from socket buffer to be parsed
 //
 // Returns:
 // - The byte slice with the file name
 // - A integer file size
 // - Either nil on success or a string error message on failure
 //
-func GetFileInfo(dataBuffer []byte) ([]byte, int64, error) {
+func GetFileInfo(buffer []byte, prefix []byte, suffix []byte) ([]byte, int64, error) {
+    // Trim the delimiters around the file info
+    buffer = buffer[len(prefix) : len(buffer) - len(suffix)]
     // Get the position of the colon delimiter
-    colonPos := bytes.IndexByte(dataBuffer, ':')
+    colonPos := bytes.IndexByte(buffer, ':')
     // If the colon separator is missing
     if colonPos == -1 {
         return []byte(""), 0, fmt.Errorf("invalid message structure, colon missing")
     }
 
     // Extract the file path and size
-    fileName := dataBuffer[:colonPos]
-    fileSizeStr := string(dataBuffer[colonPos+1:])
+    fileName := buffer[:colonPos]
+    fileSizeStr := string(buffer[colonPos+1:])
 
     // Convert the size string to an 64 bit integr
     fileSize, err := strconv.ParseInt(string(fileSizeStr), 10, 64)

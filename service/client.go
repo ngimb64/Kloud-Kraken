@@ -27,13 +27,16 @@ import (
 // Package level variables
 const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
 const HashesPath = "/tmp/hashes"       // Path where hash files are stored
+const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
 var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
-var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes temporarily stored post processing
+var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes stored post processing
 var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
-var CrackingMode = ""  // Stores cracking mode arg
-var HashFilePath = ""  // Stores hash file path when received
+var CrackingMode = ""     // Stores cracking mode arg
+var HashFilePath = ""     // Stores hash file path when received
+var RulesetFilePath = ""  // Stores ruleset file when received
 var HashType = ""      // Stores hash type to be cracked
 var Port32 int32 = 0   // Initial port for messaging communication
+var HasRuleset bool    // Toggle for specifying whether ruleset is in use
 
 
 // Format the result of data processing, send the formatted result of the data processing to the
@@ -45,9 +48,13 @@ var Port32 int32 = 0   // Initial port for messaging communication
 // - fileSize:  The size of the to be stored on disk from read socket data
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+// - waitGroup:  Acts as a barrier for the Goroutines running
 //
 func logAndRemove(filePath string, output []byte, fileSize int64, transferManager *data.TransferManager,
-                  logMan *kloudlogs.LoggerManager) {
+                  logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
+    // Decrement wait group on local exit
+    waitGroup.Done()
+
 
     // TODO:  parse the hashcat output to kloudlogs
 
@@ -74,35 +81,6 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 }
 
 
-func getWordlist(wordlistPath string) (string, int64, error) {
-    fileName, fileSize, err := disk.CheckDirFiles(wordlistPath)
-    if err != nil {
-        return "", -1, err
-    }
-
-    // If the file
-    if fileName == "" {
-        return "", 0, nil
-    } else if fileSize > 0 {
-        return fileName, fileSize, nil
-    } else {
-        // Read the contents of the directory
-        files, err := os.ReadDir(wordlistPath)
-        if err != nil {
-            return "", -1, err
-        }
-
-        // Loop over the directory contents
-        for _, file := range files {
-            // TODO:  add logic to use tool to merge multiple wordlists together, replace dummy print
-            fmt.Print(file.Name())
-        }
-
-        return fileName, fileSize, nil
-    }
-}
-
-
 // Reads data (filename or end transfer message) from channel connected to reader Goroutine,
 // takes the received filename and passes it into command execution method for processing,
 // and the result is formatted and sent back to the brain server.
@@ -113,21 +91,22 @@ func getWordlist(wordlistPath string) (string, int64, error) {
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
-                 transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
+func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
+                       transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
+    var cmd *exec.Cmd
     exitLoop := false
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
-    // Format file path arg where cracked hashes are stored
+    // Format file path arg where cracked hashes are stored post processing
     crackedOutfile := fmt.Sprintf("-o=%s", Cracked)
 
     for {
-        // Attempt to get the next available wordlist, if more than one wordlist exist
-        // merge them together as one and return the combined result as new file
-        filePath, fileSize, err := getWordlist(WordlistPath)
+        // Attempt to get the next available wordlist
+        filePath, fileSize, err := disk.CheckDirFiles(WordlistPath)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w", err,
                                  zap.String("wordlist directory", WordlistPath))
+            return
         }
 
         select {
@@ -152,9 +131,17 @@ func processData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
             break
         }
 
-        // Register a command with selected file path
-        cmd := exec.Command("hashcat", "-O", "--machine-readable", "--remove", crackedOutfile,
-                            "-a", CrackingMode, "-m", HashType, "-w", "3", HashFilePath, filePath)
+        // If a ruleset is in use and it has a path
+        if HasRuleset && RulesetFilePath != "" {
+            // Register a command with selected file path
+            cmd = exec.Command("hashcat", "-O", "--machine-readable", "--remove", crackedOutfile,
+                               "-a", CrackingMode, "-m", HashType, "-r", RulesetFilePath, "-w", "3",
+                               HashFilePath, filePath)
+        } else {
+            // Register a command with selected file path
+            cmd = exec.Command("hashcat", "-O", "--machine-readable", "--remove", crackedOutfile,
+                               "-a", CrackingMode, "-m", HashType, "-w", "3", HashFilePath, filePath)
+        }
         // Execute and save the command stdout and stderr output
         output, err := cmd.CombinedOutput()
         if err != nil {
@@ -172,8 +159,10 @@ func processData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
             return
         }
 
+        // Increment wait group
+        waitGroup.Add(1)
         // In a separate goroutine, which will log the output and delete processed data
-        go logAndRemove(filePath, output, fileSize, transferManager, logMan)
+        go logAndRemove(filePath, output, fileSize, transferManager, logMan, waitGroup)
     }
 }
 
@@ -304,15 +293,14 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 
     // If the read data does not start with special delimiter or end with closed bracket
     if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
-    !bytes.HasSuffix(buffer, globals.START_TRANSFER_SUFFIX) {
+    !bytes.HasSuffix(buffer, globals.TRANSFER_SUFFIX) {
         kloudlogs.LogMessage(logMan, "error", "Unusual format in receieved start transfer message")
         return
     }
 
-    // Trim the delimiters around the file info
-    buffer = buffer[len(globals.START_TRANSFER_PREFIX) : len(buffer) - len(globals.START_TRANSFER_SUFFIX)]
     // Extract the file name and size from the stripped initial transfer message
-    fileName, fileSize, err := netio.GetFileInfo(buffer)
+    fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX,
+                                                 globals.TRANSFER_SUFFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error extracting the file name and size from start transfer message:  %w", err)
@@ -320,7 +308,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Format the wordlist file path based on received file name
-    filePath := fmt.Sprint("%s/%s", WordlistPath, fileName)
+    filePath := fmt.Sprintf("%s/%s", WordlistPath, fileName)
 
     // Make a small int32 buffer
     int32Buffer := make([]byte, 4)
@@ -357,14 +345,15 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 }
 
 
-// Receives the file of hash to be cracked from the brain server.
+// Receives the file from the remote brain server
 //
 // Parameters:
 // - connection:  Active socket connection for reading data to be stored and processed
 // - buffer:  The buffer used for processing socket messaging
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func receiveHashFile(connection net.Conn, buffer []byte, logMan *kloudlogs.LoggerManager) {
+func receiveFile(connection net.Conn, buffer []byte, logMan *kloudlogs.LoggerManager,
+                 storePath string, prefix []byte, suffix []byte) string {
     // Wait for the brain server to send the start transfer message
     _, err := netio.ReadHandler(connection, &buffer)
     if err != nil {
@@ -373,16 +362,13 @@ func receiveHashFile(connection net.Conn, buffer []byte, logMan *kloudlogs.Logge
     }
 
     // If the read data does not start with special delimiter or end with closed bracket
-    if !bytes.HasPrefix(buffer, globals.HASHES_TRANSFER_PREFIX) ||
-    !bytes.HasSuffix(buffer, globals.HASHES_TRANSFER_SUFFIX) {
+    if !bytes.HasPrefix(buffer, prefix) || !bytes.HasSuffix(buffer, suffix) {
         kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved hashes transfer message")
         os.Exit(2)
     }
 
-    // Trim the delimiters around the file info
-    buffer = buffer[len(globals.HASHES_TRANSFER_PREFIX) : len(buffer) - len(globals.HASHES_TRANSFER_SUFFIX)]
     // Extract the file name and size from the initial transfer message
-    fileName, fileSize, err := netio.GetFileInfo(buffer)
+    fileName, fileSize, err := netio.GetFileInfo(buffer, prefix, suffix)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error extracting the file name and size from hashes transfer message:  %w", err)
@@ -390,9 +376,11 @@ func receiveHashFile(connection net.Conn, buffer []byte, logMan *kloudlogs.Logge
     }
 
     // Format the hash file path based on received file name
-    HashFilePath = fmt.Sprintf("%s/%s", HashesPath, fileName)
+    filePath := fmt.Sprintf("%s/%s", storePath, fileName)
     // Receive the hash file from server
-    handleTransfer(connection, HashFilePath, fileSize, logMan, nil)
+    handleTransfer(connection, filePath, fileSize, logMan, nil)
+
+    return filePath
 }
 
 
@@ -408,9 +396,9 @@ func receiveHashFile(connection net.Conn, buffer []byte, logMan *kloudlogs.Logge
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func receiveData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
-                transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager,
-                maxFileSizeInt64 int64) {
+func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
+                      transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager,
+                      maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
 
@@ -418,7 +406,17 @@ func receiveData(connection net.Conn, channel chan bool, waitGroup *sync.WaitGro
     // Set the message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Receive the hash file from the server
-    receiveHashFile(connection, buffer, logMan)
+    HashFilePath = receiveFile(connection, buffer, logMan, HashesPath,
+                               globals.HASHES_TRANSFER_PREFIX,
+                               globals.TRANSFER_SUFFIX)
+
+    // If a rule set was specified
+    if HasRuleset {
+        // Receive the ruleset from the server
+        RulesetFilePath = receiveFile(connection, buffer, logMan, RulesetPath,
+                                      globals.RULESET_TRANSFER_PREFIX,
+                                      globals.TRANSFER_SUFFIX)
+    }
 
     for {
         // Get the remaining available and total disk space
@@ -476,10 +474,10 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
     waitGroup.Add(2)
 
     // Start the goroutine to write data to the file
-    go receiveData(connection, channel, &waitGroup, &transferManager, logMan,
-                   maxFileSizeInt64)
+    go receivingHandler(connection, channel, &waitGroup, &transferManager, logMan,
+                        maxFileSizeInt64)
     // Start the goroutine to process the file
-    go processData(connection, channel, &waitGroup, &transferManager, logMan)
+    go processingHandler(connection, channel, &waitGroup, &transferManager, logMan)
 
     // Wait for both goroutines to finish
     waitGroup.Wait()
@@ -500,7 +498,7 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 //
 func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Define the address of the server to connect to
-    serverAddress := fmt.Sprintf("%s:%s", ipAddr, Port32)
+    serverAddress := fmt.Sprintf("%s:%d", ipAddr, Port32)
 
     // Make a connection to the remote brain server
     connection, err := net.Dial("tcp", serverAddress)
@@ -544,23 +542,23 @@ func main() {
     flag.StringVar(&logPath, "logPath", "KloudKraken.log", "Path to the log file")
     flag.StringVar(&CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
     flag.StringVar(&HashType, "hashType", "1000", "Hashcat hash type to crack")
+    flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
     // Parse the command line flags
     flag.Parse()
 
     // Ensure parsed port is int32
     Port32 = int32(port)
 
-    // Ensure the wordlist directory exists
-    err := os.MkdirAll(WordlistPath, os.ModePerm)
-    if err != nil {
-        log.Fatalf("Error creating wordlist dir:  %w", err)
+    // Set the program directories
+    programDirs := []string{WordlistPath, HashFilePath}
+
+    // If there is a ruleset, append its path to program dirs
+    if HasRuleset {
+        programDirs = append(programDirs, RulesetPath)
     }
 
-    // Ensure the hashes directory exists
-    err = os.MkdirAll(HashFilePath, os.ModePerm)
-    if err != nil {
-        log.Fatalf("Error creating hashes dir:  %w", err)
-    }
+    // Create needed directories
+    disk.MakeDirs(programDirs)
 
     // If AWS access and secret key are present
     if awsAccessKey != "" && awsSecretKey != "" {
@@ -577,7 +575,7 @@ func main() {
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, logPath, awsConfig)
     if err != nil {
-        log.Fatalf("Error initializing logger manager:  %w", err)
+        log.Fatalf("Error initializing logger manager:  %v", err)
     }
 
     // Connect to remote server to begin receiving data for processing

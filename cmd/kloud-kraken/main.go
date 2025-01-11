@@ -27,6 +27,7 @@ import (
 
 // Package level variables
 var CurrentConnections atomic.Int32		// Tracks current active connections
+var ReceivedDir = "/tmp/received"
 
 
 // Handle reading data from the passed in file descriptor and write to the socket to client.
@@ -127,7 +128,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     *buffer = append(globals.START_TRANSFER_PREFIX, []byte(filePath)...)
     *buffer = append(*buffer, globals.COLON_DELIMITER...)
     *buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
-    *buffer = append(*buffer, globals.START_TRANSFER_SUFFIX...)
+    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
 
     // Send the transfer reply with file name and size
     _, err = netio.WriteHandler(connection, buffer)
@@ -167,10 +168,8 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
 }
 
 
-func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
-                    logMan *kloudlogs.LoggerManager) {
-    filePath := appConfig.LocalConfig.HashFilePath
-
+func uploadFile(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
+                logMan *kloudlogs.LoggerManager, filePath string) {
     // Get the hash file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
@@ -185,7 +184,7 @@ func uploadHashFile(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     *buffer = append(globals.HASHES_TRANSFER_PREFIX, []byte(filePath)...)
     *buffer = append(*buffer, globals.COLON_DELIMITER...)
     *buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
-    *buffer = append(*buffer, globals.HASHES_TRANSFER_SUFFIX...)
+    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
 
     // Send the hash file transfer request with file name and size
     _, err = netio.WriteHandler(connection, buffer)
@@ -207,7 +206,15 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
     // Set message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Upload the hash file to connection client
-    uploadHashFile(connection, &buffer, appConfig, logMan)
+    uploadFile(connection, &buffer, appConfig, logMan,
+               appConfig.LocalConfig.HashFilePath)
+
+    // If a ruleset path was specified
+    if appConfig.LocalConfig.RulesetPath != "" {
+        // Upload the ruleset file to connection client
+        uploadFile(connection, &buffer, appConfig, logMan,
+                   appConfig.LocalConfig.RulesetPath)
+    }
 
     for {
         // Read data from connected client
@@ -329,6 +336,15 @@ func main() {
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
 
+    // Set the program directories
+    programDirs := []string{ReceivedDir}
+    // Create needed directories
+    disk.MakeDirs(programDirs)
+
+
+    // TODO:  after development, integrate wordlist merger to merge wordlists based on allowed max size
+
+
     // Get the AWS access and secret key environment variables
     awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
     awsSecretKey := os.Getenv("AWS_SECRET_KEY")
@@ -350,8 +366,10 @@ func main() {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
 
+
     // TODO:  After local testing add function calls for setting up AWS, packer AMI build (if not exist already),
     //		  and spawning EC2 with user data executing service with params passed in
+
 
     startServer(appConfig, logMan)
 }

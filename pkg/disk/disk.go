@@ -3,6 +3,7 @@ package disk
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -56,7 +57,6 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
 
 
 func CheckDirFiles(path string) (string, int64, error) {
-    var fileCount int
     var fileName string
     var fileSize int64
 
@@ -70,32 +70,25 @@ func CheckDirFiles(path string) (string, int64, error) {
     for _, file := range files {
         // If the current item is a file
         if !file.IsDir() {
-            fileCount++
-
-            // If the first file is selected
-            if fileCount == 1 {
-                // Get the file name and size
-                info, err := file.Info()
-                if err != nil {
-                    return "", -1, err
-                }
-
-                fileName = info.Name()
-                fileSize = info.Size()
+            // Get the file name and size
+            info, err := file.Info()
+            if err != nil {
+                return "", -1, err
             }
+
+            fileName = info.Name()
+            fileSize = info.Size()
+            break
         }
     }
 
     // If no files detected, return empty string
-    if fileCount == 0 {
+    if fileSize < 1 {
         return "", 0, nil
-    } else if fileCount == 1 {
-        // If there is one file, return the name and size
-        return fileName, fileSize, nil
-    } else {
-        // If there is more than one file in dir
-        return "<MULTI_FILE>", 0, nil
     }
+
+    // If there is one file, return the name and size
+    return fileName, fileSize, nil
 }
 
 
@@ -129,6 +122,18 @@ func GetDiskSpace() (total int64, free int64, err error) {
     free = int64(statfs.Bfree) * statfs.Bsize
 
     return total, free, nil
+}
+
+
+func MakeDirs(programDirs []string) {
+    // Iterate through slice of dirs
+    for _, dir := range programDirs {
+        // Create the current dir and any missing parent dirs
+        err := os.MkdirAll(dir, os.ModePerm)
+        if err != nil {
+            log.Fatalf("Error creating directory:  %v", dir)
+        }
+    }
 }
 
 

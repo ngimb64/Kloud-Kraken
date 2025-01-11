@@ -4,6 +4,7 @@ local_config:
   number_instances: 1
   load_dir: ""
   hash_file_path: ""
+  ruleset_path: ""
   log_path: "KloudKraken.log"
 
 client_config:
