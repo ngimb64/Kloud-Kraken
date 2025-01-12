@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -39,6 +40,56 @@ var MessagePort32 int32 = 0  // Initial port for messaging communication
 var HasRuleset bool          // Toggle for specifying whether ruleset is in use
 
 
+func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
+	var keys []string
+	var logArgs []any
+	// Make a map to store parsed data
+	outputMap := make(map[string]interface{})
+
+	// Trim up to the end section with result data
+	parsedOutput, err := data.TrimBeforeLast(output, []byte("=>"))
+	if err != nil {
+		log.Fatalf("Error pre-trimming:  %v", err)
+	}
+
+	// Split the byte slice into lines base on newlines
+	lines := bytes.Split(parsedOutput, []byte("\n"))
+	// Iterate through slice of byte slice lines
+	for _, line := range lines {
+		// Find the first occurance of the colon separator
+		index := bytes.Index(line, []byte(":"))
+		// If the line does not contain the index, skip it
+		if index == -1 {
+			continue
+		}
+
+		// Extract the key/value based on the colon separator
+		key := bytes.TrimSpace(line[:index])
+		value := bytes.TrimSpace(line[index+1:])
+
+		// Store the key and value as strings in map
+		outputMap[string(key)] = string(value)
+	}
+
+	// Iterate over keys in the output map
+	for key := range outputMap {
+		// Append the key to the keys string slice
+		keys = append(keys, key)
+	}
+
+	// Sort the keys by alphabetical order
+	sort.Strings(keys)
+
+	// Iterate through the sorted keys
+	for _, key := range keys {
+		// Add the key/value from output map based on sorted key value
+		logArgs = append(logArgs, zap.Any(key, outputMap[key]))
+	}
+
+    kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
+}
+
+
 // Format the result of data processing, send the formatted result of the data processing to the
 // remote brain server, and delete the data prior to processing.
 //
@@ -55,10 +106,8 @@ func logAndRemove(filePath string, output []byte, fileSize int64, transferManage
     // Decrement wait group on local exit
     waitGroup.Done()
 
-
-    // TODO:  parse the hashcat output to kloudlogs
-
-
+    // Parse and log the hashcat output
+    parseHashcatOutput(output, logMan)
     // Delete the processed file
     os.Remove(filePath)
 

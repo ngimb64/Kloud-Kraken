@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -58,10 +59,10 @@ func ToBytes(size float64, unit string) int64 {
         byteSize = size * 1024
     // Megabytes
     case "MB":
-        byteSize = size * 1024 * 1024
+        byteSize = size * globals.MB
     // Gigabytes
     case "GB":
-        byteSize = size * 1024 * 1024 * 1024
+        byteSize = size * globals.GB
     // Invalid unit
     default:
         return -1
@@ -95,4 +96,15 @@ func (tm *TransferManager) RemoveTransferSize(size int64) {
 // GetOngoingTransfersSize returns the current total size of ongoing transfers.
 func (tm *TransferManager) GetOngoingTransfersSize() int64 {
     return atomic.LoadInt64(&tm.OngoingTransfersSize)
+}
+
+
+func TrimBeforeLast(output []byte, delimiter []byte) ([]byte, error) {
+	// Find the last occurance of the delimiter
+	position := bytes.LastIndex(output, delimiter)
+	if position == -1 {
+		return output, fmt.Errorf("delimiter not found in output")
+	}
+
+	return output[position+1:], nil
 }

@@ -1,5 +1,3 @@
-- Handle formatting and sending the results from client back to server
-
 - Add logic to control number of allowed file transfers simultaniously
 
 - Finish writing input validation routines for yaml data
