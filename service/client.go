@@ -134,13 +134,12 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
         // If a ruleset is in use and it has a path
         if HasRuleset && RulesetFilePath != "" {
             // Register a command with selected file path
-            cmd = exec.Command("hashcat", "-O", "--machine-readable", "--remove", crackedOutfile,
-                               "-a", CrackingMode, "-m", HashType, "-r", RulesetFilePath, "-w", "3",
-                               HashFilePath, filePath)
+            cmd = exec.Command("hashcat", "-O", "--remove", crackedOutfile, "-a", CrackingMode,
+                               "-m", HashType, "-r", RulesetFilePath, "-w", "3", HashFilePath, filePath)
         } else {
             // Register a command with selected file path
-            cmd = exec.Command("hashcat", "-O", "--machine-readable", "--remove", crackedOutfile,
-                               "-a", CrackingMode, "-m", HashType, "-w", "3", HashFilePath, filePath)
+            cmd = exec.Command("hashcat", "-O", "--remove", crackedOutfile, "-a", CrackingMode,
+                               "-m", HashType, "-w", "3", HashFilePath, filePath)
         }
         // Execute and save the command stdout and stderr output
         output, err := cmd.CombinedOutput()
@@ -254,7 +253,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Add the file size of the file to be transfered to transfer manager
     transferManager.AddTransferSize(fileSize)
     // Now synchronized messages are complete, handle transfer with new connection in routine
-    go netio.HandleTransfer(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
+    go netio.HandleTransferRecv(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
 }
 
 
@@ -391,6 +390,20 @@ func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeIn
 }
 
 
+func makeClientDirs() {
+    // Set the program directories
+    programDirs := []string{WordlistPath, HashFilePath}
+
+    // If there is a ruleset, append its path to program dirs
+    if HasRuleset {
+        programDirs = append(programDirs, RulesetPath)
+    }
+
+    // Create needed directories
+    disk.MakeDirs(programDirs)
+}
+
+
 func main() {
     var ipAddr string
     var port int
@@ -421,17 +434,8 @@ func main() {
 
     // Ensure parsed port is int32
     MessagePort32 = int32(port)
-
-    // Set the program directories
-    programDirs := []string{WordlistPath, HashFilePath}
-
-    // If there is a ruleset, append its path to program dirs
-    if HasRuleset {
-        programDirs = append(programDirs, RulesetPath)
-    }
-
-    // Create needed directories
-    disk.MakeDirs(programDirs)
+    // Create directories for client
+    makeClientDirs()
 
     // If AWS access and secret key are present
     if awsAccessKey != "" && awsSecretKey != "" {

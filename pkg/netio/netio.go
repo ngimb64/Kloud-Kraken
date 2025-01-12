@@ -30,19 +30,22 @@ func FileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
 
     for {
         // Read buffer size from file
-        _, err := file.Read(transferBuffer)
+        bytesRead, err := file.Read(transferBuffer)
+        // If bytes were read from the file
+        if bytesRead > 0 {
+            // Write the read bytes to the client
+            _, err = WriteHandler(connection, &transferBuffer)
+            if err != nil {
+                kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %w", err)
+                break
+            }
+        }
+
         if err != nil {
             // If the error was not the end of file
             if err != io.EOF {
                 kloudlogs.LogMessage(logMan, "error", "Error reading file:  %w", err)
             }
-            break
-        }
-
-        // Write the read bytes to the client
-        _, err = WriteHandler(connection, &transferBuffer)
-        if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %w", err)
             break
         }
     }
@@ -64,7 +67,7 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
             return testListener, port
         }
 
-        kloudlogs.LogMessage(logMan, "info", "Unable to obtain listener port:  %w", err,
+        kloudlogs.LogMessage(logMan, "info", "Unable to obtain random listener port:  %w", err,
                              zap.Int32("listener port", port))
     }
 }
@@ -141,17 +144,21 @@ func GetIpPort(connection net.Conn) (string, int32, error) {
 func GetOptimalBufferSize(fileSize int64) int {
     switch {
     // If the file is less than or equal to 1 MB
-    case fileSize <= 1 * 1024 * 1024:
-        // 512 byte buffer
-        return 512
+    case fileSize <= 1 * globals.MB:
+        // 4 KB buffer
+        return 4 * 1024
     // If the file is less than or equal to 100 MB
-    case fileSize <= 100 * 1024 * 1024:
-        // 8 KB buffer
-        return 8 * 1024
+    case fileSize <= 100 * globals.MB:
+        // 64 KB buffer
+        return 64 * 1024
+    // If the file is less than or equal to 1 GB
+    case fileSize <= 1 * globals.GB:
+        // 1 MB buffer
+        return 1 * globals.MB
     // If the file is greater than 100 MB
     default:
-        // 1 MB buffer
-        return 1024 * 1024
+        // 4 MB buffer
+        return 4 * globals.MB
     }
 }
 
@@ -167,8 +174,8 @@ func GetOptimalBufferSize(fileSize int64) int {
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - waitGroup:  Used to synchronize the Goroutines running
 //
-func HandleTransfer(connection net.Conn, filePath string, fileSize int64, messagingPort int32,
-                    logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
+func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64, messagingPort int32,
+                        logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
     // If a waitgroup was passed in
     if waitGroup != nil {
         // Decrement wait group on local exit
@@ -236,27 +243,24 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32, logMan
     _, err := ReadHandler(connection, &buffer)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %w", err)
-        os.Exit(2)
     }
 
     // If the read data does not start with special delimiter or end with closed bracket
     if !bytes.HasPrefix(buffer, prefix) || !bytes.HasSuffix(buffer, suffix) {
-        kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved hashes transfer message")
-        os.Exit(2)
+        kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved transfer message")
     }
 
     // Extract the file name and size from the initial transfer message
     fileName, fileSize, err := GetFileInfo(buffer, prefix, suffix)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
-                             "Error extracting the file name and size from hashes transfer message:  %w", err)
-        os.Exit(2)
+                             "Error extracting the file name and size from transfer message:  %w", err)
     }
 
-    // Format the hash file path based on received file name
+    // Format the file path based on received file name
     filePath := fmt.Sprintf("%s/%s", storePath, fileName)
-    // Receive the hash file from server
-    HandleTransfer(connection, filePath, fileSize, messagingPort, logMan, nil)
+    // Receive the file from server
+    HandleTransferRecv(connection, filePath, fileSize, messagingPort, logMan, nil)
 
     return filePath
 }
@@ -278,21 +282,23 @@ func SocketToFileHander(connection net.Conn, transferBuffer []byte, file *os.Fil
 
     for {
         // Read data into the buffer
-        _, err := ReadHandler(connection, &transferBuffer)
+        bytesRead, err := ReadHandler(connection, &transferBuffer)
+        // If bytes were read from the socket
+        if bytesRead > 0 {
+            // Write the data to the file
+            _, err = file.Write(transferBuffer[:bytesRead])
+            if err != nil {
+                kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %w", err)
+                break
+            }
+        }
+
         if err != nil {
             // If the error is not End Of File reached
             if err != io.EOF {
                 kloudlogs.LogMessage(logMan, "error", "Error reading from socket:  %w", err)
-                return
             }
             break
-        }
-
-        // Write the data to the file
-        _, err = file.Write(transferBuffer)
-        if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %w", err)
-            return
         }
     }
 }
@@ -320,7 +326,7 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string, fil
     // Open the file
     file, err := os.Open(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error opening the file to be transfered:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error opening file to be transfered:  %w", err)
         return
     }
 
@@ -338,7 +344,7 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string, fil
 
 func UploadFile(connection net.Conn, buffer *[]byte, listenerPort int32,
                 logMan *kloudlogs.LoggerManager, filePath string) {
-    // Get the hash file size based on saved path in config
+    // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error getting file size:  %w", err)
@@ -348,19 +354,19 @@ func UploadFile(connection net.Conn, buffer *[]byte, listenerPort int32,
 
     // Clear the buffer before building transfer reply
     *buffer = (*buffer)[:0]
-    // Append the hash file transfer request piece by piece in buffer
+    // Append the file transfer request piece by piece in buffer
     *buffer = append(globals.HASHES_TRANSFER_PREFIX, []byte(filePath)...)
     *buffer = append(*buffer, globals.COLON_DELIMITER...)
     *buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
     *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
 
-    // Send the hash file transfer request with file name and size
+    // Send the file transfer request with file name and size
     _, err = WriteHandler(connection, buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error sending the hash file name and size:  %w", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error sending file name and size:  %w", err)
     }
 
-    // Transfer the hash file to client
+    // Transfer the file to client
     TransferFile(connection, listenerPort, filePath, fileSize, logMan)
 }
 

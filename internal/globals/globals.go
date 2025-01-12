@@ -1,5 +1,6 @@
 package globals
 
+const MB = 1024 * 1024
 const GB = 1024 * 1024 * 1024
 const MESSAGE_BUFFER_SIZE = 256
 const OS_RESERVED_SPACE = 10 * GB

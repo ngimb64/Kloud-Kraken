@@ -197,6 +197,14 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 }
 
 
+func makeServerDirs() {
+    // Set the program directories
+    programDirs := []string{ReceivedDir}
+    // Create needed directories
+    disk.MakeDirs(programDirs)
+}
+
+
 func parseArgs() *config.AppConfig {
     var configFilePath string
 
@@ -236,11 +244,8 @@ func main() {
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
-
-    // Set the program directories
-    programDirs := []string{ReceivedDir}
-    // Create needed directories
-    disk.MakeDirs(programDirs)
+    // Make the server directories
+    makeServerDirs()
 
 
     // TODO:  after development, integrate wordlist merger to merge wordlists based on allowed max size
