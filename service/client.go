@@ -41,50 +41,51 @@ var HasRuleset bool          // Toggle for specifying whether ruleset is in use
 
 
 func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
-	var keys []string
-	var logArgs []any
-	// Make a map to store parsed data
-	outputMap := make(map[string]interface{})
+    var keys []string
+    var logArgs []any
+    // Make a map to store parsed data
+    outputMap := make(map[string]string)
 
-	// Trim up to the end section with result data
-	parsedOutput, err := data.TrimBeforeLast(output, []byte("=>"))
-	if err != nil {
-		log.Fatalf("Error pre-trimming:  %v", err)
-	}
+    // Trim up to the end section with result data
+    parsedOutput, err := data.TrimBeforeLast(output, []byte("=>"))
+    if err != nil {
+        log.Fatalf("Error pre-trimming:  %v", err)
+    }
 
-	// Split the byte slice into lines base on newlines
-	lines := bytes.Split(parsedOutput, []byte("\n"))
-	// Iterate through slice of byte slice lines
-	for _, line := range lines {
-		// Find the first occurance of the colon separator
-		index := bytes.Index(line, []byte(":"))
-		// If the line does not contain the index, skip it
-		if index == -1 {
-			continue
-		}
+    // Split the byte slice into lines base on newlines
+    lines := bytes.Split(parsedOutput, []byte("\n"))
 
-		// Extract the key/value based on the colon separator
-		key := bytes.TrimSpace(line[:index])
-		value := bytes.TrimSpace(line[index+1:])
+    // Iterate through slice of byte slice lines
+    for _, line := range lines {
+        // Find the first occurance of the colon separator
+        index := bytes.Index(line, []byte(":"))
+        // If the line does not contain the index, skip it
+        if index == -1 {
+            continue
+        }
 
-		// Store the key and value as strings in map
-		outputMap[string(key)] = string(value)
-	}
+        // Extract the key/value based on the colon separator
+        key := bytes.TrimSpace(line[:index])
+        value := bytes.TrimSpace(line[index+1:])
 
-	// Iterate over keys in the output map
-	for key := range outputMap {
-		// Append the key to the keys string slice
-		keys = append(keys, key)
-	}
+        // Store the key and value as strings in map
+        outputMap[string(key)] = string(value)
+    }
 
-	// Sort the keys by alphabetical order
-	sort.Strings(keys)
+    // Iterate over keys in the output map
+    for key := range outputMap {
+        // Append the key to the keys string slice
+        keys = append(keys, key)
+    }
 
-	// Iterate through the sorted keys
-	for _, key := range keys {
-		// Add the key/value from output map based on sorted key value
-		logArgs = append(logArgs, zap.Any(key, outputMap[key]))
-	}
+    // Sort the keys by alphabetical order
+    sort.Strings(keys)
+
+    // Iterate through the sorted keys
+    for _, key := range keys {
+        // Add the key/value from output map based on sorted key value
+        logArgs = append(logArgs, zap.String(key, outputMap[key]))
+    }
 
     kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
 }
@@ -93,7 +94,7 @@ func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
 // Format the result of data processing, send the formatted result of the data processing to the
 // remote brain server, and delete the data prior to processing.
 //
-// Parameters:
+// @Parameters
 // - filePath:  The path to the file to remove after the results are transfered back
 // - output:  The raw output of the data processing to formatted and transferred
 // - fileSize:  The size of the to be stored on disk from read socket data
@@ -122,7 +123,8 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
     defer BufferMutex.Unlock()
 
     // Send the processing complete message
-    _, err := netio.WriteHandler(connection, &globals.PROCESSING_COMPLETE)
+    _, err := netio.WriteHandler(connection, globals.PROCESSING_COMPLETE,
+                                 len(globals.PROCESSING_COMPLETE))
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %w", err)
         return
@@ -134,7 +136,7 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 // takes the received filename and passes it into command execution method for processing,
 // and the result is formatted and sent back to the brain server.
 //
-// Parameters:
+// @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - waitGroup:  Acts as a barrier for the Goroutines running
 // - transferManager:  Manages calculating the amount of data being transferred locally
@@ -218,7 +220,7 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
 // Sends transfer message to the brain server, waits for transfer reply with file name and
 // size, and proceeds to call handle transfer method.
 //
-// Parameters:
+// @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - buffer:  The buffer used for processing socket messaging
 // - transferManager:  Manages calculating the amount of data being transferred locally
@@ -233,9 +235,11 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     defer BufferMutex.Unlock()
 
     // Send the transfer request message to initiate file transfer
-    _, err := netio.WriteHandler(connection, &globals.TRANSFER_REQUEST_MARKER)
+    _, err := netio.WriteHandler(connection, globals.TRANSFER_REQUEST_MARKER,
+                                 len(globals.TRANSFER_REQUEST_MARKER))
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer request to brain server:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error sending the transfer request to brain server:  %w", err)
         return
     }
 
@@ -264,7 +268,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
                                                  globals.TRANSFER_SUFFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error extracting the file name and size from start transfer message:  %w", err)
+                             "Error extracting file name and size from start transfer message:  %w", err)
         return
     }
 
@@ -279,14 +283,16 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Convert int32 port to bytes and write it into the buffer
     err = binary.Write(bytes.NewBuffer(int32Buffer), binary.BigEndian, port)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occurred converting int32 port to byte array:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error occurred converting int32 port to byte array:  %w", err)
         return
     }
 
     // Send the converted port bytes to server to notify open port to connect for transfer
-    _, err = netio.WriteHandler(connection, &int32Buffer)
+    _, err = netio.WriteHandler(connection, int32Buffer, len(int32Buffer))
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occurred sending converted int32 port to server:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error occurred sending converted int32 port to server:  %w", err)
         return
     }
 
@@ -310,7 +316,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 // transferred. Afterwards the file name is passed through a channel to the process
 // data Goroutine to load the file into data processing.
 //
-// Parameters:
+// @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - channel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Used to synchronize the Goroutines running
@@ -373,16 +379,16 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     }
 
     // Transfer the cracked user hash file to server
-    netio.UploadFile(connection, &buffer, MessagePort32, logMan, Loot)
+    netio.UploadFile(connection, buffer, MessagePort32, logMan, Loot)
     // Transfer the log file to server
-    netio.UploadFile(connection, &buffer, MessagePort32, logMan, LogPath)
+    netio.UploadFile(connection, buffer, MessagePort32, logMan, LogPath)
 }
 
 
 // Handle the TCP connection between Goroutine with a channel
 // connecting routines to pass messages to signal data to process.
 //
-// Parameters:
+// @Parameters
 // - connection:  The TCP socket connection utilized for transferring data
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
@@ -413,7 +419,7 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 // Take the IP address & port argument and establish a connection to
 // remote brain server, then pass the connection to Goroutine handler.
 //
-// Parameters:
+// @Parameters
 // - ipAddr:  The ip address of the remote brain server
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred

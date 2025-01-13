@@ -17,7 +17,7 @@ import (
 
 // Handle reading data from the passed in file descriptor and write to the socket to client.
 //
-// Params:
+// @Parameters
 // - connection:  The active TCP socket connection to transmit data
 // - transferBuffer:  The buffer used to store file data that is transferred
 // - file:  A pointer to the open file descriptor
@@ -34,7 +34,7 @@ func FileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
         // If bytes were read from the file
         if bytesRead > 0 {
             // Write the read bytes to the client
-            _, err = WriteHandler(connection, &transferBuffer)
+            _, err = WriteHandler(connection, transferBuffer, bytesRead)
             if err != nil {
                 kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %w", err)
                 break
@@ -75,10 +75,10 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
 
 // Parse file name/size from buffer data based on colon separator
 //
-// Parameters:
+// @Parameters
 // - buffer:  The data read from socket buffer to be parsed
 //
-// Returns:
+// @Returns
 // - The byte slice with the file name
 // - A integer file size
 // - Either nil on success or a string error message on failure
@@ -135,10 +135,10 @@ func GetIpPort(connection net.Conn) (string, int32, error) {
 
 // Adjust buffer to optimal size based on file size to be received.
 //
-// Parameters:
+// @Parameters
 // - fileSize:  The size of the file to be received
 //
-// Returns:
+// @Returns
 // - An optimal integer buffer size
 //
 func GetOptimalBufferSize(fileSize int64) int {
@@ -166,7 +166,7 @@ func GetOptimalBufferSize(fileSize int64) int {
 // Takes the passed in file name and parses it to the file path to create the file where the
 // resulting file will be stored to lated be used for processing.
 //
-// Parameters:
+// @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - filePath:  The path of the file to be stored on disk from read socket data
 // - fileSize:  The size of the to be stored on disk from read socket data
@@ -217,9 +217,6 @@ func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64, me
 
 // ReadWrapper clears the buffer before reading
 func ReadHandler(conn net.Conn, buffer *[]byte) (int, error) {
-    // Clear the buffer to avoid leftover data
-    *buffer = (*buffer)[:0]
-
     // Perform the read operation
     bytesRead, err := conn.Read(*buffer)
     if err != nil {
@@ -232,7 +229,7 @@ func ReadHandler(conn net.Conn, buffer *[]byte) (int, error) {
 
 // Receives the file from the remote brain server
 //
-// Parameters:
+// @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - buffer:  The buffer used for processing socket messaging
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
@@ -269,7 +266,7 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32, logMan
 // Reads data from the socket and write it to the passed in open file descriptor until end
 // of file has been reached or error occurs with socket operation.
 //
-// Parameters:
+// @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - transferBuffer:  Buffer allocated for file transfer based on file size
 // - file:  The open file descriptor of where the data to be processed will be stored
@@ -342,7 +339,7 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string, fil
 }
 
 
-func UploadFile(connection net.Conn, buffer *[]byte, listenerPort int32,
+func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
                 logMan *kloudlogs.LoggerManager, filePath string) {
     // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
@@ -351,17 +348,23 @@ func UploadFile(connection net.Conn, buffer *[]byte, listenerPort int32,
     }
 
     fileSize := fileInfo.Size()
+    byteFilePath := []byte(filePath)
+    byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
 
-    // Clear the buffer before building transfer reply
-    *buffer = (*buffer)[:0]
-    // Append the file transfer request piece by piece in buffer
-    *buffer = append(globals.HASHES_TRANSFER_PREFIX, []byte(filePath)...)
-    *buffer = append(*buffer, globals.COLON_DELIMITER...)
-    *buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
-    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
+    // Clear the buffer for sending transfer reply
+    copy(buffer, make([]byte, len(buffer)))
+    // Append the transfer request piece by piece in buffer
+    buffer = append(globals.HASHES_TRANSFER_PREFIX, byteFilePath...)
+    buffer = append(buffer, globals.COLON_DELIMITER...)
+    buffer = append(buffer, byteFileSize...)
+    buffer = append(buffer, globals.TRANSFER_SUFFIX...)
+    // Calculate the len of the transfer reply message
+    sendLength := len(globals.HASHES_TRANSFER_PREFIX) + len(byteFilePath) +
+                  len(globals.COLON_DELIMITER) + len(byteFileSize) +
+                  len(globals.TRANSFER_SUFFIX)
 
     // Send the file transfer request with file name and size
-    _, err = WriteHandler(connection, buffer)
+    _, err = WriteHandler(connection, buffer, sendLength)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error sending file name and size:  %w", err)
     }
@@ -372,15 +375,12 @@ func UploadFile(connection net.Conn, buffer *[]byte, listenerPort int32,
 
 
 // WriteWrapper writes data to the connection
-func WriteHandler(conn net.Conn, buffer *[]byte) (int, error) {
+func WriteHandler(conn net.Conn, buffer []byte, writeBytes int) (int, error) {
     // Perform the write operation
-    bytesWrote, err := conn.Write(*buffer)
+    bytesWrote, err := conn.Write(buffer[:writeBytes])
     if err != nil {
         return 0, fmt.Errorf("error writing to connection - %w", err)
     }
-
-    // Clear the buffer to avoid leftover data
-    *buffer = (*buffer)[:0]
 
     return bytesWrote, nil
 }

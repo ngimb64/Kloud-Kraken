@@ -140,10 +140,10 @@ func MakeDirs(programDirs []string) {
 // Checks if the file or directory exists and ensure directories
 // have contents in them based on file size or entries in dir.
 //
-// Parameters:
+// @Parameters
 // - The path to check for existence
 //
-// Returns:
+// @Returns
 // - Boolean for the item existing and having content
 // - Boolean for if the item is a directory
 // - Error return handler

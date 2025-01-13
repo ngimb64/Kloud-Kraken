@@ -29,36 +29,45 @@ var CurrentConnections atomic.Int32		// Tracks current active connections
 var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client logs are stored
 
 
-func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppConfig,
+func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppConfig,
                     logMan *kloudlogs.LoggerManager) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
                                                appConfig.ClientConfig.MaxFileSizeInt64)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error selecting the next available file to transfer:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error selecting the next available file to transfer:  %w", err)
         return
     }
 
     // If there are no more files available to be transfered
     if filePath == "" {
         // Send the end transfer message then exit function
-        _, err = netio.WriteHandler(connection, &globals.END_TRANSFER_MARKER)
+        _, err = netio.WriteHandler(connection, globals.END_TRANSFER_MARKER,
+                                    len(globals.END_TRANSFER_MARKER))
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %w", err)
         }
         return
     }
 
-    // Clear the buffer before building transfer reply
-    *buffer = (*buffer)[:0]
+    byteFilePath := []byte(filePath)
+    byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
+
+    // Clear the buffer for sending transfer reply
+    copy(buffer, make([]byte, len(buffer)))
     // Append the transfer reply piece by piece in buffer
-    *buffer = append(globals.START_TRANSFER_PREFIX, []byte(filePath)...)
-    *buffer = append(*buffer, globals.COLON_DELIMITER...)
-    *buffer = append(*buffer, []byte(strconv.FormatInt(fileSize, 10))...)
-    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
+    buffer = append(globals.START_TRANSFER_PREFIX, byteFilePath...)
+    buffer = append(buffer, globals.COLON_DELIMITER...)
+    buffer = append(buffer, byteFileSize...)
+    buffer = append(buffer, globals.TRANSFER_SUFFIX...)
+    // Calculate the len of the transfer reply message
+    sendLength := len(globals.HASHES_TRANSFER_PREFIX) + len(byteFilePath) +
+                  len(globals.COLON_DELIMITER) + len(byteFileSize) +
+                  len(globals.TRANSFER_SUFFIX)
 
     // Send the transfer reply with file name and size
-    _, err = netio.WriteHandler(connection, buffer)
+    _, err = netio.WriteHandler(connection, buffer, sendLength)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %w", err)
         return
@@ -67,7 +76,8 @@ func handleTransfer(connection net.Conn, buffer *[]byte, appConfig *config.AppCo
     // Get the IP address from the ip:port host address
     ipAddr, _, err := netio.GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error occcurred spliting host address to get IP/port:  %w", err)
         return
     }
 
@@ -104,13 +114,13 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
     // Set message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Upload the hash file to connection client
-    netio.UploadFile(connection, &buffer, appConfig.LocalConfig.ListenerPort,
+    netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
                     logMan, appConfig.LocalConfig.HashFilePath)
 
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
         // Upload the ruleset file to connection client
-        netio.UploadFile(connection, &buffer, appConfig.LocalConfig.ListenerPort,
+        netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
                          logMan, appConfig.LocalConfig.RulesetPath)
     }
 
@@ -130,7 +140,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
         // If the read data contains transfer request message
         if bytes.Contains(buffer, globals.TRANSFER_REQUEST_MARKER) {
             // Call method to handle file transfer based
-            handleTransfer(connection, &buffer, appConfig, logMan)
+            handleTransfer(connection, buffer, appConfig, logMan)
         }
     }
 
