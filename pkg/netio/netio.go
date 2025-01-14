@@ -28,27 +28,30 @@ func FileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
     // Close the file on local exit
     defer file.Close()
 
-    for {
-        // Read buffer size from file
-        bytesRead, err := file.Read(transferBuffer)
-        // If bytes were read from the file
-        if bytesRead > 0 {
-            // Write the read bytes to the client
-            _, err = WriteHandler(connection, transferBuffer, bytesRead)
-            if err != nil {
-                kloudlogs.LogMessage(logMan, "error", "Error sending data in socket:  %w", err)
-                break
-            }
-        }
-
-        if err != nil {
-            // If the error was not the end of file
-            if err != io.EOF {
-                kloudlogs.LogMessage(logMan, "error", "Error reading file:  %w", err)
-            }
-            break
-        }
+    // Transfer data from open file to connection
+    _, err := io.CopyBuffer(connection, file, transferBuffer)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error sending file transfer:  %w", err)
     }
+}
+
+
+func FormatTransferReply(filePath string, fileSize int64, buffer *[]byte,
+                         prefix []byte) int {
+    byteFilePath := []byte(filePath)
+    byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
+
+    // Clear the buffer for sending transfer reply
+    copy(*buffer, make([]byte, len(*buffer)))
+    // Append the transfer request piece by piece in buffer
+    *buffer = append(prefix, byteFilePath...)
+    *buffer = append(*buffer, globals.COLON_DELIMITER...)
+    *buffer = append(*buffer, byteFileSize...)
+    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
+    // Calculate the len of the transfer reply message
+    sendLength := len(prefix) + len(byteFilePath) + len(globals.COLON_DELIMITER) +
+                  len(byteFileSize) + len(globals.TRANSFER_SUFFIX)
+    return sendLength
 }
 
 
@@ -83,9 +86,9 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
 // - A integer file size
 // - Either nil on success or a string error message on failure
 //
-func GetFileInfo(buffer []byte, prefix []byte, suffix []byte) ([]byte, int64, error) {
+func GetFileInfo(buffer []byte, prefix []byte) ([]byte, int64, error) {
     // Trim the delimiters around the file info
-    buffer = buffer[len(prefix) : len(buffer) - len(suffix)]
+    buffer = buffer[len(prefix) : len(buffer) - len(globals.TRANSFER_SUFFIX)]
     // Get the position of the colon delimiter
     colonPos := bytes.IndexByte(buffer, ':')
     // If the colon separator is missing
@@ -235,7 +238,7 @@ func ReadHandler(conn net.Conn, buffer *[]byte) (int, error) {
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32, logMan *kloudlogs.LoggerManager,
-                 storePath string, prefix []byte, suffix []byte) string {
+                 storePath string, prefix []byte) string {
     // Wait for the brain server to send the start transfer message
     _, err := ReadHandler(connection, &buffer)
     if err != nil {
@@ -243,12 +246,12 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32, logMan
     }
 
     // If the read data does not start with special delimiter or end with closed bracket
-    if !bytes.HasPrefix(buffer, prefix) || !bytes.HasSuffix(buffer, suffix) {
+    if !bytes.HasPrefix(buffer, prefix) || !bytes.HasSuffix(buffer, globals.TRANSFER_SUFFIX) {
         kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved transfer message")
     }
 
     // Extract the file name and size from the initial transfer message
-    fileName, fileSize, err := GetFileInfo(buffer, prefix, suffix)
+    fileName, fileSize, err := GetFileInfo(buffer, prefix)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error extracting the file name and size from transfer message:  %w", err)
@@ -277,26 +280,10 @@ func SocketToFileHander(connection net.Conn, transferBuffer []byte, file *os.Fil
     // Close file on local exit
     defer file.Close()
 
-    for {
-        // Read data into the buffer
-        bytesRead, err := ReadHandler(connection, &transferBuffer)
-        // If bytes were read from the socket
-        if bytesRead > 0 {
-            // Write the data to the file
-            _, err = file.Write(transferBuffer[:bytesRead])
-            if err != nil {
-                kloudlogs.LogMessage(logMan, "error", "Error writing to file:  %w", err)
-                break
-            }
-        }
-
-        if err != nil {
-            // If the error is not End Of File reached
-            if err != io.EOF {
-                kloudlogs.LogMessage(logMan, "error", "Error reading from socket:  %w", err)
-            }
-            break
-        }
+    // Transfer data from connection to open file
+    _, err := io.CopyBuffer(file, connection, transferBuffer)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error receiving file transfer:  %w", err)
     }
 }
 
@@ -340,7 +327,7 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string, fil
 
 
 func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
-                logMan *kloudlogs.LoggerManager, filePath string) {
+                logMan *kloudlogs.LoggerManager, filePath string, prefix []byte) {
     // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
@@ -348,22 +335,10 @@ func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
     }
 
     fileSize := fileInfo.Size()
-    byteFilePath := []byte(filePath)
-    byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
+    // Format the transfer reply
+    sendLength := FormatTransferReply(filePath, fileSize, &buffer, prefix)
 
-    // Clear the buffer for sending transfer reply
-    copy(buffer, make([]byte, len(buffer)))
-    // Append the transfer request piece by piece in buffer
-    buffer = append(globals.HASHES_TRANSFER_PREFIX, byteFilePath...)
-    buffer = append(buffer, globals.COLON_DELIMITER...)
-    buffer = append(buffer, byteFileSize...)
-    buffer = append(buffer, globals.TRANSFER_SUFFIX...)
-    // Calculate the len of the transfer reply message
-    sendLength := len(globals.HASHES_TRANSFER_PREFIX) + len(byteFilePath) +
-                  len(globals.COLON_DELIMITER) + len(byteFileSize) +
-                  len(globals.TRANSFER_SUFFIX)
-
-    // Send the file transfer request with file name and size
+    // Send the file transfer reply with file name and size
     _, err = WriteHandler(connection, buffer, sendLength)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error sending file name and size:  %w", err)

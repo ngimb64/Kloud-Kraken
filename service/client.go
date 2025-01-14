@@ -68,14 +68,11 @@ func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
         key := bytes.TrimSpace(line[:index])
         value := bytes.TrimSpace(line[index+1:])
 
+        // Append the key to the keys string slice
+        keys = append(keys, string(key))
+
         // Store the key and value as strings in map
         outputMap[string(key)] = string(value)
-    }
-
-    // Iterate over keys in the output map
-    for key := range outputMap {
-        // Append the key to the keys string slice
-        keys = append(keys, key)
     }
 
     // Sort the keys by alphabetical order
@@ -148,8 +145,15 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
     exitLoop := false
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
-    // Format file path arg where cracked hashes are stored post processing
-    crackedOutfile := fmt.Sprintf("-o=%s", Cracked)
+
+    //Format the hashcat options
+    cmdOptions := []string{"-O", "--remove", fmt.Sprintf("-o=%s", Cracked), "-a", CrackingMode,
+                           "-m", HashType, "-w", "3"}
+    // If a ruleset is in use and it has a path
+    if HasRuleset && RulesetFilePath != "" {
+        // Append it to the command args
+        cmdOptions = append(cmdOptions, "-r", RulesetFilePath)
+    }
 
     for {
         // Attempt to get the next available wordlist
@@ -182,16 +186,11 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
             break
         }
 
-        // If a ruleset is in use and it has a path
-        if HasRuleset && RulesetFilePath != "" {
-            // Register a command with selected file path
-            cmd = exec.Command("hashcat", "-O", "--remove", crackedOutfile, "-a", CrackingMode,
-                               "-m", HashType, "-r", RulesetFilePath, "-w", "3", HashFilePath, filePath)
-        } else {
-            // Register a command with selected file path
-            cmd = exec.Command("hashcat", "-O", "--remove", crackedOutfile, "-a", CrackingMode,
-                               "-m", HashType, "-w", "3", HashFilePath, filePath)
-        }
+        // Append the hash file and wordlist path
+        cmdArgs := append(cmdOptions, HashFilePath, filePath)
+
+        // Register a command with selected file path
+        cmd = exec.Command("hashcat", cmdArgs...)
         // Execute and save the command stdout and stderr output
         output, err := cmd.CombinedOutput()
         if err != nil {
@@ -264,8 +263,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Extract the file name and size from the stripped initial transfer message
-    fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX,
-                                                 globals.TRANSFER_SUFFIX)
+    fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error extracting file name and size from start transfer message:  %w", err)
@@ -281,7 +279,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     listener, port := netio.GetAvailableListener(logMan)
 
     // Convert int32 port to bytes and write it into the buffer
-    err = binary.Write(bytes.NewBuffer(int32Buffer), binary.BigEndian, port)
+    err = binary.Write(bytes.NewBuffer(int32Buffer), binary.LittleEndian, port)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error occurred converting int32 port to byte array:  %w", err)
@@ -335,14 +333,12 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Receive the hash file from the server
     HashFilePath = netio.ReceiveFile(connection, buffer, MessagePort32, logMan, HashesPath,
-                                     globals.HASHES_TRANSFER_PREFIX,
-                                     globals.TRANSFER_SUFFIX)
+                                     globals.HASHES_TRANSFER_PREFIX)
     // If a rule set was specified
     if HasRuleset {
         // Receive the ruleset from the server
         RulesetFilePath = netio.ReceiveFile(connection, buffer, MessagePort32, logMan, RulesetPath,
-                                            globals.RULESET_TRANSFER_PREFIX,
-                                            globals.TRANSFER_SUFFIX)
+                                            globals.RULESET_TRANSFER_PREFIX)
     }
 
     for {
@@ -379,9 +375,11 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     }
 
     // Transfer the cracked user hash file to server
-    netio.UploadFile(connection, buffer, MessagePort32, logMan, Loot)
+    netio.UploadFile(connection, buffer, MessagePort32, logMan,
+                     Loot, globals.LOOT_TRANSFER_PREFIX)
     // Transfer the log file to server
-    netio.UploadFile(connection, buffer, MessagePort32, logMan, LogPath)
+    netio.UploadFile(connection, buffer, MessagePort32, logMan,
+                     LogPath, globals.LOG_TRANSFER_PREFIX)
 }
 
 
