@@ -19,7 +19,7 @@ type AppConfig struct {
 type LocalConfig struct {
     Region		    string `yaml:"region"`
     ListenerPort    int32  `yaml:"listener_port"`
-    NumberInstances int    `yaml:"number_instances"`
+    NumberInstances int32  `yaml:"number_instances"`
     LoadDir	   	    string `yaml:"load_dir"`
     HashFilePath    string `yaml:"hash_file_path"`
     RulesetPath     string `yaml:"ruleset_path"`
@@ -31,10 +31,11 @@ type ClientConfig struct {
     Region			 string `yaml:"region"`
     MaxFileSize    	 string `yaml:"max_file_size"`
     MaxFileSizeInt64 int64  `yaml:"-"`              // Parsed later
-    LogMode			 string `yaml:"log_mode"`
-    LogPath			 string `yaml:"log_path"`
     CrackingMode     string `yaml:"cracking_mode"`
     HashType         string `yaml:"hash_type"`
+    MaxTransfers     int32  `yaml:"max_transfers"`
+    LogMode			 string `yaml:"log_mode"`
+    LogPath			 string `yaml:"log_path"`
 }
 
 
@@ -80,12 +81,12 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
         return fmt.Errorf("improper region specified in local config")
     }
 
-    // Ensure the listerner port is greater than 1000
+    // If the listerner port is less than 1000
     if !validate.ValidateListenerPort(localConfig.ListenerPort) {
         return fmt.Errorf("listener_port must greater than 1000")
     }
 
-    // Ensure the number of instances is a positive integer
+    // If the number of instances is less than one
     if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
         return fmt.Errorf("number_instances must be a positive integer")
     }
@@ -102,37 +103,47 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
+    // Ensure the ruleset file path exists
+    err = validate.ValidateRulesetFile(localConfig.RulesetPath)
+    if err != nil {
+        return err
+    }
 
-    // TODO:  add validation logic for ruleset file
-
-
-    // Ensure log path is of proper format
-    logPath, err := validate.ValidatePath(localConfig.LogPath)
+    // Ensure log path is proper format and reset ruleset path with validated
+    localConfig.LogPath, err = validate.ValidatePath(localConfig.LogPath)
     if err != nil {
         return fmt.Errorf("improper log_path specified in local config - %w", err)
     }
-
-    // Reset the logging path with validated clean path
-    localConfig.LogPath = logPath
 
     return nil
 }
 
 
 func ValidateClientConfig(clientConfig *ClientConfig) error {
+    var err error
+
     // If an improper region was specified in client config
     if !validate.ValidateRegion(clientConfig.Region) {
         return fmt.Errorf("improper region specified in client config")
     }
 
     // Parse and convert the max file size to raw bytes from any units
-    fileSize, err := validate.ValidateMaxFileSize(clientConfig.MaxFileSize)
+    clientConfig.MaxFileSizeInt64, err = validate.ValidateMaxFileSize(clientConfig.MaxFileSize)
     if err != nil {
         return fmt.Errorf("improper max_file_size in client config - %w", err)
     }
 
-    // Prior to validation set the int64 max file size in client config
-    clientConfig.MaxFileSizeInt64 = fileSize
+
+    // TODO:  add validation for cracking_mode
+
+
+    // TODO:  add validation for hash_type
+
+
+    // If the max_transfers was less than one
+    if !validate.ValidateMaxTransfers(clientConfig.MaxTransfers) {
+        return fmt.Errorf("improper max_transfers specified in client config")
+    }
 
     // If an improper region was specified in client config
     if !validate.ValidateLogMode(clientConfig.LogMode) {
@@ -140,17 +151,10 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
     }
 
     // Ensure log path is of proper format
-    logPath, err := validate.ValidatePath(clientConfig.LogPath)
+    clientConfig.LogPath, err = validate.ValidatePath(clientConfig.LogPath)
     if err != nil {
         return fmt.Errorf("improper log_path specified in client config - %w", err)
     }
-
-    // Reset the logging path with validated clean path
-    clientConfig.LogPath = logPath
-
-
-    // TODO:  validation methods for cracking_mode and hash_type
-
 
     return nil
 }

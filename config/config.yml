@@ -10,7 +10,8 @@ local_config:
 client_config:
   region: "us-east-1"
   max_file_size: "1GB"
-  log_mode: "local"
-  log_path: "KloudKraken.log"
   cracking_mode: "0"
   hash_type: "1000"
+  max_transfers: 3
+  log_mode: "local"
+  log_path: "KloudKraken.log"

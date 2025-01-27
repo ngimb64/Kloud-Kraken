@@ -49,41 +49,9 @@ func ValidateConfigPath(configFilePath *string) {
 }
 
 
-func ValidateHashFile(hashFilePath string) error {
-    // Check to see if the hash file exists
-    exists, isDir, err := disk.PathExists(hashFilePath)
-    if err != nil {
-        return err
-    }
-
-    // If the hash file path does not exist or is a directory
-    if !exists || isDir {
-        return fmt.Errorf("hash file path does not exist or is a directory")
-    }
-
-    return nil
-}
-
-
-func ValidateListenerPort(listenerPort int32) bool {
-    // If the listener port is less than or equal to 1000
-    if listenerPort <= 1000 {
-        return false
-    }
-
-    return true
-}
-
-
-func ValidateLoadDir(loadDirPath string) error {
-    // Validate and clense the load dir path
-    loadDirPath, err := ValidatePath(loadDirPath)
-    if err != nil {
-        return fmt.Errorf("failed to validate load dir path - %w", err)
-    }
-
+func ValidateDir(dirPath string) error {
     // Check to see if the load directory exists and has files in it
-    exists, isDir, err := disk.PathExists(loadDirPath)
+    exists, isDir, err := disk.PathExists(dirPath)
     if err != nil {
         return err
     }
@@ -97,17 +65,63 @@ func ValidateLoadDir(loadDirPath string) error {
 }
 
 
+func ValidateFile(filePath string) error {
+    // Check to see if the hash file exists
+    exists, isDir, err := disk.PathExists(filePath)
+    if err != nil {
+        return err
+    }
+
+    // If the hash file path does not exist or is a directory
+    if !exists || isDir {
+        return fmt.Errorf("hash file path does not exist or is a directory")
+    }
+
+    return nil
+}
+
+
+func ValidateHashFile(filePath string) error {
+    validPath, err := ValidatePath(filePath)
+    if err != nil {
+        return fmt.Errorf("improper hash_file_path specified in local config - %w", err)
+    }
+
+    err = ValidateFile(validPath)
+    if err != nil {
+        return fmt.Errorf("error validating hash file based on %s path - %w", validPath, err)
+    }
+
+    return nil
+}
+
+
+func ValidateListenerPort(listenerPort int32) bool {
+    return listenerPort > 1000
+}
+
+
+func ValidateLoadDir(dirPath string) error {
+    validPath, err := ValidatePath(dirPath)
+    if err != nil {
+        return fmt.Errorf("improper load_dir specified in local config - %w", err)
+    }
+
+    // Ensure the load directory exists and has files in it
+    err = ValidateDir(validPath)
+    if err != nil {
+        return fmt.Errorf("error validating load directory - %w", err)
+    }
+
+    return nil
+}
+
+
 func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
 
     // Check to see if the passed in mode is in preset list
-    hasMode := data.StringSliceContains(logModes, logMode)
-    // If the specified log mode is in preset list
-    if hasMode {
-        return true
-    }
-
-    return false
+    return data.StringSliceContains(logModes, logMode)
 }
 
 
@@ -148,13 +162,13 @@ func ValidateMaxFileSize(maxFileSize string) (int64, error) {
 }
 
 
-func ValidateNumberInstances(numberInstances int) bool {
-    // If the max connections is less than or equal to 0
-    if numberInstances <= 0 {
-        return false
-    }
+func ValidateMaxTransfers(maxTransfers int32) bool {
+    return maxTransfers > 0
+}
 
-    return true
+
+func ValidateNumberInstances(numberInstances int32) bool {
+    return numberInstances > 0
 }
 
 
@@ -199,4 +213,19 @@ func ValidateRegion(region string) bool {
     }
 
     return false
+}
+
+
+func ValidateRulesetFile(filePath string) error {
+    validPath, err := ValidatePath(filePath)
+    if err != nil {
+        return fmt.Errorf("improper ruleset_path specified in local config - %w", err)
+    }
+
+    err = ValidateFile(validPath)
+    if err != nil {
+        return fmt.Errorf("error validating ruleset file based on %s path - %w", validPath, err)
+    }
+
+    return nil
 }

@@ -1,14 +1,14 @@
-- Add logic to control number of allowed file transfers simultaniously
+- Data compression and encryption (try TLS first)
+	- Ask ChatGPT about using an interface for current socket functions with encryption integrated
 
 - Finish writing input validation routines for yaml data
 
-- Write and run unit tests, then integration tests to get baseline working
-
-- Data compression and encryption
-	- Ask ChatGPT about using an interface for current socket functions with encryption integrated
-
-- Build provisioner script for AMI with uploaded compiled client code
+- Build wordlist merging tool
 
 - Double check Makefile
+
+- Write and run unit tests, then run integration tests to get baseline working
+
+- Build provisioner script for AMI with uploaded compiled client code
 
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS

@@ -165,7 +165,7 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 
     for {
         // If current number of connection is greater than or equal to number of instances
-        if CurrentConnections.Load() >= int32(appConfig.LocalConfig.NumberInstances) {
+        if CurrentConnections.Load() >= appConfig.LocalConfig.NumberInstances {
             kloudlogs.LogMessage(logMan, "info", "All remote clients are connected")
             break
         }

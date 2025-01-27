@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -31,13 +32,15 @@ const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
 var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
 var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes stored post processing
 var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
-var CrackingMode = ""        // Stores cracking mode arg
-var HashFilePath = ""        // Stores hash file path when received
-var LogPath = ""             // Stores log file to be returned to client
-var RulesetFilePath = ""     // Stores ruleset file when received
-var HashType = ""            // Stores hash type to be cracked
-var MessagePort32 int32 = 0  // Initial port for messaging communication
-var HasRuleset bool          // Toggle for specifying whether ruleset is in use
+var CrackingMode = ""          // Stores cracking mode arg
+var HashFilePath = ""          // Stores hash file path when received
+var LogPath = ""               // Stores log file to be returned to client
+var RulesetFilePath = ""       // Stores ruleset file when received
+var HashType = ""              // Stores hash type to be cracked
+var MessagePort32 int32        // Initial port for messaging communication
+var HasRuleset bool            // Toggle for specifying whether ruleset is in use
+var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
+var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 
 
 func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
@@ -67,12 +70,12 @@ func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
         // Extract the key/value based on the colon separator
         key := bytes.TrimSpace(line[:index])
         value := bytes.TrimSpace(line[index+1:])
+        keyStr := string(key)
 
         // Append the key to the keys string slice
-        keys = append(keys, string(key))
-
+        keys = append(keys, keyStr)
         // Store the key and value as strings in map
-        outputMap[string(key)] = string(value)
+        outputMap[keyStr] = string(value)
     }
 
     // Sort the keys by alphabetical order
@@ -301,12 +304,18 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
-    // Increment wait group
+    // Increment wait group and max transfers counter
     waitGroup.Add(1)
+    MaxTransfers.Add(1)
     // Add the file size of the file to be transfered to transfer manager
     transferManager.AddTransferSize(fileSize)
-    // Now synchronized messages are complete, handle transfer with new connection in routine
-    go netio.HandleTransferRecv(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
+
+    // Now synchronized messages finished, handle transfer with new connection and
+    // decrement counter when complete
+    go func() {
+        netio.HandleTransferRecv(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
+        MaxTransfers.Add(-1)
+    }()
 }
 
 
@@ -355,9 +364,10 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
         // Get the ongoing transfer size from transfer manager
         ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
-        // If the remaining space minus the ongoing file transfers
-        // is greater than or equal to the max file size
-        if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 {
+        // If the remaining space minus the ongoing file transfers is greater than or
+        // equal to the max file size AND the current number of transfers is less than
+        if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 &&
+        MaxTransfers.Load() != MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
             processTransfer(connection, buffer, waitGroup, transferManager,
                             &transferComplete, logMan)
@@ -466,10 +476,10 @@ func main() {
     var awsAccessKey string
     var awsSecretKey string
     var awsConfig aws.Config
+    var maxTransfers int
 
     // Define command line flags with default values and descriptions
-    flag.StringVar(&ipAddr, "ipAddr", "localhost",
-                   "IP address of brain server to connect to")
+    flag.StringVar(&ipAddr, "ipAddr", "localhost", "IP address of brain server to connect to")
     flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
                   "The max size for file to be transmitted at once")
@@ -482,11 +492,14 @@ func main() {
     flag.StringVar(&CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
     flag.StringVar(&HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
+    flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
     // Parse the command line flags
     flag.Parse()
 
-    // Ensure parsed port is int32
+    // Parsed int args are int32
     MessagePort32 = int32(port)
+    MaxTransfersInt32 = int32(maxTransfers)
+
     // Create directories for client
     makeClientDirs()
 
