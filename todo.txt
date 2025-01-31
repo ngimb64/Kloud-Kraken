@@ -1,14 +1,13 @@
-- Data compression and encryption (try TLS first)
-	- Ask ChatGPT about using an interface for current socket functions with encryption integrated
-
-- Finish writing input validation routines for yaml data
-
-- Build wordlist merging tool
+- Integrate cat to sort -u or other tools for wordlist merging and dedupe
 
 - Double check Makefile
 
 - Write and run unit tests, then run integration tests to get baseline working
 
+- Implement mutual TLS over TCP for connections (Network Programming With Go book is great reference)
+
 - Build provisioner script for AMI with uploaded compiled client code
 
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS
+
+- Try to fix rustmerger and replace original wordlist merging logic with it

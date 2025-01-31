@@ -116,7 +116,8 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
         // Read data from connected client
         _, err := netio.ReadHandler(connection, &buffer)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error occurred reading data from socket:  %w", err)
+            kloudlogs.LogMessage(logMan, "error",
+                                 "Error occurred reading data from socket:  %w", err)
             return
         }
 

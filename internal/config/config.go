@@ -28,14 +28,21 @@ type LocalConfig struct {
 
 // ClientConfig contains the configuration for the client settings
 type ClientConfig struct {
-    Region			 string `yaml:"region"`
-    MaxFileSize    	 string `yaml:"max_file_size"`
-    MaxFileSizeInt64 int64  `yaml:"-"`              // Parsed later
-    CrackingMode     string `yaml:"cracking_mode"`
-    HashType         string `yaml:"hash_type"`
-    MaxTransfers     int32  `yaml:"max_transfers"`
-    LogMode			 string `yaml:"log_mode"`
-    LogPath			 string `yaml:"log_path"`
+    Region			  string `yaml:"region"`
+    MaxFileSize    	  string `yaml:"max_file_size"`
+    MaxFileSizeInt64  int64  `yaml:"-"`              // Parsed later
+    CrackingMode      string `yaml:"cracking_mode"`
+    HashType          string `yaml:"hash_type"`
+    ApplyOptimization bool   `yaml:"apply_optimization"`
+    Workload          string `yaml:"workload"`
+    CharSet1          string `yaml:"char_set1"`
+    CharSet2          string `yaml:"char_set2"`
+    CharSet3          string `yaml:"char_set3"`
+    CharSet4          string `yaml:"char_set4"`
+    HashMask          string `yaml:"hash_mask"`
+    MaxTransfers      int32  `yaml:"max_transfers"`
+    LogMode			  string `yaml:"log_mode"`
+    LogPath			  string `yaml:"log_path"`
 }
 
 
@@ -133,12 +140,33 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
         return fmt.Errorf("improper max_file_size in client config - %w", err)
     }
 
+    // If the cracking mode was not in supported modes
+    if !validate.ValidateCrackingMode(clientConfig.CrackingMode) {
+        return fmt.Errorf("improper cracking_mode specified in client config")
+    }
 
-    // TODO:  add validation for cracking_mode
+    // If the hash type was not in supported types
+    if !validate.ValidateHashType(clientConfig.HashType) {
+        return fmt.Errorf("improper hash_type specified in client config")
+    }
 
+    // If the workload was not in supported profiles
+    if !validate.ValidateWorkload(clientConfig.Workload) {
+        return fmt.Errorf("improper workload specified in client config")
+    }
 
-    // TODO:  add validation for hash_type
+    // If the there are custom charsets but missing hash masks or improper mode
+    if !validate.ValidateCharsets(clientConfig.CrackingMode, clientConfig.HashMask,
+                                  clientConfig.CharSet1, clientConfig.CharSet2,
+                                  clientConfig.CharSet3, clientConfig.CharSet4) {
+        return fmt.Errorf("custom charsets specified with either missing hash mask or " +
+                          "mode that does not support hash masks")
+    }
 
+    // If the hash mask is present but not supported by cracking mode
+    if !validate.ValidateHashMask(clientConfig.CrackingMode, clientConfig.HashMask) {
+        return fmt.Errorf("hash_mask specified but not supported by cracking mode")
+    }
 
     // If the max_transfers was less than one
     if !validate.ValidateMaxTransfers(clientConfig.MaxTransfers) {

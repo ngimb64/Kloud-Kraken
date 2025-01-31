@@ -25,22 +25,35 @@ import (
 	"go.uber.org/zap"
 )
 
+
+type HashcatArgs struct {
+    CrackingMode      string
+    HashType          string
+    ApplyOptimization bool
+    Workload          string
+    CharSet1          string
+    CharSet2          string
+    CharSet3          string
+    CharSet4          string
+    HashMask          string
+}
+
+
 // Package level variables
-const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
 const HashesPath = "/tmp/hashes"       // Path where hash files are stored
 const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
-var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
+const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
 var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes stored post processing
 var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
-var CrackingMode = ""          // Stores cracking mode arg
-var HashFilePath = ""          // Stores hash file path when received
-var LogPath = ""               // Stores log file to be returned to client
-var RulesetFilePath = ""       // Stores ruleset file when received
-var HashType = ""              // Stores hash type to be cracked
-var MessagePort32 int32        // Initial port for messaging communication
+var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
+var HashcatArgsStruct = HashcatArgs{}  // Initialze struct where hashcat options stored
+var HashFilePath string        // Stores hash file path when received
 var HasRuleset bool            // Toggle for specifying whether ruleset is in use
+var LogPath string             // Stores log file to be returned to client
 var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
+var MessagePort32 int32        // Initial port for messaging communication
+var RulesetFilePath string     // Stores ruleset file when received
 
 
 func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
@@ -117,6 +130,25 @@ func logAndRemove(filePath string, output []byte, fileSize int64, transferManage
 }
 
 
+func appendCharsets(cmdOptions *[]string) {
+    charsets := []string{HashcatArgsStruct.CharSet1, HashcatArgsStruct.CharSet2,
+                         HashcatArgsStruct.CharSet3, HashcatArgsStruct.CharSet4}
+    var counter int32 = 1
+
+    // Iterate through hashcat charsets
+    for _, charset := range charsets {
+        // Exit loop is charset is empty or counter is greater than max charset
+        if charset == "" || counter > 4 {
+            break
+        }
+
+        // Append the formated charset flag and corresponding charset
+        *cmdOptions = append(*cmdOptions, fmt.Sprintf("-%d", counter), charset)
+        counter += 1
+    }
+}
+
+
 func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager) {
     // Lock the mutex and ensure it unlocks on local exit
     BufferMutex.Lock()
@@ -149,9 +181,18 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
 
-    //Format the hashcat options
-    cmdOptions := []string{"-O", "--remove", fmt.Sprintf("-o=%s", Cracked), "-a", CrackingMode,
-                           "-m", HashType, "-w", "3"}
+    cmdOptions := []string{}
+
+    // If GPU optimization is to be applied, append it to options slice
+    if HashcatArgsStruct.ApplyOptimization {
+        cmdOptions = append(cmdOptions, "-O")
+    }
+
+    // Append command args used by all attack modes
+    cmdOptions = append(cmdOptions, "--remove", fmt.Sprintf("-o=%s", Cracked), "-a",
+                        HashcatArgsStruct.CrackingMode, "-m", HashcatArgsStruct.HashType,
+                        "-w", HashcatArgsStruct.Workload, HashFilePath)
+
     // If a ruleset is in use and it has a path
     if HasRuleset && RulesetFilePath != "" {
         // Append it to the command args
@@ -189,8 +230,31 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
             break
         }
 
-        // Append the hash file and wordlist path
-        cmdArgs := append(cmdOptions, HashFilePath, filePath)
+        var cmdArgs []string
+
+        switch HashcatArgsStruct.CrackingMode {
+        case "3":
+            // Appened incremental mode and available charsets for hash mask
+            cmdArgs = append(cmdOptions, "--incremental")
+            appendCharsets(&cmdArgs)
+            // Append the hash mask
+            cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask)
+        case "6":
+            // Appened incremental mode and available charsets for hash mask
+            cmdArgs = append(cmdOptions, "--incremental")
+            appendCharsets(&cmdArgs)
+            // Append the wordlist path then the hash mask
+            cmdArgs = append(cmdArgs, filePath, HashcatArgsStruct.HashMask)
+        case "7":
+            // Appened incremental mode and available charsets for hash mask
+            cmdArgs = append(cmdOptions, "--incremental")
+            appendCharsets(&cmdArgs)
+            // Append the hash mask then the wordlist path
+            cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask, filePath)
+        default:
+            // For straight mode (0), append the loopback mode and wordlist path
+            cmdArgs = append(cmdOptions, "--loopback", filePath)
+        }
 
         // Register a command with selected file path
         cmd = exec.Command("hashcat", cmdArgs...)
@@ -481,18 +545,27 @@ func main() {
     // Define command line flags with default values and descriptions
     flag.StringVar(&ipAddr, "ipAddr", "localhost", "IP address of brain server to connect to")
     flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
-    flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
-                  "The max size for file to be transmitted at once")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
     flag.StringVar(&awsAccessKey, "awsAccessKey", "", "The access key for AWS programmatic access")
     flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
+    flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
+                  "The max size for file to be transmitted at once")
+    flag.StringVar(&HashcatArgsStruct.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
+    flag.StringVar(&HashcatArgsStruct.HashType, "hashType", "1000", "Hashcat hash type to crack")
+    flag.BoolVar(&HashcatArgsStruct.ApplyOptimization, "applyOptimization", false,
+                 "Apply the -O flag for GPU optimization")
+    flag.StringVar(&HashcatArgsStruct.Workload, "workload", "3", "Workload profile number to apply")
+    flag.StringVar(&HashcatArgsStruct.CharSet1, "charSet1", "", "Custom character set 1 for masks")
+    flag.StringVar(&HashcatArgsStruct.CharSet2, "charSet2", "", "Custom character set 2 for masks")
+    flag.StringVar(&HashcatArgsStruct.CharSet3, "charSet3", "", "Custom character set 3 for masks")
+    flag.StringVar(&HashcatArgsStruct.CharSet4, "charSet4", "", "Custom character set 4 for masks")
+    flag.StringVar(&HashcatArgsStruct.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
+    flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
+    flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.StringVar(&LogPath, "logPath", "KloudKraken.log", "Path to the log file")
-    flag.StringVar(&CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
-    flag.StringVar(&HashType, "hashType", "1000", "Hashcat hash type to crack")
-    flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
-    flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
+
     // Parse the command line flags
     flag.Parse()
 

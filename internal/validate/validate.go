@@ -15,6 +15,25 @@ import (
 )
 
 
+func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool {
+    supportedModes := []string{"3", "6", "7"}
+
+    // Check to see if passed in cracking mode is in supported modes
+    isSupported := data.StringSliceContains(supportedModes, crackingMode)
+
+    // Iterate through charset args
+    for _, charset := range args {
+        // If the custom charset is present and the mode is
+        // not supported or the hashmask is empty
+        if charset != "" && (!isSupported || hashMask == "") {
+            return false
+        }
+    }
+
+    return true
+}
+
+
 func ValidateConfigPath(configFilePath *string) {
     for {
         fmt.Print("Enter the path of the YAML config file to use:  ")
@@ -38,7 +57,8 @@ func ValidateConfigPath(configFilePath *string) {
 
         // If the path does not exist or is a dir or is not YAML file
         if !exists || isDir || !strings.HasSuffix(*configFilePath, ".yml") {
-            fmt.Println("Input path does not exist or is a dir or not of YAML file type: ", configFilePath)
+            fmt.Println("Input path does not exist,is a dir, or not YAML file type: ",
+                        configFilePath)
             // Sleep for a few seconds and clear screen before re-prompt
             display.ClearScreen(3)
             continue
@@ -46,6 +66,14 @@ func ValidateConfigPath(configFilePath *string) {
 
         break
     }
+}
+
+
+func ValidateCrackingMode(hashMode string) bool {
+    hashModes := []string{"0", "3", "6", "7"}
+
+    // Check to see if arg hash mode is in the allowed hash modes
+    return data.StringSliceContains(hashModes, hashMode)
 }
 
 
@@ -96,6 +124,43 @@ func ValidateHashFile(filePath string) error {
 }
 
 
+func ValidateHashMask(crackingMode string, hashMask string) bool {
+    supportedModes := []string{"3", "6", "7"}
+
+    // Check to see if passed in cracking mode is in supported modes
+    isSupported := data.StringSliceContains(supportedModes, crackingMode)
+
+    // If a hash mask is present but not supported by specified cracking mode
+    if hashMask != "" && !isSupported {
+        return false
+    }
+
+    return true
+}
+
+
+func ValidateHashType(hashType string) bool {
+    hashTypes := []string{"0", "10", "11", "12", "20", "21", "23", "30", "40", "50",
+                          "60", "100", "101", "110", "111", "112", "120", "121", "122",
+                          "123", "124", "130", "131", "132", "133", "140", "141", "150",
+                          "160", "200", "300", "400", "500", "900", "1000", "1100", "1400",
+                          "1410", "1420", "1421", "1430", "1431", "1440", "1441", "1450",
+                          "1460", "1600", "1700", "1710", "1711", "1720", "1722", "1730",
+                          "1731", "1740", "1750", "1760", "1800", "2400", "2410", "2500",
+                          "2600", "2611", "2612", "2711", "2811", "3200", "3300", "3500",
+                          "3610", "3710", "3711", "3720", "3721", "3800", "3910", "4010",
+                          "4110", "4210", "4300", "4400", "4500", "4600", "4700", "4800",
+                          "4900", "5000", "5100", "5200", "5300", "5400", "5500", "5600",
+                          "5700", "5800", "6300", "6400", "6500", "6700", "6900", "7000",
+                          "7100", "7200", "7300", "7400", "7600", "7900", "8400", "8900",
+                          "9200", "9300", "9800", "10000", "10200", "10300", "11000",
+                          "11100", "11200", "11400", "99999"}
+
+    // Check to see if arg hash type is in the allowed hash types
+    return data.StringSliceContains(hashTypes, hashType)
+}
+
+
 func ValidateListenerPort(listenerPort int32) bool {
     return listenerPort > 1000
 }
@@ -120,7 +185,7 @@ func ValidateLoadDir(dirPath string) error {
 func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
 
-    // Check to see if the passed in mode is in preset list
+    // Check to see if arg logging mode is in allowed modes
     return data.StringSliceContains(logModes, logMode)
 }
 
@@ -228,4 +293,12 @@ func ValidateRulesetFile(filePath string) error {
     }
 
     return nil
+}
+
+
+func ValidateWorkload(workload string) bool {
+    workloads := []string{"1", "2", "3", "4"}
+
+    // Ensure the passed in workload is in workload slice
+    return data.StringSliceContains(workloads, workload)
 }
