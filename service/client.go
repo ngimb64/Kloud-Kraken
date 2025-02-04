@@ -256,7 +256,7 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
             cmdArgs = append(cmdOptions, "--loopback", filePath)
         }
 
-        // Register a command with selected file path
+        // Register the hashcat command with populated arg list
         cmd = exec.Command("hashcat", cmdArgs...)
         // Execute and save the command stdout and stderr output
         output, err := cmd.CombinedOutput()

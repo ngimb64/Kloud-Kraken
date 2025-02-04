@@ -1,8 +1,8 @@
 - Integrate cat to sort -u or other tools for wordlist merging and dedupe
 
-- Double check Makefile
-
 - Write and run unit tests, then run integration tests to get baseline working
+
+- Double check Makefile
 
 - Implement mutual TLS over TCP for connections (Network Programming With Go book is great reference)
 

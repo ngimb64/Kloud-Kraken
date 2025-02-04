@@ -4,6 +4,7 @@ const MB = 1024 * 1024
 const GB = 1024 * 1024 * 1024
 const MESSAGE_BUFFER_SIZE = 256
 const OS_RESERVED_SPACE = 10 * GB
+const RAND_STRING_SIZE = 16
 
 var COLON_DELIMITER = []byte(":")
 var HASHES_TRANSFER_PREFIX = []byte("<TRANSFER_HASHES:")

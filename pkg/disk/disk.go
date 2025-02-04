@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
@@ -61,25 +60,27 @@ func CheckDirFiles(path string) (string, int64, error) {
     var fileSize int64
 
     // Read the contents of the directory
-    files, err := os.ReadDir(path)
+    items, err := os.ReadDir(path)
     if err != nil {
         return "", -1, err
     }
 
     // Loop over the directory contents
-    for _, file := range files {
-        // If the current item is a file
-        if !file.IsDir() {
-            // Get the file name and size
-            info, err := file.Info()
-            if err != nil {
-                return "", -1, err
-            }
-
-            fileName = info.Name()
-            fileSize = info.Size()
-            break
+    for _, item := range items {
+        // If the current item is a directory
+        if item.IsDir() {
+            continue
         }
+
+        // Get the file name and size
+        info, err := item.Info()
+        if err != nil {
+            return "", -1, err
+        }
+
+        fileName = info.Name()
+        fileSize = info.Size()
+        break
     }
 
     // If no files detected, return empty string
@@ -193,52 +194,49 @@ func PathExists(filePath string) (bool, bool, error) {
 func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
     var returnPath string
     var returnSize int64
-    done := false
 
-    // Iterate through the file and folders in the load directory
-    err := filepath.Walk(loadDir, func(path string, itemInfo os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
-
-        // If a file has been already selected, skip to next iteration
-        if done {
-            return nil
-        }
-
-        // If the current item is not a directory, meaning a file
-        if !itemInfo.IsDir() {
-            // Lock selection process to ensure a single goroutine selects the file
-            FileSelectionLock.Lock()
-            // Unlock selection process on local exit
-            defer FileSelectionLock.Unlock()
-
-            // If the current file size is greater than the max file size set in YAML
-            if itemInfo.Size() > maxFileSizeInt64 {
-                return nil
-            }
-
-            // Check if the file has already been selected by another goroutine,
-            // otherwise store the file path in the sync map
-            _, loaded := SelectedFiles.LoadOrStore(path, true)
-            // The file was already selected, so skip it
-            if loaded {
-                return nil
-            }
-
-            // Set the current file path as return path
-            returnPath = path
-            // Set the current file size as return size
-            returnSize = itemInfo.Size()
-            // Set the complete flag to true
-            done = true
-        }
-
-        return nil
-    })
-
+    // Read the contents of the directory
+    items, err := os.ReadDir(loadDir)
     if err != nil {
         return "", 0, err
+    }
+
+    // Iterate through the items in the load dir
+    for _, item := range items {
+        if item.IsDir() {
+            continue
+        }
+
+        // Lock selection process to ensure a single goroutine selects the file
+        FileSelectionLock.Lock()
+        // Unlock selection process on local exit
+        defer FileSelectionLock.Unlock()
+
+        // Format the current file path
+        itemPath := fmt.Sprintf("%s/%s", loadDir, item.Name())
+
+        // Get the file statistics for the current file
+        itemInfo, err := os.Stat(itemPath)
+        if err != nil {
+            continue
+        }
+
+        // If the current file size is greater than the max file size set in YAML
+        if itemInfo.Size() > maxFileSizeInt64 {
+            continue
+        }
+
+        // Check if the file has already been selected by another goroutine,
+        // otherwise store the file path in the sync map
+        _, loaded := SelectedFiles.LoadOrStore(itemPath, true)
+        // The file was already selected, so skip it
+        if loaded {
+            continue
+        }
+
+        returnPath = itemPath
+        returnSize = itemInfo.Size()
+        break
     }
 
     return returnPath, returnSize, nil
