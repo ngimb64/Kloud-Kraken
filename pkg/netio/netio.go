@@ -101,7 +101,7 @@ func GetFileInfo(buffer []byte, prefix []byte) ([]byte, int64, error) {
     fileSizeStr := string(buffer[colonPos+1:])
 
     // Convert the size string to an 64 bit integr
-    fileSize, err := strconv.ParseInt(string(fileSizeStr), 10, 64)
+    fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
     if err != nil {
         return fileName, fileSize, err
     }

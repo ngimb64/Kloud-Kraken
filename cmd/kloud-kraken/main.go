@@ -7,8 +7,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,8 +20,8 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
+	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
 	"go.uber.org/zap"
-	"golang.org/x/exp/rand"
 )
 
 // Package level variables
@@ -207,124 +205,6 @@ func makeServerDirs() {
 }
 
 
-// TODO:  move to file header after dev
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-
-func RandStringBytes(numberChars int) string {
-    byteSlice := make([]byte, numberChars)
-    for index := range byteSlice {
-        byteSlice[index] = letterBytes[rand.Intn(len(letterBytes))]
-    }
-
-    return string(byteSlice)
-}
-
-
-func randFilePath(dirPath string, nameLen int) string {
-    // Create a random size string based on passed on length
-    randoString := RandStringBytes(nameLen)
-    // Format generate string into path
-    randoPath := fmt.Sprintf("%s/%s.txt", dirPath, randoString)
-
-    // TODO:  pass in hashmap and ensure only unique entries are made
-
-    // Create file for the wordlist output
-    _, err := os.Create(randoPath)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    return randoPath
-}
-
-
-func wordlistMerge(dirPath string, maxFileSize int64) {
-    catFiles := []string{}
-    cmdArgs := []string{}
-
-
-    // TODO:  create hashmap here and pass into randFilePath()
-
-
-    // Format the first output list
-    outPath := randFilePath(dirPath, globals.RAND_STRING_SIZE)
-
-    // Iterate through the contents of the directory and any subdirectories
-    err := filepath.Walk(dirPath, func(_ string, itemInfo os.FileInfo, walkErr error) error {
-        if walkErr != nil {
-            return walkErr
-        }
-
-        // If the item is a dir, skip to next iteration
-        if itemInfo.IsDir() {
-            return nil
-        }
-
-        // Append the current file path to cat files list
-        catFiles = append(catFiles, fmt.Sprintf("%s/%s", dirPath, itemInfo.Name()))
-
-        // If there is more than one file in the cat file list
-        if len(catFiles) > 1 {
-            // Append the file paths to be run via cat
-            cmdArgs = append(cmdArgs, catFiles...)
-            // Append the rest of the command args
-            cmdArgs = append(cmdArgs, "2>/dev/null", "|", "uniq", ">>", outPath)
-
-            // Format the unique merging command with current file to output file
-            cmd := exec.Command("cat", cmdArgs...)
-            // Execute the command and wait until it is complete
-            walkErr = cmd.Run()
-            if walkErr != nil {
-                return walkErr
-            }
-
-            // Get the size of resulting output file
-            outPathInfo, walkErr := os.Stat(outPath)
-            if walkErr != nil {
-                return walkErr
-            }
-
-            // If the output file size is greater than the max size
-            if outPathInfo.Size() > maxFileSize {
-                // Reset cmd args list
-                cmdArgs = cmdArgs[:0]
-
-                // Append the outpath and new random file path to commad args
-                cmdArgs = append(cmdArgs, outPath, randFilePath(dirPath, globals.RAND_STRING_SIZE))
-                // TODO:  add logic to run unique to see if more duplicates can be removed before proceeding to a new wordlist
-
-
-                // TODO:  check the size of the uniq result file and skip iteration if size is less than max file size
-
-
-                // Reset the file path
-                newPath := randFilePath(dirPath, globals.RAND_STRING_SIZE)
-
-                // Reset cmd args list
-                cmdArgs = cmdArgs[:0]
-
-                // TODO:  add code to split or dd to parse extra data into new file depending on file size
-
-
-                // Set the outpath to the new file path
-                outPath = newPath
-            }
-
-            // Reset the cat files and cmd args list
-            catFiles = catFiles[:0]
-            cmdArgs = cmdArgs[:0]
-        }
-
-        return nil
-    })
-
-    if err != nil {
-        log.Fatalf("Error merging wordlists:  %v", err)
-    }
-}
-
-
 func parseArgs() *config.AppConfig {
     var configFilePath string
 
@@ -367,7 +247,13 @@ func main() {
     // Make the server directories
     makeServerDirs()
     // Merge the wordlists in the load dir based on max file size
-    wordlistMerge(appConfig.LocalConfig.LoadDir, appConfig.ClientConfig.MaxFileSizeInt64)
+    wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
+                              appConfig.ClientConfig.MaxFileSizeInt64,
+                              15.0)
+
+
+    // TODO:  add max range float above to YAML config, parse into config struct, and validate
+
 
     // Get the AWS access and secret key environment variables
     awsAccessKey := os.Getenv("AWS_ACCESS_KEY")

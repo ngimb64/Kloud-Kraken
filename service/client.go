@@ -429,7 +429,7 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
         ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
         // If the remaining space minus the ongoing file transfers is greater than or
-        // equal to the max file size AND the current number of transfers is less than
+        // equal to the max file size AND number of transfers is less than allowed max
         if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 &&
         MaxTransfers.Load() != MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
@@ -507,11 +507,12 @@ func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeIn
         return
     }
 
+    // Close connection on local exit
+    defer connection.Close()
+
     kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
                          zap.String("ip address", ipAddr), zap.Int32("port", MessagePort32))
 
-    // Close connection on local exit
-    defer connection.Close()
     // Set up goroutines for receiving and processing data
     handleConnection(connection, logMan, maxFileSizeInt64)
 }

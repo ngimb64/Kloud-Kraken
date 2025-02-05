@@ -1,0 +1,4 @@
+- This project uses duplicut as submodule for de-duplicating wordlists
+    - First run `git submodule init`
+    - For future uses run `git submodule update`
+    - Then run `cd duplicate && make && cd ..`

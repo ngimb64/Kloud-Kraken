@@ -16,16 +16,18 @@ import (
 
 
 func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool {
-    supportedModes := []string{"3", "6", "7"}
+    if hashMask == "" {
+        return false
+    }
 
+    supportedModes := []string{"3", "6", "7"}
     // Check to see if passed in cracking mode is in supported modes
     isSupported := data.StringSliceContains(supportedModes, crackingMode)
 
     // Iterate through charset args
     for _, charset := range args {
-        // If the custom charset is present and the mode is
-        // not supported or the hashmask is empty
-        if charset != "" && (!isSupported || hashMask == "") {
+        // If the custom charset is present and mode is not supported
+        if charset != "" && !isSupported  {
             return false
         }
     }
@@ -128,14 +130,7 @@ func ValidateHashMask(crackingMode string, hashMask string) bool {
     supportedModes := []string{"3", "6", "7"}
 
     // Check to see if passed in cracking mode is in supported modes
-    isSupported := data.StringSliceContains(supportedModes, crackingMode)
-
-    // If a hash mask is present but not supported by specified cracking mode
-    if hashMask != "" && !isSupported {
-        return false
-    }
-
-    return true
+    return data.StringSliceContains(supportedModes, crackingMode)
 }
 
 

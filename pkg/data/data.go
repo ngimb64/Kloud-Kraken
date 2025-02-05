@@ -8,7 +8,25 @@ import (
 	"sync/atomic"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"golang.org/x/exp/rand"
 )
+
+// Packagre level variables
+const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+// Check if the file size is within the percentage range of the max size
+func IsWithinPercentageRange(maxSize float64, fileSize, percent float64) bool {
+	// Calculate the margin based on the percentage
+	margin := (percent / 100) * maxSize
+
+	// Calculate the lower and upper bounds
+	lowerBound := maxSize - margin
+	upperBound := maxSize
+
+	// Check if the file size is within the range
+	return fileSize >= lowerBound && fileSize <= upperBound
+}
 
 
 func ParseFileSizeType(unitFileSize string) (float64, string, error) {
@@ -32,6 +50,17 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
     // If no units were found return error indicating unusual behavior, as this function
     // should have not been called without file units present in arg string
     return 0, "", fmt.Errorf("no valid unit found in arg file size string")
+}
+
+
+func RandStringBytes(numberChars int) string {
+    byteSlice := make([]byte, numberChars)
+
+    for index := range byteSlice {
+        byteSlice[index] = LetterBytes[rand.Intn(len(LetterBytes))]
+    }
+
+    return string(byteSlice)
 }
 
 

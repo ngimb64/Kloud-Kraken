@@ -5,9 +5,12 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"sync"
+	"unicode"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"golang.org/x/sys/unix"
 )
 
@@ -93,6 +96,36 @@ func CheckDirFiles(path string) (string, int64, error) {
 }
 
 
+func CreateRandFile(dirPath string, nameLen int, nameMap map[string]struct{}) string {
+    var randoString string
+
+    for {
+        // Re-create a random size string based on passed on length
+        randoString = data.RandStringBytes(nameLen)
+        // Check to see if created file name string exists in string name map
+        _, exists := nameMap[randoString]
+        if exists {
+            continue
+        }
+
+        break
+    }
+
+    // Set the random string in the string map
+    nameMap[randoString] = struct{}{}
+    // Format generate string into path
+    randoPath := fmt.Sprintf("%s/%s.txt", dirPath, randoString)
+
+    // Create file for the wordlist output
+    _, err := os.Create(randoPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    return randoPath
+}
+
+
 func DiskCheck() (int64, int64, error) {
     // Get the total and available disk space
     total, free, err := GetDiskSpace()
@@ -104,6 +137,31 @@ func DiskCheck() (int64, int64, error) {
     remainingSpace := free - globals.OS_RESERVED_SPACE
 
     return remainingSpace, total, nil
+}
+
+
+func GetBlockSize() (int, error) {
+    var blockSize int
+
+    // Format command to get recommended block size
+    cmd := exec.Command("sh", "-c", "stat / | grep 'IO Block:' | cut -d':' -f4 | cut -d' ' -f2")
+
+    // Execute command to get block size
+    byteBlockSize, err := cmd.Output()
+    if err != nil {
+        return 0, err
+    }
+
+    // Iterate through the range of bytes in slice
+    for _, b := range byteBlockSize {
+        // If the byte rune is a digit
+        if unicode.IsDigit(rune(b)) {
+            // Convert from byte ('0' to '9') to int
+            blockSize = blockSize*10 + int(b-'0')
+        }
+    }
+
+    return blockSize, nil
 }
 
 
