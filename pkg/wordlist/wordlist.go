@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
@@ -90,13 +91,30 @@ func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
 }
 
 
-func FileShaveCut () error {
+func FileShaveDD (filterPath string, shavePath string, blockSize int, maxFileSize int64) error {
+    // Format the dd command to be executed
+    cmd := exec.Command("dd", fmt.Sprintf("if=%s", filterPath),
+                        fmt.Sprintf("of=%s", shavePath),
+                        fmt.Sprintf("bs=%d", blockSize),
+                        fmt.Sprintf("skip=%d", maxFileSize))
+    // Execute the dd command
+    err := cmd.Run()
+    if err != nil {
+        return err
+    }
 
     return nil
 }
 
 
-func FileShaveDD () error {
+func FileShaveSplit (filterPath string, shavePath string, maxFileSize string) error {
+    // Format the cut command to be executed
+    cmd := exec.Command("cut", "-b", maxFileSize, filterPath, shavePath)
+    // Execute the cut command
+    err := cmd.Run()
+    if err != nil {
+        return err
+    }
 
     return nil
 }
@@ -105,11 +123,7 @@ func FileShaveDD () error {
 func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
     catFiles := []string{}
     outFilesMap := make(map[string]struct{})
-    nameMap := make(map[string]struct{})
-    // Create random file for duplicut command output per iteration
-    dupePath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, nameMap)
-    // Create a new file for final duplicut command output
-    filterPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, nameMap)
+    fileNameMap := make(map[string]struct{})
 
     // Get the recommended block size for if dd is utilized
     blockSize, err := disk.GetBlockSize()
@@ -118,7 +132,7 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
     }
 
     // Iterate through the contents of the directory and any subdirectories
-    err = filepath.Walk(dirPath, func(_ string, itemInfo os.FileInfo, walkErr error) error {
+    err = filepath.Walk(dirPath, func(path string, itemInfo os.FileInfo, walkErr error) error {
         if walkErr != nil {
             return walkErr
         }
@@ -128,16 +142,14 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
             return nil
         }
 
-        // Format the current file name with path
-        currentFile := fmt.Sprintf("%s/%s", dirPath, itemInfo.Name())
         // If current file exists in the out files map, skip to next
-        _, exists := outFilesMap[currentFile]
+        _, exists := outFilesMap[path]
         if exists {
             return nil
         }
 
         // Append the current file path to cat files list
-        catFiles = append(catFiles, currentFile)
+        catFiles = append(catFiles, path)
 
         // If there is less than 2 files in the cat files list, skip to next
         if len(catFiles) < 2 {
@@ -145,59 +157,55 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
         }
 
         // Create random file for cat command output
-        catPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, nameMap)
+        catPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
 
         // Cat files in cat list into result deleting originals
-        walkErr = CatAndDelete(&catFiles, catPath, nameMap)
+        walkErr = CatAndDelete(&catFiles, catPath, fileNameMap)
         if walkErr != nil {
             return walkErr
         }
 
-        // Run the cat merge file via duplicut to output file, deleting original file
-        sizeComparison, destFileSize := DuplicutAndDelete(catPath, dupePath,
-                                                          maxFileSize, nameMap)
-        // If the size of the dest file is equal to max
-        // OR resides within the top 15 percent of the max
-        if sizeComparison == 1 || (sizeComparison == 0 &&
-        data.IsWithinPercentageRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
-            // Add the resulting path to out files map
-            outFilesMap[dupePath] = struct{}{}
-            // Create a new random file for duplicut command output
-            dupePath = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, nameMap)
-        // If the size of the dest file is less than max, skip to next
-        } else if sizeComparison == 0 {
-            return nil
-        }
+        // Create a new file for final duplicut command output
+        filterPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
 
         // Run the oversized file via duplicut to output file, deleting original file
-        sizeComparison, destFileSize = DuplicutAndDelete(dupePath, filterPath,
-                                                         maxFileSize, nameMap)
+        sizeComparison, destFileSize := DuplicutAndDelete(catPath, filterPath,
+                                                          maxFileSize, fileNameMap)
         // If the size of the dest file is equal to max
         // OR resides within the top 15 percent of the max
         if sizeComparison == 1 || (sizeComparison == 0 &&
         data.IsWithinPercentageRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
             // Add the resulting path to out files map
             outFilesMap[filterPath] = struct{}{}
-            // Create a new random file for duplicut command output
-            filterPath = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, nameMap)
+            return nil
         // If the size of the dest file is less than max, skip to next
         } else if sizeComparison == 0 {
+            // Add the output file to cat files list for further processing
+            catFiles = append(catFiles, filterPath)
             return nil
         }
 
-        // For files less than 75 GB, cut is optimal
-        if destFileSize < (75 * globals.GB) {
-            // Shaves any data large than excess size into new file
-            walkErr = FileShaveCut()
+        // Create a new file for final duplicut command output
+        shavePath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
+
         // For file greater than 75 GB, dd is optimal for resource scalability
+        if destFileSize > (75 * globals.GB) {
+            // Shaves any data large than excess size into new file
+            walkErr = FileShaveDD(filterPath, shavePath, blockSize, maxFileSize)
+        // For files less than 75 GB, split is optimal
         } else {
             // Shaves any data large than excess size into new file
-            walkErr = FileShaveDD()
+            walkErr = FileShaveSplit(filterPath, shavePath, strconv.Itoa(int(maxFileSize)))
         }
 
         if walkErr != nil {
             return walkErr
         }
+
+        // Add the maxed out file to the out files map
+        outFilesMap[filterPath] = struct{}{}
+        // Add the file with extra shaved data to cat files list
+        catFiles = append(catFiles, shavePath)
 
         return nil
     })

@@ -249,16 +249,11 @@ func main() {
     // Merge the wordlists in the load dir based on max file size
     wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
                               appConfig.ClientConfig.MaxFileSizeInt64,
-                              15.0)
-
-
-    // TODO:  add max range float above to YAML config, parse into config struct, and validate
-
+                              appConfig.LocalConfig.MaxSizeRange)
 
     // Get the AWS access and secret key environment variables
     awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
     awsSecretKey := os.Getenv("AWS_SECRET_KEY")
-
     // If AWS access and secret key are present
     if awsAccessKey == "" || awsSecretKey == "" {
         log.Fatal("Missing either the access or the secret key for AWS")

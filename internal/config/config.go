@@ -17,13 +17,14 @@ type AppConfig struct {
 
 // LocalConfig contains the configuration for local server settings
 type LocalConfig struct {
-    Region		    string `yaml:"region"`
-    ListenerPort    int32  `yaml:"listener_port"`
-    NumberInstances int32  `yaml:"number_instances"`
-    LoadDir	   	    string `yaml:"load_dir"`
-    HashFilePath    string `yaml:"hash_file_path"`
-    RulesetPath     string `yaml:"ruleset_path"`
-    LogPath		    string `yaml:"log_path"`
+    Region		    string  `yaml:"region"`
+    ListenerPort    int32   `yaml:"listener_port"`
+    NumberInstances int32   `yaml:"number_instances"`
+    LoadDir	   	    string  `yaml:"load_dir"`
+    HashFilePath    string  `yaml:"hash_file_path"`
+    RulesetPath     string  `yaml:"ruleset_path"`
+    MaxSizeRange    float64 `yaml:"max_size_range"`
+    LogPath		    string  `yaml:"log_path"`
 }
 
 // ClientConfig contains the configuration for the client settings

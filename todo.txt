@@ -1,5 +1,3 @@
-- Integrate cat to sort -u or other tools for wordlist merging and dedupe
-
 - Write and run unit tests, then run integration tests to get baseline working
 
 - Double check Makefile

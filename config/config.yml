@@ -5,6 +5,7 @@ local_config:
   load_dir: ""
   hash_file_path: ""
   ruleset_path: ""
+  max_size_range: 15.0
   log_path: "KloudKraken.log"
 
 client_config:
