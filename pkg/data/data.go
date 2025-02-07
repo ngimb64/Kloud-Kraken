@@ -16,7 +16,8 @@ const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 // Check if the file size is within the percentage range of the max size
-func IsWithinPercentageRange(maxSize float64, fileSize, percent float64) bool {
+func IsWithinPercentageRange(maxSize float64, fileSize float64,
+                             percent float64) bool {
 	// Calculate the margin based on the percentage
 	margin := (percent / 100) * maxSize
 
@@ -85,7 +86,7 @@ func ToBytes(size float64, unit string) int64 {
     switch unit {
     // Kilobytes
     case "KB":
-        byteSize = size * 1024
+        byteSize = size * globals.KB
     // Megabytes
     case "MB":
         byteSize = size * globals.MB
@@ -102,9 +103,9 @@ func ToBytes(size float64, unit string) int64 {
 }
 
 
-// TransferManager tracks the size of ongoing transfers.
+// TransferManager tracks the size of all ongoing transfers.
 type TransferManager struct {
-    OngoingTransfersSize int64 // Total size of all ongoing transfers
+    OngoingTransfersSize int64
 }
 
 // NewTransferManager initializes and returns a new TransferManager instance.
@@ -128,12 +129,12 @@ func (tm *TransferManager) GetOngoingTransfersSize() int64 {
 }
 
 
-func TrimBeforeLast(output []byte, delimiter []byte) ([]byte, error) {
+func TrimAfterLast(input []byte, delimiter []byte) ([]byte, error) {
 	// Find the last occurance of the delimiter
-	position := bytes.LastIndex(output, delimiter)
+	position := bytes.LastIndex(input, delimiter)
 	if position == -1 {
-		return output, fmt.Errorf("delimiter not found in output")
+		return input, fmt.Errorf("delimiter not found in input")
 	}
 
-	return output[position+1:], nil
+	return input[position+len(delimiter):], nil
 }

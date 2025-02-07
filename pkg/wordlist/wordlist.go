@@ -188,11 +188,11 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
         // Create a new file for final duplicut command output
         shavePath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
 
-        // For file greater than 75 GB, dd is optimal for resource scalability
+        // For file greater than threshold, dd is optimal for resource scalability
         if destFileSize > (75 * globals.GB) {
             // Shaves any data large than excess size into new file
             walkErr = FileShaveDD(filterPath, shavePath, blockSize, maxFileSize)
-        // For files less than 75 GB, split is optimal
+        // For files less than threshold, split is optimal for efficiency
         } else {
             // Shaves any data large than excess size into new file
             walkErr = FileShaveSplit(filterPath, shavePath, strconv.Itoa(int(maxFileSize)))

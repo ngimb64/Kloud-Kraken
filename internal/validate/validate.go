@@ -190,8 +190,8 @@ func ValidateMaxFileSize(maxFileSize string) (int64, error) {
     var err error
 
     // Save string max file size to local variable ensuring
-    // any units are lowercase (MB, GB, etc.)
-    maxFileSize = strings.ToLower(maxFileSize)
+    // any units are uppercase (KB, MB, GB)
+    maxFileSize = strings.ToUpper(maxFileSize)
     // Check to see if the max files size contains a conversion unit
     sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
 
@@ -219,6 +219,11 @@ func ValidateMaxFileSize(maxFileSize string) (int64, error) {
     }
 
     return byteSize, nil
+}
+
+
+func ValidateMaxSizeRange(percentage float64) bool {
+    return percentage <= 50.0
 }
 
 

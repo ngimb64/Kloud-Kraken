@@ -45,8 +45,8 @@ const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
 const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
 var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes stored post processing
 var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
-var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
-var HashcatArgsStruct = HashcatArgs{}  // Initialze struct where hashcat options stored
+var BufferMutex = &sync.Mutex{}           // Mutex for message buffer synchronization
+var HashcatArgsStruct = new(HashcatArgs)  // Initialze struct where hashcat options stored
 var HashFilePath string        // Stores hash file path when received
 var HasRuleset bool            // Toggle for specifying whether ruleset is in use
 var LogPath string             // Stores log file to be returned to client
@@ -63,7 +63,7 @@ func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
     outputMap := make(map[string]string)
 
     // Trim up to the end section with result data
-    parsedOutput, err := data.TrimBeforeLast(output, []byte("=>"))
+    parsedOutput, err := data.TrimAfterLast(output, []byte("=>"))
     if err != nil {
         log.Fatalf("Error pre-trimming:  %v", err)
     }
@@ -468,7 +468,7 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
 func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
                       maxFileSizeInt64 int64) {
     // Initialize a transfer mananager used to track the size of active file transfers
-    transferManager := data.TransferManager{}
+    transferManager := data.NewTransferManager()
 
     // Create a channel for the goroutines to communicate
     channel := make(chan bool)
@@ -478,10 +478,10 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
     waitGroup.Add(2)
 
     // Start the goroutine to write data to the file
-    go receivingHandler(connection, channel, &waitGroup, &transferManager, logMan,
+    go receivingHandler(connection, channel, &waitGroup, transferManager, logMan,
                         maxFileSizeInt64)
     // Start the goroutine to process the file
-    go processingHandler(connection, channel, &waitGroup, &transferManager, logMan)
+    go processingHandler(connection, channel, &waitGroup, transferManager, logMan)
 
     // Wait for both goroutines to finish
     waitGroup.Wait()
@@ -569,11 +569,9 @@ func main() {
 
     // Parse the command line flags
     flag.Parse()
-
     // Parsed int args are int32
     MessagePort32 = int32(port)
     MaxTransfersInt32 = int32(maxTransfers)
-
     // Create directories for client
     makeClientDirs()
 

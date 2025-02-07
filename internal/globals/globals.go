@@ -1,5 +1,6 @@
 package globals
 
+const KB = 1024
 const MB = 1024 * 1024
 const GB = 1024 * 1024 * 1024
 const MESSAGE_BUFFER_SIZE = 256

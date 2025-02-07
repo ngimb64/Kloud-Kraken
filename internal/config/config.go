@@ -58,7 +58,7 @@ func LoadConfig(filePath string) *AppConfig {
     defer file.Close()
 
     // Create a new AppConfig instance
-    var config AppConfig
+    config := new(AppConfig)
 
     // Decode YAML into AppConfig struct
     decoder := yaml.NewDecoder(file)
@@ -79,14 +79,14 @@ func LoadConfig(filePath string) *AppConfig {
         log.Fatalf("Invalid client config:  %v", err)
     }
 
-    return &config
+    return config
 }
 
 
 func ValidateLocalConfig(localConfig *LocalConfig) error {
     // Ensure a proper region was specified in the local config
     if !validate.ValidateRegion(localConfig.Region) {
-        return fmt.Errorf("improper region specified in local config")
+        return fmt.Errorf("improper region specified")
     }
 
     // If the listerner port is less than 1000
@@ -117,10 +117,15 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
+    // Ensure the max size range is less or equal to 50 percent
+    if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
+        return fmt.Errorf("max_size_range greater than 50 percent")
+    }
+
     // Ensure log path is proper format and reset ruleset path with validated
     localConfig.LogPath, err = validate.ValidatePath(localConfig.LogPath)
     if err != nil {
-        return fmt.Errorf("improper log_path specified in local config - %w", err)
+        return fmt.Errorf("improper log_path specified - %w", err)
     }
 
     return nil
@@ -132,28 +137,28 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 
     // If an improper region was specified in client config
     if !validate.ValidateRegion(clientConfig.Region) {
-        return fmt.Errorf("improper region specified in client config")
+        return fmt.Errorf("improper region specified")
     }
 
     // Parse and convert the max file size to raw bytes from any units
     clientConfig.MaxFileSizeInt64, err = validate.ValidateMaxFileSize(clientConfig.MaxFileSize)
     if err != nil {
-        return fmt.Errorf("improper max_file_size in client config - %w", err)
+        return fmt.Errorf("improper max_file_size - %w", err)
     }
 
     // If the cracking mode was not in supported modes
     if !validate.ValidateCrackingMode(clientConfig.CrackingMode) {
-        return fmt.Errorf("improper cracking_mode specified in client config")
+        return fmt.Errorf("improper cracking_mode specified")
     }
 
     // If the hash type was not in supported types
     if !validate.ValidateHashType(clientConfig.HashType) {
-        return fmt.Errorf("improper hash_type specified in client config")
+        return fmt.Errorf("improper hash_type specified")
     }
 
     // If the workload was not in supported profiles
     if !validate.ValidateWorkload(clientConfig.Workload) {
-        return fmt.Errorf("improper workload specified in client config")
+        return fmt.Errorf("improper workload specified")
     }
 
     // If the there are custom charsets but missing hash masks or improper mode
@@ -171,18 +176,18 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
 
     // If the max_transfers was less than one
     if !validate.ValidateMaxTransfers(clientConfig.MaxTransfers) {
-        return fmt.Errorf("improper max_transfers specified in client config")
+        return fmt.Errorf("improper max_transfers specified")
     }
 
     // If an improper region was specified in client config
     if !validate.ValidateLogMode(clientConfig.LogMode) {
-        return fmt.Errorf("improper log_mode specified in client config")
+        return fmt.Errorf("improper log_mode specified")
     }
 
     // Ensure log path is of proper format
     clientConfig.LogPath, err = validate.ValidatePath(clientConfig.LogPath)
     if err != nil {
-        return fmt.Errorf("improper log_path specified in client config - %w", err)
+        return fmt.Errorf("improper log_path specified - %w", err)
     }
 
     return nil
