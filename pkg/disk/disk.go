@@ -26,6 +26,7 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     if err != nil {
         return fmt.Errorf("error opening source file - %w", err)
     }
+
     // Close source file on local exit
     defer sourceFile.Close()
 
@@ -45,6 +46,7 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     if err != nil {
         return fmt.Errorf("error opening destination file - %w", err)
     }
+
     // Close destination file on local exit
     defer destFile.Close()
 
@@ -52,6 +54,12 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     _, err = io.Copy(destFile, sourceFile)
     if err != nil {
         return fmt.Errorf("error copying data - %w", err)
+    }
+
+    // Delete the original file
+    err = os.Remove(sourceFilePath)
+    if err != nil {
+        return fmt.Errorf("error deleting souce file - %w", err)
     }
 
     return nil
@@ -205,29 +213,33 @@ func MakeDirs(programDirs []string) {
 // @Returns
 // - Boolean for the item existing and having content
 // - Boolean for if the item is a directory
+// - Boolean for if the file or dir contains data
 // - Error return handler
 //
-func PathExists(filePath string) (bool, bool, error) {
+func PathExists(filePath string) (bool, bool, bool, error) {
     // Get item info on passed in path
     itemInfo, err := os.Stat(filePath)
     if err != nil {
         // If the item does not exist
         if os.IsNotExist(err) {
-            return false, false, nil
+            return false, false, false, nil
         }
         // If unexpected error getting item info
-        return false, false, fmt.Errorf("error checking file existence - %w", err)
+        return false, false, false, fmt.Errorf("error checking file existence - %w", err)
     }
 
-    // If the path is a file, and has data in it
+    // If the path is a file and has data
     if !itemInfo.IsDir() && itemInfo.Size() > 0 {
-        return true, false, nil
+        return true, false, true, nil
+    // If the path is a empty file
+    } else if !itemInfo.IsDir() && itemInfo.Size() == 0 {
+        return true, false, false, nil
     }
 
     // Open the directory
     dir, err := os.Open(filePath)
     if err != nil {
-        return false, true, fmt.Errorf("error opening directory - %w", err)
+        return true, true, false, fmt.Errorf("error opening directory - %w", err)
     }
     // Close the directory on local exit
     defer dir.Close()
@@ -235,16 +247,16 @@ func PathExists(filePath string) (bool, bool, error) {
     // Attempt to read the first entry in the dir
     entries, err := dir.ReadDir(1)
     if err != nil {
-        return false, true, fmt.Errorf("error reading directory - %w", err)
+        return true, true, false, fmt.Errorf("error reading directory - %w", err)
     }
 
     // If there is an entry, the dir is not empty
     if len(entries) > 0 {
-        return true, true, nil
+        return true, true, true, nil
     }
 
     // If no entries the directory is empty
-    return false, true, nil
+    return false, true, false, nil
 }
 
 

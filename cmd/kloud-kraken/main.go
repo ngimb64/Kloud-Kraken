@@ -218,13 +218,13 @@ func parseArgs() *config.AppConfig {
         configFilePath = os.Args[1]
 
         // Check to see if the input path exists and is a file or dir
-        exists, isDir, err := disk.PathExists(configFilePath)
+        exists, isDir, hasData, err := disk.PathExists(configFilePath)
         if err != nil {
             log.Fatal("Error checking config file path existence: ", err)
         }
 
-        // If the path does not exist or is a dir or is not YAML file
-        if !exists || isDir || !strings.HasSuffix(configFilePath, ".yml") {
+        // If the path does not exist OR is a dir OR does not have data OR is not YAML file
+        if !exists || isDir || !hasData || !strings.HasSuffix(configFilePath, ".yml") {
             fmt.Println("Provided YAML config file path invalid: ", configFilePath)
             // Sleep for a few seconds and clear screen
             display.ClearScreen(3)
@@ -250,6 +250,10 @@ func main() {
     wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
                               appConfig.ClientConfig.MaxFileSizeInt64,
                               appConfig.LocalConfig.MaxSizeRange)
+
+
+    // TODO:  create function to delete leftover directories after wordlist merging
+
 
     // Get the AWS access and secret key environment variables
     awsAccessKey := os.Getenv("AWS_ACCESS_KEY")

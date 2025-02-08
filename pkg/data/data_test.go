@@ -1,13 +1,57 @@
-package data
+package data_test
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
+	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/stretchr/testify/assert"
 )
+
+
+func TestGenerateRandomBytes (t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Create buffer and generate half with random bytes
+    buffer := make([]byte, 128)
+    data.GenerateRandomBytes(buffer, 128)
+    // Create map for ensuring unique file names
+    nameMap := make(map[string]struct{})
+
+    //Get the current working directory
+    path, err := os.Getwd()
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Create a random file for testing
+    testFile := disk.CreateRandFile(path, 10, nameMap)
+    // Open the file with write permissions
+    file, err := os.OpenFile(testFile, os.O_RDWR|os.O_CREATE, 0644)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Write the random bytes to file
+    bytesWrote, err := file.Write(buffer)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the bytes wrote equals random generated in buffer
+    assert.Equal(128, len(buffer[:bytesWrote]))
+    // Close the file
+    file.Close()
+
+    // Get the size of the file
+    fileInfo, err := os.Stat(testFile)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the file size equals random generate in buffer
+    assert.Equal(int64(128), fileInfo.Size())
+    // Delete the file
+    err = os.Remove(testFile)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+}
 
 
 func TestIsWithinPercentageRange(t *testing.T) {

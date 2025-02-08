@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"golang.org/x/exp/rand"
@@ -13,6 +14,16 @@ import (
 
 // Packagre level variables
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+func GenerateRandomBytes(buffer []byte, maxBytes int) {
+	// Seed the random number generator to ensure unique results
+	rand.Seed(uint64(time.Now().UnixNano()))
+
+    for i := range buffer {
+		buffer[i] = byte(rand.Intn(maxBytes))
+	}
+}
 
 
 // Check if the file size is within the percentage range of the max size
@@ -55,6 +66,10 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
 
 
 func RandStringBytes(numberChars int) string {
+    timestamp := time.Now().UnixNano()
+    // Seed the random number generator with the current Unix timestamp
+    rand.Seed(uint64(timestamp))
+
     byteSlice := make([]byte, numberChars)
 
     for index := range byteSlice {
