@@ -1,12 +1,12 @@
+- Add needed docstrings in all source
+
 - Write and run unit tests
-    - Finish config tests
-    - Finish remaining doable pkg tests for (netio, wordlist)
+    - Write tests for netio
+    - Write tests for wordlist
     - Write tests for main
     - Write tests for client
 
 - Run integration tests to get baseline working
-
-- Add needed docstrings in all source
 
 - Test and modify Makefile
 
