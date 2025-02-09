@@ -29,6 +29,17 @@ var CurrentConnections atomic.Int32		// Tracks current active connections
 var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client logs are stored
 
 
+// Select next available file for transfer, if there are no more available send the end transfer
+// message to client, format the transfer reply with the file name and size, get the IP address
+// of the current connection and read the port from the socket to format the dialer for the new
+// connection for file transfer, and pass the connection with other args into TransferFile().
+//
+// @Parameters
+// - connection:  Network socket connection for handling messaging
+// - buffer:  The buffer storing network messaging
+// - appConfig:  The configuration struct with loaded yaml program data
+// - logMan:  The kloudlogs logger manager for local logging
+//
 func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppConfig,
                     logMan *kloudlogs.LoggerManager) {
     // Select the next avaible file in the load dir from YAML data
@@ -94,8 +105,18 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppCon
 }
 
 
-func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig *config.AppConfig,
-                      logMan *kloudlogs.LoggerManager) {
+// Upload the hash and ruleset files (if optional ruleset applied), goes into continual loop
+// where data is read from the message sockets connection-buffer, checks for a processing complete
+// message which signals exiting the loop, finally after the loop received cracked hash and log file.
+//
+// @Parameters
+// - connection:  Network socket connection for handling messaging
+// - waitGroup:  Used to synchronize the Goroutines running
+// - appConfig:  The configuration struct with loaded yaml program data
+// - logMan:  The kloudlogs logger manager for local logging
+//
+func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
+                      appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Close connection and decrement waitGroup counter on local exit
     defer connection.Close()
     defer waitGroup.Done()
@@ -149,10 +170,19 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup, appConfig 
 }
 
 
+// Set up listener and enter loop where the ammount of active connections is checked,
+// until the specified number of instances is equal to the active connections the
+// listener will wait until a connection is accepted, increment the active connections
+// counter and waitgroup, and pass the connection with other args into handler goroutine.
+//
+// @Parameters
+// - appConfig:  The configuration struct with loaded yaml program data
+// - logMan:  The kloudlogs logger manager for local logging
+//
 func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Format listener port with parsed YAML data
     listenerPort := fmt.Sprintf(":%v", appConfig.LocalConfig.ListenerPort)
-    // Start listening on specified port
+    // Establish listener on specified port
     listener, err := net.Listen("tcp", listenerPort)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error starting server:  %w", err)
@@ -197,6 +227,8 @@ func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
 }
 
 
+// Create the required dirs for program operation.
+//
 func makeServerDirs() {
     // Set the program directories
     programDirs := []string{ReceivedDir}
@@ -205,6 +237,12 @@ func makeServerDirs() {
 }
 
 
+// Parses command line args (path to yaml config file), if args not present
+// or invalid then proceeds to user input until valid yaml file is specified.
+//
+// @Returns
+// - AppConfig struct populated from yaml data
+//
 func parseArgs() *config.AppConfig {
     var configFilePath string
 
@@ -238,6 +276,10 @@ func parseArgs() *config.AppConfig {
 }
 
 
+// Parse command line args, make needed directories, merge wordlists and remove remaining
+// empty dirs, set up AWS access config with key and secret, set up logging manager
+// instance, set up EC2 code passing command line args via user data, and start server.
+//
 func main() {
     var awsConfig aws.Config
 

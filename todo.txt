@@ -1,10 +1,13 @@
-- Add needed docstrings in all source
+- Add needed docstrings in packages
 
 - Write and run unit tests
     - Write tests for netio
     - Write tests for wordlist
     - Write tests for main
     - Write tests for client
+
+- Try improving tests related to file io with potential memory-based io providers (read blog)
+    - Also look into using testing lib for file related operations instead of os
 
 - Run integration tests to get baseline working
 
@@ -14,7 +17,7 @@
 
 - Implement tests for above TLS code
 
-- Add docstrings to added TLS code
+- Add docstrings to added TLS code and wherever needed
 
 - Build provisioner script for AMI to upload compiled client code and setup clients
 
