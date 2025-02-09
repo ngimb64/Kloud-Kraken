@@ -58,7 +58,7 @@ func LoadConfig(filePath string) *AppConfig {
     defer file.Close()
 
     // Create a new AppConfig instance
-    config := new(AppConfig)
+    var config AppConfig
 
     // Decode YAML into AppConfig struct
     decoder := yaml.NewDecoder(file)
@@ -79,7 +79,7 @@ func LoadConfig(filePath string) *AppConfig {
         log.Fatalf("Invalid client config:  %v", err)
     }
 
-    return config
+    return &config
 }
 
 

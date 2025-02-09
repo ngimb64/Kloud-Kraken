@@ -17,4 +17,4 @@ var LOG_TRANSFER_PREFIX = []byte("<TRANSFER_LOG:")
 var TRANSFER_SUFFIX = []byte(">")
 var END_TRANSFER_MARKER = []byte("<END_TRANSFER>")
 var PROCESSING_COMPLETE = []byte("<PROCESSING_COMPLETE>")
-var FILE_SIZE_TYPES = []string{"kb", "mb", "gb"}
+var FILE_SIZE_TYPES = []string{"KB", "MB", "GB"}

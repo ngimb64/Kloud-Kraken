@@ -80,12 +80,25 @@ func RandStringBytes(numberChars int) string {
 }
 
 
-// Function that takes a slice, makes it immutable by copying it, and checks for a target
+// Checks to see if element in slice contains the target string
 func StringSliceContains(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
     for _, item := range slice {
         // If the current unit is in the target string
         if strings.Contains(target, item) {
+            return true
+        }
+    }
+    return false
+}
+
+
+// Checks to see if element in slice equals the target string
+func StringSliceHasItem(slice []string, target string) bool {
+    // Iterate over the copied slice and check for the target value
+    for _, item := range slice {
+        // If the current unit is in the target string
+        if target == item {
             return true
         }
     }

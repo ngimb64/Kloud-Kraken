@@ -22,7 +22,7 @@ func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool
 
     supportedModes := []string{"3", "6", "7"}
     // Check to see if passed in cracking mode is in supported modes
-    isSupported := data.StringSliceContains(supportedModes, crackingMode)
+    isSupported := data.StringSliceHasItem(supportedModes, crackingMode)
 
     // Iterate through charset args
     for _, charset := range args {
@@ -38,31 +38,39 @@ func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool
 
 func ValidateConfigPath(configFilePath *string) {
     for {
-        fmt.Print("Enter the path of the YAML config file to use:  ")
-        // Read the YAML file path from user input
-        _, err := fmt.Scanln(configFilePath)
-        if err != nil {
-            fmt.Println("Error occurred reading user input path: ", err)
-            // Sleep for a few seconds and clear screen before re-prompt
-            display.ClearScreen(3)
-            continue
+        if *configFilePath == "" {
+            fmt.Print("Enter the path of the YAML config file to use:  ")
+            // Read the YAML file path from user input
+            _, err := fmt.Scanln(configFilePath)
+            if err != nil {
+                fmt.Println("Error occurred reading user input path: ", err)
+                // Sleep for a few seconds and clear screen before re-prompt
+                display.ClearScreen(3)
+                // Reset the config file path
+                *configFilePath = ""
+                continue
+            }
         }
 
         // Check to see if the input path exists and is a file or dir
-        exists, isDir, err := disk.PathExists(*configFilePath)
+        exists, isDir, hasData, err := disk.PathExists(*configFilePath)
         if err != nil {
             fmt.Println("Error checking input path existence: ", err)
             // Sleep for a few seconds and clear screen before re-prompt
             display.ClearScreen(3)
+            // Reset the config file path
+            *configFilePath = ""
             continue
         }
 
-        // If the path does not exist or is a dir or is not YAML file
-        if !exists || isDir || !strings.HasSuffix(*configFilePath, ".yml") {
+        // If the path does not exist OR is a dir OR does not have data OR is not YAML file
+        if !exists || isDir || !hasData || !strings.HasSuffix(*configFilePath, ".yml") {
             fmt.Println("Input path does not exist,is a dir, or not YAML file type: ",
                         configFilePath)
             // Sleep for a few seconds and clear screen before re-prompt
             display.ClearScreen(3)
+            // Reset the config file path
+            *configFilePath = ""
             continue
         }
 
@@ -75,20 +83,21 @@ func ValidateCrackingMode(hashMode string) bool {
     hashModes := []string{"0", "3", "6", "7"}
 
     // Check to see if arg hash mode is in the allowed hash modes
-    return data.StringSliceContains(hashModes, hashMode)
+    return data.StringSliceHasItem(hashModes, hashMode)
 }
 
 
 func ValidateDir(dirPath string) error {
     // Check to see if the load directory exists and has files in it
-    exists, isDir, err := disk.PathExists(dirPath)
+    exists, isDir, hasData, err := disk.PathExists(dirPath)
     if err != nil {
         return err
     }
 
-    // If the load dir path does not exist or is not a directory
-    if !exists || !isDir {
-        return fmt.Errorf("load dir path does not exist or is a file")
+    // If the load dir path does not exist OR is not a directory OR does not have data
+    if !exists || !isDir || !hasData {
+        return fmt.Errorf("load dir path does not exist or is a file or" +
+                          " does not have data in it")
     }
 
     return nil
@@ -97,14 +106,15 @@ func ValidateDir(dirPath string) error {
 
 func ValidateFile(filePath string) error {
     // Check to see if the hash file exists
-    exists, isDir, err := disk.PathExists(filePath)
+    exists, isDir, hasData, err := disk.PathExists(filePath)
     if err != nil {
         return err
     }
 
-    // If the hash file path does not exist or is a directory
-    if !exists || isDir {
-        return fmt.Errorf("hash file path does not exist or is a directory")
+    // If the hash file path does not exist OR is a directory OR does not have data
+    if !exists || isDir || !hasData {
+        return fmt.Errorf("hash file path does not exist or is a directory or" +
+                          " does not have data in it")
     }
 
     return nil
@@ -129,8 +139,8 @@ func ValidateHashFile(filePath string) error {
 func ValidateHashMask(crackingMode string, hashMask string) bool {
     supportedModes := []string{"3", "6", "7"}
 
-    // Check to see if passed in cracking mode is in supported modes
-    return data.StringSliceContains(supportedModes, crackingMode)
+    // Check to see if passed in cracking mode is in supported modes and hashmask is present
+    return data.StringSliceHasItem(supportedModes, crackingMode) && hashMask != ""
 }
 
 
@@ -152,7 +162,7 @@ func ValidateHashType(hashType string) bool {
                           "11100", "11200", "11400", "99999"}
 
     // Check to see if arg hash type is in the allowed hash types
-    return data.StringSliceContains(hashTypes, hashType)
+    return data.StringSliceHasItem(hashTypes, hashType)
 }
 
 
@@ -181,7 +191,7 @@ func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
 
     // Check to see if arg logging mode is in allowed modes
-    return data.StringSliceContains(logModes, logMode)
+    return data.StringSliceHasItem(logModes, logMode)
 }
 
 
@@ -250,11 +260,6 @@ func ValidatePath(path string) (string, error) {
         return "", fmt.Errorf("path %s contains double slashes", path)
     }
 
-    // Ensure the path does not end with slash unless its root directory
-    if cleanedPath != "/" && strings.HasSuffix(cleanedPath, "/") {
-        return "", fmt.Errorf("path %s cannot end with a slash unless it is the root directory", path)
-    }
-
     // Validate path format with regex
     validPath := regexp.MustCompile(`^[a-zA-Z0-9\._\-\/]+$`).MatchString(cleanedPath)
     if !validPath {
@@ -300,5 +305,5 @@ func ValidateWorkload(workload string) bool {
     workloads := []string{"1", "2", "3", "4"}
 
     // Ensure the passed in workload is in workload slice
-    return data.StringSliceContains(workloads, workload)
+    return data.StringSliceHasItem(workloads, workload)
 }

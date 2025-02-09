@@ -27,7 +27,7 @@ func TestGenerateRandomBytes (t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Create a random file for testing
-    testFile := disk.CreateRandFile(path, 10, nameMap)
+    testFile := disk.CreateRandFile(path, globals.RAND_STRING_SIZE, nameMap)
     // Open the file with write permissions
     file, err := os.OpenFile(testFile, os.O_RDWR|os.O_CREATE, 0644)
     // Ensure the error is nil meaning successful operation
@@ -124,8 +124,9 @@ func TestStringSliceContains(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
     testSlice := []string{"fee", "fi", "fo", "fum"}
+
     // Set true values and test them in loop
-    trues := []string{"fi", "fum", "fee"}
+    trues := []string{"blahfiblah", "blahfum", "feeblah"}
 
     for _, truth := range trues {
         assert.True(data.StringSliceContains(testSlice, truth))
@@ -136,6 +137,27 @@ func TestStringSliceContains(t *testing.T) {
 
     for _, falacy := range falses {
         assert.False(data.StringSliceContains(testSlice, falacy))
+    }
+}
+
+
+func TestStringSliceHasItem(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+    testSlice := []string{"fee", "fi", "fo", "fum"}
+
+    // Set true values and test them in loop
+    trues := []string{"fi", "fum", "fee"}
+
+    for _, truth := range trues {
+        assert.True(data.StringSliceHasItem(testSlice, truth))
+    }
+
+    // Set false values and test them in loop
+    falses := []string{"dxrz4", "flapjacks", "doug funny"}
+
+    for _, falacy := range falses {
+        assert.False(data.StringSliceHasItem(testSlice, falacy))
     }
 }
 
@@ -189,7 +211,7 @@ func TestTrimAfterLast(t *testing.T) {
         {[]byte("test<SPACE>string<SPACE>result"), []byte("<SPACE>"), []byte("result")},
     }
 
-    // Iterate through slice of structs
+    // Iterate through slice of test structs
     for _, test := range tests {
         // Use struct members as input to call function and trim after last delimiter
         output, _ := data.TrimAfterLast(test.input, test.delimiter)

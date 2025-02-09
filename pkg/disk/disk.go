@@ -26,7 +26,6 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     if err != nil {
         return fmt.Errorf("error opening source file - %w", err)
     }
-
     // Close source file on local exit
     defer sourceFile.Close()
 
@@ -46,7 +45,6 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     if err != nil {
         return fmt.Errorf("error opening destination file - %w", err)
     }
-
     // Close destination file on local exit
     defer destFile.Close()
 
