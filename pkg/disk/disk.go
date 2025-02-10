@@ -218,10 +218,6 @@ func PathExists(filePath string) (bool, bool, bool, error) {
     // Get item info on passed in path
     itemInfo, err := os.Stat(filePath)
     if err != nil {
-        // If the item does not exist
-        if os.IsNotExist(err) {
-            return false, false, false, nil
-        }
         // If unexpected error getting item info
         return false, false, false, fmt.Errorf("error checking file existence - %w", err)
     }
@@ -243,18 +239,14 @@ func PathExists(filePath string) (bool, bool, bool, error) {
     defer dir.Close()
 
     // Attempt to read the first entry in the dir
-    entries, err := dir.ReadDir(1)
+    _, err = dir.ReadDir(1)
     if err != nil {
         return true, true, false, fmt.Errorf("error reading directory - %w", err)
     }
 
     // If there is an entry, the dir is not empty
-    if len(entries) > 0 {
-        return true, true, true, nil
-    }
+    return true, true, true, nil
 
-    // If no entries the directory is empty
-    return false, true, false, nil
 }
 
 

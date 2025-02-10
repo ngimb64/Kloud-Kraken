@@ -207,8 +207,8 @@ func TestPathExists(t *testing.T) {
     nonExistentFile := "skdlvskldnld"
     // Check to see if the path exists, dir or file, and if it has data
     exists, isDir, hasData, err = disk.PathExists(nonExistentFile)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    // Ensure error is present since path does not exist
+    assert.NotEqual(nil, err)
     // Ensure the file does not exist
     assert.False(exists)
     // The file is neither a file or a dir

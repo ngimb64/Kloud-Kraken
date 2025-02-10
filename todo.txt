@@ -1,4 +1,4 @@
-- Add needed docstrings in packages
+- Add needed docstrings in pkg packages
 
 - Write and run unit tests
     - Write tests for netio

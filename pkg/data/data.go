@@ -17,27 +17,27 @@ const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 func GenerateRandomBytes(buffer []byte, maxBytes int) {
-	// Seed the random number generator to ensure unique results
-	rand.Seed(uint64(time.Now().UnixNano()))
+    // Seed the random number generator to ensure unique results
+    rand.Seed(uint64(time.Now().UnixNano()))
 
     for i := range buffer {
-		buffer[i] = byte(rand.Intn(maxBytes))
-	}
+        buffer[i] = byte(rand.Intn(maxBytes))
+    }
 }
 
 
 // Check if the file size is within the percentage range of the max size
 func IsWithinPercentageRange(maxSize float64, fileSize float64,
                              percent float64) bool {
-	// Calculate the margin based on the percentage
-	margin := (percent / 100) * maxSize
+    // Calculate the margin based on the percentage
+    margin := (percent / 100) * maxSize
 
-	// Calculate the lower and upper bounds
-	lowerBound := maxSize - margin
-	upperBound := maxSize
+    // Calculate the lower and upper bounds
+    lowerBound := maxSize - margin
+    upperBound := maxSize
 
-	// Check if the file size is within the range
-	return fileSize >= lowerBound && fileSize <= upperBound
+    // Check if the file size is within the range
+    return fileSize >= lowerBound && fileSize <= upperBound
 }
 
 
@@ -158,11 +158,11 @@ func (tm *TransferManager) GetOngoingTransfersSize() int64 {
 
 
 func TrimAfterLast(input []byte, delimiter []byte) ([]byte, error) {
-	// Find the last occurance of the delimiter
-	position := bytes.LastIndex(input, delimiter)
-	if position == -1 {
-		return input, fmt.Errorf("delimiter not found in input")
-	}
+    // Find the last occurance of the delimiter
+    position := bytes.LastIndex(input, delimiter)
+    if position == -1 {
+        return input, fmt.Errorf("delimiter not found in input")
+    }
 
-	return input[position+len(delimiter):], nil
+    return input[position+len(delimiter):], nil
 }

@@ -30,9 +30,9 @@ var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client lo
 
 
 // Select next available file for transfer, if there are no more available send the end transfer
-// message to client, format the transfer reply with the file name and size, get the IP address
+// message to client. Format the transfer reply with the file name and size, get the IP address
 // of the current connection and read the port from the socket to format the dialer for the new
-// connection for file transfer, and pass the connection with other args into TransferFile().
+// connection for file transfer. Finally pass the connection with other args into TransferFile().
 //
 // @Parameters
 // - connection:  Network socket connection for handling messaging
@@ -105,7 +105,7 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppCon
 }
 
 
-// Upload the hash and ruleset files (if optional ruleset applied), goes into continual loop
+// Upload the hash and ruleset files (if optional ruleset applied). Goes into continual loop
 // where data is read from the message sockets connection-buffer, checks for a processing complete
 // message which signals exiting the loop, finally after the loop received cracked hash and log file.
 //
@@ -170,9 +170,9 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 }
 
 
-// Set up listener and enter loop where the ammount of active connections is checked,
+// Set up listener and enter loop where the ammount of active connections is checked
 // until the specified number of instances is equal to the active connections the
-// listener will wait until a connection is accepted, increment the active connections
+// listener will wait until a connection is accepted. Increment the active connections
 // counter and waitgroup, and pass the connection with other args into handler goroutine.
 //
 // @Parameters
@@ -277,7 +277,7 @@ func parseArgs() *config.AppConfig {
 
 
 // Parse command line args, make needed directories, merge wordlists and remove remaining
-// empty dirs, set up AWS access config with key and secret, set up logging manager
+// empty dirs. Set up AWS access config with key and secret, set up logging manager
 // instance, set up EC2 code passing command line args via user data, and start server.
 //
 func main() {

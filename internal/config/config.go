@@ -9,28 +9,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AppConfig is a wrapper for the configuration
+// AppConfig is a wrapper that ties the local and client yaml configs
 type AppConfig struct {
     LocalConfig  LocalConfig  `yaml:"local_config"`
     ClientConfig ClientConfig `yaml:"client_config"`
 }
 
-// LocalConfig contains the configuration for local server settings
+// LocalConfig contains the yaml configuration for local server settings
 type LocalConfig struct {
-    Region		    string  `yaml:"region"`
+    Region          string  `yaml:"region"`
     ListenerPort    int32   `yaml:"listener_port"`
     NumberInstances int32   `yaml:"number_instances"`
     LoadDir	   	    string  `yaml:"load_dir"`
     HashFilePath    string  `yaml:"hash_file_path"`
     RulesetPath     string  `yaml:"ruleset_path"`
     MaxSizeRange    float64 `yaml:"max_size_range"`
-    LogPath		    string  `yaml:"log_path"`
+    LogPath         string  `yaml:"log_path"`
 }
 
-// ClientConfig contains the configuration for the client settings
+// ClientConfig contains the yaml configuration for the client settings
 type ClientConfig struct {
-    Region			  string `yaml:"region"`
-    MaxFileSize    	  string `yaml:"max_file_size"`
+    Region            string `yaml:"region"`
+    MaxFileSize       string `yaml:"max_file_size"`
     MaxFileSizeInt64  int64  `yaml:"-"`              // Parsed later
     CrackingMode      string `yaml:"cracking_mode"`
     HashType          string `yaml:"hash_type"`
@@ -42,12 +42,17 @@ type ClientConfig struct {
     CharSet4          string `yaml:"char_set4"`
     HashMask          string `yaml:"hash_mask"`
     MaxTransfers      int32  `yaml:"max_transfers"`
-    LogMode			  string `yaml:"log_mode"`
-    LogPath			  string `yaml:"log_path"`
+    LogMode           string `yaml:"log_mode"`
+    LogPath           string `yaml:"log_path"`
 }
 
 
-// LoadConfig reads the YAML file and unmarshals it into AppConfig
+// LoadConfig reads the YAML file and unmarshals it into AppConfig struct in
+// memory, then validates the parsed data from local and client sections of yaml.
+//
+// @Returns
+// - The initialized AppConfig struct loaded with validated data
+//
 func LoadConfig(filePath string) *AppConfig {
     // Open the YAML file
     file, err := os.Open(filePath)
@@ -83,6 +88,15 @@ func LoadConfig(filePath string) *AppConfig {
 }
 
 
+// Takes the parsed data in LocalConfig struct and passes each
+// struct member into its corresponding validation routine.
+//
+// @Parameters
+// - localConfig:  The LocalConfig section of the parsed yaml data
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateLocalConfig(localConfig *LocalConfig) error {
     // Ensure a proper region was specified in the local config
     if !validate.ValidateRegion(localConfig.Region) {
@@ -132,6 +146,15 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 }
 
 
+// Takes the parsed data in ClientConfig struct and passes each
+// struct member into its corresponding validation routine.
+//
+// @Parameters
+// - clientConfig:  The ClientConfig section of the parsed yaml data
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateClientConfig(clientConfig *ClientConfig) error {
     var err error
 

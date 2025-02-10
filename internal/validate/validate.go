@@ -14,7 +14,17 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 )
 
-
+// Ensures that if there is a char set that is present and the proper cracking
+// mode that supports a hash mask with custom charsets is present.
+//
+// @Parameters
+// - crackingMode:  The hashcat cracking mode
+// - hashMask:  The hashcat hash mask
+// - args:  A iterator of 4 custom character sets
+//
+// @Returns
+// - true/false boolean depending on if valid hashmask and charsets are present
+//
 func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool {
     if hashMask == "" {
         return false
@@ -36,6 +46,12 @@ func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool
 }
 
 
+// In a continous loop, the input is gathered and tested to see if the path
+// exists that is a yaml file with data inside it.
+//
+// @Parameters
+// - configFilePath:  The path to the configuration to attempt to load
+//
 func ValidateConfigPath(configFilePath *string) {
     for {
         if *configFilePath == "" {
@@ -79,6 +95,14 @@ func ValidateConfigPath(configFilePath *string) {
 }
 
 
+// Validate the hashcat cracking mode to ensure it is supported.
+//
+// @Parameters
+// - hashMode:  The hashcat mode to validate
+//
+// @Returns
+// - A true/false boolean depending on whether the mode is supported or not
+//
 func ValidateCrackingMode(hashMode string) bool {
     hashModes := []string{"0", "3", "6", "7"}
 
@@ -87,6 +111,14 @@ func ValidateCrackingMode(hashMode string) bool {
 }
 
 
+// Ensure the passed in directory path exists and is a dir that has data.
+//
+// @Parameters
+// - dirPath:  The path to the directory to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateDir(dirPath string) error {
     // Check to see if the load directory exists and has files in it
     exists, isDir, hasData, err := disk.PathExists(dirPath)
@@ -104,6 +136,14 @@ func ValidateDir(dirPath string) error {
 }
 
 
+// Ensure the passed in file path exists and is a file that has data.
+//
+// @Parameters
+// - filePath:  The path to the file to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateFile(filePath string) error {
     // Check to see if the hash file exists
     exists, isDir, hasData, err := disk.PathExists(filePath)
@@ -111,7 +151,7 @@ func ValidateFile(filePath string) error {
         return err
     }
 
-    // If the hash file path does not exist OR is a directory OR does not have data
+    // If hash file path does not exist OR is a directory OR does not have data
     if !exists || isDir || !hasData {
         return fmt.Errorf("hash file path does not exist or is a directory or" +
                           " does not have data in it")
@@ -121,12 +161,22 @@ func ValidateFile(filePath string) error {
 }
 
 
+// Validate the path to the hash file and the file itself via ValidateFile().
+//
+// @Parameters
+// - filePath:  The path to the hash file to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateHashFile(filePath string) error {
+    // Validate the hash file path
     validPath, err := ValidatePath(filePath)
     if err != nil {
         return fmt.Errorf("improper hash_file_path specified in local config - %w", err)
     }
 
+    // Validate the hash file
     err = ValidateFile(validPath)
     if err != nil {
         return fmt.Errorf("error validating hash file based on %s path - %w", validPath, err)
@@ -136,6 +186,15 @@ func ValidateHashFile(filePath string) error {
 }
 
 
+// Ensure the hash mask is present while a supported cracking mode is selcted.
+//
+// crackingMode:  The hashcat cracking mode
+// hashMask:  The hashcat mask to validate
+//
+// @Returns
+// - true/false value depending on whether the hash mask is present
+//   with a supported cracking mode
+//
 func ValidateHashMask(crackingMode string, hashMask string) bool {
     supportedModes := []string{"3", "6", "7"}
 
@@ -144,6 +203,14 @@ func ValidateHashMask(crackingMode string, hashMask string) bool {
 }
 
 
+// Ensure the passed in hash type is a supported hashcat hash type.
+//
+// @Parameters
+// - hashType:  the hash type to validate
+//
+// @Returns
+// - true/false boolean depending on whether hash type is valid or not
+//
 func ValidateHashType(hashType string) bool {
     hashTypes := []string{"0", "10", "11", "12", "20", "21", "23", "30", "40", "50",
                           "60", "100", "101", "110", "111", "112", "120", "121", "122",
@@ -166,12 +233,29 @@ func ValidateHashType(hashType string) bool {
 }
 
 
+// Ensure the listener is above a non-privileged TCP port (over 1000).
+//
+// @Parameters
+// - listenerPort:  The port to be validated
+//
+// @Returns
+// - true/false boolean depending on whether the port is above 1000 or not
+//
 func ValidateListenerPort(listenerPort int32) bool {
     return listenerPort > 1000
 }
 
 
+// Ensure the load dir path is valid and validate the load dir.
+//
+// @Paramters
+// - dirPath:  Path to the load directory to be validated
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateLoadDir(dirPath string) error {
+    // Validate the load directory path
     validPath, err := ValidatePath(dirPath)
     if err != nil {
         return fmt.Errorf("improper load_dir specified in local config - %w", err)
@@ -187,6 +271,14 @@ func ValidateLoadDir(dirPath string) error {
 }
 
 
+// Ensure the passed in log mode is supported.
+//
+// @Parameters
+// - logMode:  The log mode to be validated
+//
+// @Returns
+// - true/false depending on whether log mode is supported or not
+//
 func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
 
@@ -195,6 +287,17 @@ func ValidateLogMode(logMode string) bool {
 }
 
 
+// Ensure the passed in max file size is of raw bytes format or in
+// unit format (KB, MB, GB). If in raw bytes it is simply converted to
+// int64, but for unit format a conversion to raw bytes then int64.
+//
+// @Parameters
+// - maxFileSize:  The max file size prior to parse and calculation/conversion
+//
+// @Returns
+// - The converted int64 max file size as raw bytes
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateMaxFileSize(maxFileSize string) (int64, error) {
     var byteSize int64
     var err error
@@ -232,21 +335,55 @@ func ValidateMaxFileSize(maxFileSize string) (int64, error) {
 }
 
 
+// Ensure the passed in max size range is 50 percent or below.
+//
+// @Parameters
+// - percentage:  The float percentage to validate
+//
+// @Returns
+// - true/false boolean depending on whether the percentage
+//   less than or equal to 50 or not
+//
 func ValidateMaxSizeRange(percentage float64) bool {
     return percentage <= 50.0
 }
 
 
+// Ensure the passed in max transfers is greater than zero.
+//
+// @Parameters
+// - maxTransfers:  The number of allowed file transfer simultaniously
+//
+// @Returns
+// - true/false boolean depending on whether the max transfers
+//   is greater than 0 or not
 func ValidateMaxTransfers(maxTransfers int32) bool {
     return maxTransfers > 0
 }
 
 
+// Ensure the passed in number instances is greater than zero.
+//
+// @Parameters
+// - maxTransfers:  The number instances to allocate
+//
+// @Returns
+// - true/false boolean depending on whether the number instances
+//   is greater than 0 or not
 func ValidateNumberInstances(numberInstances int32) bool {
     return numberInstances > 0
 }
 
 
+// Cleans the passed in path and ensures it is of proper format.
+//
+// @Parameters
+// - path:  The path to be validated
+//
+// @Returns
+// - The validated path
+// - Error if it occurs, otherwise nil on success
+//
 func ValidatePath(path string) (string, error) {
     // Ensure the path is not empty
     if path == "" {
@@ -270,6 +407,14 @@ func ValidatePath(path string) (string, error) {
 }
 
 
+// Ensure the passed in region is a valid AWS region.
+//
+// @Parameters
+// - region:  The AWS region to be validated
+//
+// @Returns
+// - true/false boolean depending on whether the AWS region is valid or not
+//
 func ValidateRegion(region string) bool {
     // Iterate through the endpoint partitions
     for _, currPartitions := range endpoints.DefaultPartitions() {
@@ -286,12 +431,22 @@ func ValidateRegion(region string) bool {
 }
 
 
+// Validate the path to the ruleset file and the file itself via ValidateFile().
+//
+// @Parameters
+// - filePath:  The path to the ruleset file to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func ValidateRulesetFile(filePath string) error {
+    // Validate the ruleset file path
     validPath, err := ValidatePath(filePath)
     if err != nil {
         return fmt.Errorf("improper ruleset_path specified in local config - %w", err)
     }
 
+    // Validate the ruleset file
     err = ValidateFile(validPath)
     if err != nil {
         return fmt.Errorf("error validating ruleset file based on %s path - %w", validPath, err)
@@ -301,6 +456,14 @@ func ValidateRulesetFile(filePath string) error {
 }
 
 
+// Ensure the passed in workload is suppported by hashcat.
+//
+// @Parameters
+// - workload:  The hashcat workload to be validated
+//
+// @Returns
+// - true/false boolean depending on whether the workload is supported or not
+//
 func ValidateWorkload(workload string) bool {
     workloads := []string{"1", "2", "3", "4"}
 

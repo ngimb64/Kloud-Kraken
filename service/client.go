@@ -59,7 +59,7 @@ var RulesetFilePath string     // Stores ruleset file when received
 // Parses the final section of hashcat output where result statistics reside,
 // splits the parsed section by newlines into slice, iterates through split slice
 // and trims the data before and after the colon delimiter into key-value variables
-// that are mapped to a map, the keys are sorted and iterated over to log the parsed
+// that are mapped to a map. The keys are sorted and iterated over to log the parsed
 // output in order established by the keys.
 //
 // @Parameters
@@ -307,7 +307,7 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
 
 
 // Sends transfer message to server, waits for transfer reply with file name and size or
-// the end transfer message, gets an available port and sends it to the server, and
+// the end transfer message. Gets an available port and sends it to the server, and
 // waits for an incoming connection from the server and uses that new connection to
 // initiate file transfer routine.
 //
@@ -409,10 +409,10 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 }
 
 
-// Sets up messaging buffer, receives the hash and ruleset files (if optional ruleset applied),
-// goes into continual loop where it checks the disk space and the size on the ongoing file
+// Sets up messaging buffer, receives the hash and ruleset files (if optional ruleset applied).
+// Goes into continual loop where it checks the disk space and the size on the ongoing file
 // transfers where the combined information is used to decide whether there is a proper amount
-// of disk space to initiate the transfer (if not there is a brief sleep to reiterate), after
+// of disk space to initiate the transfer (if not there is a brief sleep to reiterate). After
 // the loop concludes the cracked hashes and log files are sent back to the server.
 //
 // @Parameters
@@ -563,7 +563,7 @@ func makeClientDirs() {
 
 
 // Parse the command like flags into local and package level variables, make any
-// required dirs for program operation, set up the AWS access config with key and
+// required dirs for program operation. Set up the AWS access config with key and
 // secret, set up logging manager, and set up connection with server.
 //
 func main() {
