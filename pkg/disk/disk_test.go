@@ -93,7 +93,7 @@ func TestCreateRandFile(t *testing.T) {
     // Make a map to enforce unique string names
     nameMap := make(map[string]struct{})
     // Create a random file and return the path
-    filePath := disk.CreateRandFile(path, globals.RAND_STRING_SIZE, nameMap)
+    filePath := disk.CreateRandFile(path, globals.RAND_STRING_SIZE, "txt", nameMap)
 
     // Check to see if the file exists
     exists, isDir, hasData, err := disk.PathExists(filePath)

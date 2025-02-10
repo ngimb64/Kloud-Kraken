@@ -157,7 +157,7 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
         }
 
         // Create random file for cat command output
-        catPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
+        catPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, "txt", fileNameMap)
 
         // Cat files in cat list into result deleting originals
         walkErr = CatAndDelete(&catFiles, catPath, fileNameMap)
@@ -166,7 +166,7 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
         }
 
         // Create a new file for final duplicut command output
-        filterPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
+        filterPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, "txt", fileNameMap)
 
         // Run the oversized file via duplicut to output file, deleting original file
         sizeComparison, destFileSize := DuplicutAndDelete(catPath, filterPath,
@@ -186,7 +186,7 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
         }
 
         // Create a new file for final duplicut command output
-        shavePath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, fileNameMap)
+        shavePath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, "txt", fileNameMap)
 
         // For file greater than threshold, dd is optimal for resource scalability
         if destFileSize > (75 * globals.GB) {

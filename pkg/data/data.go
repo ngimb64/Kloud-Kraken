@@ -16,6 +16,12 @@ import (
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
+// Populate passed in buffer with random bytes of data.
+//
+// @Parameters
+// - buffer:  The buffer where the random bytes of data will be written
+// - maxBytes:  The max amount of bytes of data to store in buffer
+//
 func GenerateRandomBytes(buffer []byte, maxBytes int) {
     // Seed the random number generator to ensure unique results
     rand.Seed(uint64(time.Now().UnixNano()))
@@ -26,7 +32,16 @@ func GenerateRandomBytes(buffer []byte, maxBytes int) {
 }
 
 
-// Check if the file size is within the percentage range of the max size
+// Check if the file size is within the percentage range of the max size.
+//
+// @Parameters
+// - maxSize:  The max allowed file size
+// - fileSize:  The current size of the file
+// - percent:  The upper allowed percentange within max size
+//
+// @Returns
+// - true/false boolean whether the file size is within upper max range
+//
 func IsWithinPercentageRange(maxSize float64, fileSize float64,
                              percent float64) bool {
     // Calculate the margin based on the percentage
@@ -41,6 +56,16 @@ func IsWithinPercentageRange(maxSize float64, fileSize float64,
 }
 
 
+// Split the file size from its unit and return to different variables
+//
+// @Parameters
+// - unitFileSize:  The file size and unit as one string
+//
+// @Returns
+// - The parsed file size converted to float type
+// - The parsed file size unit
+// - Error if it occurs, otherwise nil on success
+//
 func ParseFileSizeType(unitFileSize string) (float64, string, error) {
     // Iterate through the string slice of file types
     for _, unit := range globals.FILE_SIZE_TYPES {
@@ -65,12 +90,18 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
 }
 
 
+// Creates buffer and populates it with random bytes and returns as string.
+//
+// @Parameters
+// - numberChars:  The number of random character to create and set buffer size
+//
+// @Returns
+// - The string of random characters converted from bytes
+//
 func RandStringBytes(numberChars int) string {
-    timestamp := time.Now().UnixNano()
-    // Seed the random number generator with the current Unix timestamp
-    rand.Seed(uint64(timestamp))
-
     byteSlice := make([]byte, numberChars)
+    // Seed the random number generator with the current Unix timestamp
+    rand.Seed(uint64(time.Now().UnixNano()))
 
     for index := range byteSlice {
         byteSlice[index] = LetterBytes[rand.Intn(len(LetterBytes))]
@@ -80,7 +111,15 @@ func RandStringBytes(numberChars int) string {
 }
 
 
-// Checks to see if element in slice contains the target string
+// Checks to see if element in slice contains the target string.
+//
+// @Parameters
+// - slice:  String slice to check if value is contained in an entry
+// - target:  Target string to check if contained in slice items
+//
+// @Returns
+// - true/false boolean depnding on whether target is in slice or not
+//
 func StringSliceContains(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
     for _, item := range slice {
@@ -93,7 +132,15 @@ func StringSliceContains(slice []string, target string) bool {
 }
 
 
-// Checks to see if element in slice equals the target string
+// Checks to see if element in slice is equal to the target string.
+//
+// @Parameters
+// - slice:  String slice to check if value is equal to an entry
+// - target:  Target string to check if equal to slice items
+//
+// @Returns
+// - true/false boolean depnding on whether target is in slice or not
+//
 func StringSliceHasItem(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
     for _, item := range slice {
@@ -106,7 +153,15 @@ func StringSliceHasItem(slice []string, target string) bool {
 }
 
 
-// Function to convert different size units to bytes and return as int64
+// Function to convert different size units to bytes and return as int64.
+//
+// @Parameters
+// - size:  The size of unit to be converted
+// - unit:  The unit to be converted to raw bytes
+//
+// @Returns
+// - The converted file size as raw bytes
+//
 func ToBytes(size float64, unit string) int64 {
     var byteSize float64
 
@@ -146,17 +201,27 @@ func (tm *TransferManager) AddTransferSize(size int64) {
     atomic.AddInt64(&tm.OngoingTransfersSize, size)
 }
 
-// RemoveTransferSize subtracts the specified size from the ongoing transfers.
-func (tm *TransferManager) RemoveTransferSize(size int64) {
-    atomic.AddInt64(&tm.OngoingTransfersSize, -size)
-}
-
 // GetOngoingTransfersSize returns the current total size of ongoing transfers.
 func (tm *TransferManager) GetOngoingTransfersSize() int64 {
     return atomic.LoadInt64(&tm.OngoingTransfersSize)
 }
 
+// RemoveTransferSize subtracts the specified size from the ongoing transfers.
+func (tm *TransferManager) RemoveTransferSize(size int64) {
+    atomic.AddInt64(&tm.OngoingTransfersSize, -size)
+}
 
+
+// Trims after the last occurance of specified delimiter.
+//
+// @Parameters
+// - input:  Input to parsed based on last delimiter
+// - delimiter:  The delimiter to specify where input should be parsed
+//
+// @Returns
+// - The parsed byte slice output
+// - Error if it occurs, otherwise nil on success
+//
 func TrimAfterLast(input []byte, delimiter []byte) ([]byte, error) {
     // Find the last occurance of the delimiter
     position := bytes.LastIndex(input, delimiter)

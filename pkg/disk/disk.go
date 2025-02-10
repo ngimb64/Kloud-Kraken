@@ -20,6 +20,14 @@ var FileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
 
 
 // AppendFile appends the contents of srcFile to destFile if the source file has data.
+//
+// @Parameters
+// - sourceFilePath:  The source file whose data will be appended to the dest
+// - destFilePath:  The destination file where the source files data will be appended
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func AppendFile(sourceFilePath string, destFilePath string) error {
     // Open the source file for reading
     sourceFile, err := os.Open(sourceFilePath)
@@ -64,6 +72,17 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
 }
 
 
+// Reads the passed in path (dir) and attempts to get the first file,
+// returning its name and size.
+//
+// @Parameters
+// - path:  The path to the directory to attempt to read a file
+//
+// @Returns
+// - The name of the retrieved file
+// - The size of the retrieved file
+// - Error if it occurs, otherwise nil on success
+//
 func CheckDirFiles(path string) (string, int64, error) {
     var fileName string
     var fileSize int64
@@ -102,7 +121,20 @@ func CheckDirFiles(path string) (string, int64, error) {
 }
 
 
-func CreateRandFile(dirPath string, nameLen int, nameMap map[string]struct{}) string {
+// Creates a random text file based on length of name and extension.
+// Unique files names are ensured utilizing a map.
+//
+// @Parameters
+// - dirPath:  The path to the directory where the file will be created
+// - nameLen:  The number of random characters for the name
+// - externsion:  The file extension to use (ex: "txt" leave out the .)
+// - nameMap:  Map used to ensure unique file names are enforced
+//
+// @Returns
+// - The formatted path to the newly create random file
+//
+func CreateRandFile(dirPath string, nameLen int, extension string,
+                    nameMap map[string]struct{}) string {
     var randoString string
 
     for {
@@ -120,7 +152,7 @@ func CreateRandFile(dirPath string, nameLen int, nameMap map[string]struct{}) st
     // Set the random string in the string map
     nameMap[randoString] = struct{}{}
     // Format generate string into path
-    randoPath := fmt.Sprintf("%s/%s.txt", dirPath, randoString)
+    randoPath := fmt.Sprintf("%s/%s.%s", dirPath, randoString, extension)
 
     // Create file for the wordlist output
     _, err := os.Create(randoPath)
@@ -132,6 +164,14 @@ func CreateRandFile(dirPath string, nameLen int, nameMap map[string]struct{}) st
 }
 
 
+// Checks the disk to get the total and available space.
+// The reserved space for the OS is subtracted from the free.
+//
+// @Returns
+// - The remaining space (free - OS_RESERVED)
+// - The total space
+// - Error if it occurs, otherwise nil on success
+//
 func DiskCheck() (int64, int64, error) {
     // Get the total and available disk space
     total, free, err := GetDiskSpace()
@@ -146,6 +186,12 @@ func DiskCheck() (int64, int64, error) {
 }
 
 
+// Get the recommended IO block size and convert it to int.
+//
+// @Returns
+// - The recommended block size
+// - Error if it occurs, otherwise nil on success
+//
 func GetBlockSize() (int, error) {
     var blockSize int
 
@@ -171,7 +217,13 @@ func GetBlockSize() (int, error) {
 }
 
 
-// GetDiskSpace gets the total and available space on the root disk.
+// Gets the total and available space on the root disk.
+//
+// @Returns
+// - The total space on disk
+// - the available free space
+// - Error if it occurs, otherwise nil on success
+//
 func GetDiskSpace() (total int64, free int64, err error) {
     var statfs unix.Statfs_t
 
@@ -190,6 +242,11 @@ func GetDiskSpace() (total int64, free int64, err error) {
 }
 
 
+// Creates the slice of directories passed in.
+//
+// @Parameters
+// - programDirs:  The slice of directories to be created
+//
 func MakeDirs(programDirs []string) {
     // Iterate through slice of dirs
     for _, dir := range programDirs {
@@ -212,7 +269,7 @@ func MakeDirs(programDirs []string) {
 // - Boolean for the item existing and having content
 // - Boolean for if the item is a directory
 // - Boolean for if the file or dir contains data
-// - Error return handler
+// - Error if it occurs, otherwise nil on success
 //
 func PathExists(filePath string) (bool, bool, bool, error) {
     // Get item info on passed in path
@@ -250,7 +307,17 @@ func PathExists(filePath string) (bool, bool, bool, error) {
 }
 
 
-// Function for each goroutine to walk the directory and select a file.
+// Function for each goroutine to walk the directory and select a unique file.
+//
+// @Parameters
+// - loadDir:  The directory to attempt to select a file
+// - maxFileSizeInt64:  The max file size to ensure any violators are not selected
+//
+// @Returns
+// - Path of the selected file
+// - Size of the selected file
+// - Error if it occurs, otherwise nil on success
+//
 func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
     var returnPath string
     var returnSize int64
