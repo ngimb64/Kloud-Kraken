@@ -1,17 +1,13 @@
-- Add needed docstrings in pkg packages
-
 - Write and run unit tests
     - Write tests for netio
     - Write tests for wordlist
     - Write tests for main
     - Write tests for client
 
-- Try improving tests related to file io with potential memory-based io providers (read blog)
-    - Also look into using testing lib for file related operations instead of os
+- Might (but probably not) have to add more messaging logic if client is unable to proceed with file transfer due to disk space
+    - The server uses a sync map to ensure unique files are selected so the file path should be removed
 
-- Run integration tests to get baseline working
-
-- Test and modify Makefile
+- Run integration tests locally to get baseline working
 
 - Implement mutual TLS over TCP for connections (Network Programming With Go book is great reference)
 
@@ -19,10 +15,21 @@
 
 - Add docstrings to added TLS code and wherever needed
 
+- Rerun integration tests locally
+
+- Test and modify Makefile
+
 - Build provisioner script for AMI to upload compiled client code and setup clients
 
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS
 
 - Do unit tests for Kloudlogs now that AWS code is added
+
+- Add needed docstrings in kloudlogs
+
+- Rerun integration tests in AWS environment
+
+- Try improving tests related to file io with potential memory-based io providers (read blog)
+    - Also look into using testing lib for file related operations instead of os
 
 - Try to fix rustmerger and replace original wordlist merging logic with it

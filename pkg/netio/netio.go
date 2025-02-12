@@ -11,11 +11,13 @@ import (
 	"sync"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"go.uber.org/zap"
 )
 
-// Handle reading data from the passed in file descriptor and write to the socket to client.
+// Handle reading data from the passed in file descriptor and write to
+// the socket to client.
 //
 // @Parameters
 // - connection:  The active TCP socket connection to transmit data
@@ -36,25 +38,53 @@ func FileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.Fi
 }
 
 
+// Format the transfer reply in buffer the file path and size sent to the client.
+//
+// @Parameters
+// - filePath:  The path to the file to be transfered
+// - fileSize:  The size of the file to be transfered
+// - buffer:  The buffer where the transfer reply is formatted
+// - prefix:  The prefix used on the message
+//
+// @Returns
+// - Return the length of the formatted transfer reply
+// - Error if it occurs, otherwise nil on success
+//
 func FormatTransferReply(filePath string, fileSize int64, buffer *[]byte,
-                         prefix []byte) int {
+                         prefix []byte) (int, error) {
     byteFilePath := []byte(filePath)
     byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
+    // Grab the file name from the end of the path
+    fileName, err := data.TrimAfterLast(byteFilePath, []byte("/"))
+    if err != nil {
+        return -1, err
+    }
 
     // Clear the buffer for sending transfer reply
     copy(*buffer, make([]byte, len(*buffer)))
     // Append the transfer request piece by piece in buffer
-    *buffer = append(prefix, byteFilePath...)
+    *buffer = append(prefix, fileName...)
     *buffer = append(*buffer, globals.COLON_DELIMITER...)
     *buffer = append(*buffer, byteFileSize...)
     *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
     // Calculate the len of the transfer reply message
-    sendLength := len(prefix) + len(byteFilePath) + len(globals.COLON_DELIMITER) +
+    sendLength := len(prefix) + len(fileName) + len(globals.COLON_DELIMITER) +
                   len(byteFileSize) + len(globals.TRANSFER_SUFFIX)
-    return sendLength
+    return sendLength, nil
 }
 
 
+// In a continuous loop, attempt to find a port to establish a listener.
+// If there is an error it will re-iterate until a listener is found and
+// returned with its corresponding port number.
+//
+// @Parameters
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
+// @Returns
+// - The established listener
+// - The port number the listener is established on
+//
 func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32) {
     var minPort int32 = 1001
     var maxPort int32 = 65535
@@ -66,29 +96,32 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
         // Attempt to establish a local listener for incoming connect
         testListener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
         // If the listener was succefully established
-        if err == nil {
-            return testListener, port
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "info",
+                                "Unable to obtain random listener port:  %w", err,
+                                zap.Int32("listener port", port))
+            continue
         }
 
-        kloudlogs.LogMessage(logMan, "info", "Unable to obtain random listener port:  %w", err,
-                             zap.Int32("listener port", port))
+        return testListener, port
     }
 }
 
 
-// Parse file name/size from buffer data based on colon separator
+// Parse file name:size from buffer data based on colon separator.
 //
 // @Parameters
 // - buffer:  The data read from socket buffer to be parsed
+// - prefix:  The message prefix format
 //
 // @Returns
 // - The byte slice with the file name
 // - A integer file size
-// - Either nil on success or a string error message on failure
+// - Error if it occurs, otherwise nil on success
 //
 func GetFileInfo(buffer []byte, prefix []byte) ([]byte, int64, error) {
     // Trim the delimiters around the file info
-    buffer = buffer[len(prefix) : len(buffer) - len(globals.TRANSFER_SUFFIX)]
+    buffer = buffer[len(prefix):len(buffer)-len(globals.TRANSFER_SUFFIX)]
     // Get the position of the colon delimiter
     colonPos := bytes.IndexByte(buffer, ':')
     // If the colon separator is missing
@@ -110,6 +143,16 @@ func GetFileInfo(buffer []byte, prefix []byte) ([]byte, int64, error) {
 }
 
 
+// Get the IP address and port of the passed in connection.
+//
+// @Parameters
+// - connection:  The connection to get the IP and port
+//
+// @Returns
+// - The parsed IP address
+// - The parsed port
+// - Error if it occurs, otherwise nil on success
+//
 func GetIpPort(connection net.Conn) (string, int32, error) {
     // Get the ip:port adress of the connected client
     stringAddr := connection.RemoteAddr().String()
@@ -149,11 +192,11 @@ func GetOptimalBufferSize(fileSize int64) int {
     // If the file is less than or equal to 1 MB
     case fileSize <= 1 * globals.MB:
         // 4 KB buffer
-        return 4 * 1024
+        return 4 * globals.KB
     // If the file is less than or equal to 100 MB
     case fileSize <= 100 * globals.MB:
         // 64 KB buffer
-        return 64 * 1024
+        return 64 * globals.KB
     // If the file is less than or equal to 1 GB
     case fileSize <= 1 * globals.GB:
         // 1 MB buffer
@@ -166,8 +209,8 @@ func GetOptimalBufferSize(fileSize int64) int {
 }
 
 
-// Takes the passed in file name and parses it to the file path to create the file where the
-// resulting file will be stored to lated be used for processing.
+// Sets up file to be received by allocating an optimal buffer size based on expected
+// file size and creating an empty file before proceeding to the file to socket handler.
 //
 // @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
@@ -218,10 +261,19 @@ func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64, me
 }
 
 
-// ReadWrapper clears the buffer before reading
-func ReadHandler(conn net.Conn, buffer *[]byte) (int, error) {
+// Handler for network socket read operations.
+//
+// @Parameters
+// - connection:  The network connection where data will be read from
+// - buffer:  The buffer where the read data will be stored
+//
+// @Returns
+// - The number of bytes read into the buffer
+// - Error if it occurs, otherwise nil on success
+//
+func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
     // Perform the read operation
-    bytesRead, err := conn.Read(*buffer)
+    bytesRead, err := connection.Read(*buffer)
     if err != nil {
         return bytesRead, fmt.Errorf("error reading from connection - %w", err)
     }
@@ -230,16 +282,23 @@ func ReadHandler(conn net.Conn, buffer *[]byte) (int, error) {
 }
 
 
-// Receives the file from the remote brain server
+// Waits for the start transfer message and parses the file name and size from it.
+// The file name is appended to the current path and passed into the receive handler.
 //
 // @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - buffer:  The buffer used for processing socket messaging
+// - messagingPort:  The original port used for server-client messaging
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+// - storePath:  The path where the received file will be stored
+// - prefix:  The expected prefix for the transfer reply
 //
-func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32, logMan *kloudlogs.LoggerManager,
-                 storePath string, prefix []byte) string {
-    // Wait for the brain server to send the start transfer message
+// @Returns
+// - The formatted file path with the received file name
+//
+func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
+                 logMan *kloudlogs.LoggerManager, storePath string, prefix []byte) string {
+    // Wait for the start transfer message
     _, err := ReadHandler(connection, &buffer)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %w", err)
@@ -288,8 +347,19 @@ func SocketToFileHander(connection net.Conn, transferBuffer []byte, file *os.Fil
 }
 
 
-func TransferFile(connection net.Conn, messagingPort int32, filePath string, fileSize int64,
-                  logMan *kloudlogs.LoggerManager) {
+// Gets the IP address and port, sets up optimal buffer based on expected file size, opens
+// the file and calls method to send the file via network socket. After the transfer is
+// complete the file is deleted from disk.
+//
+// @Parameters
+// - connection:  The network connection where the file will be sent
+// - messagingPort:  The port where the server-client messaging occurs
+// - filePath:  The path to the file to be transfered
+// - fileSize:  The size of the file to be transfered
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//
+func TransferFile(connection net.Conn, messagingPort int32, filePath string,
+                  fileSize int64, logMan *kloudlogs.LoggerManager) {
     // Get the IP address from the ip:port host address
     _, port, err := GetIpPort(connection)
     if err != nil {
@@ -326,6 +396,16 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string, fil
 }
 
 
+// Gets the file size, formats and sends the transfer reply, and calls transfer method.
+//
+// @Parameters
+// - connection:  The network connection where the file will be sent
+// - buffer:  The buffer used for server-client messaging
+// - listenerPort:  The port used for the listener for incomming connection
+// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+// - filePath:  The path to the file to be uploaded
+// - prefix:  The prefix of the transfer reply
+//
 func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
                 logMan *kloudlogs.LoggerManager, filePath string, prefix []byte) {
     // Get the file size based on saved path in config
@@ -336,7 +416,10 @@ func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
 
     fileSize := fileInfo.Size()
     // Format the transfer reply
-    sendLength := FormatTransferReply(filePath, fileSize, &buffer, prefix)
+    sendLength, err := FormatTransferReply(filePath, fileSize, &buffer, prefix)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal", "Error formatting transfer reply:  %w", err)
+    }
 
     // Send the file transfer reply with file name and size
     _, err = WriteHandler(connection, buffer, sendLength)
@@ -349,7 +432,17 @@ func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
 }
 
 
-// WriteWrapper writes data to the connection
+// Handler for network socket write operations.
+//
+// @Parameters
+// - connection:  The network connection where data will be wrote to
+// - buffer:  The buffer where the data will be wrote to
+// - writeBytes:  The number of bytes into the buffer to write
+//
+// @Returns
+// - The number of bytes wrote from the buffer
+// - Error if it occurs, otherwise nil on success
+//
 func WriteHandler(conn net.Conn, buffer []byte, writeBytes int) (int, error) {
     // Perform the write operation
     bytesWrote, err := conn.Write(buffer[:writeBytes])

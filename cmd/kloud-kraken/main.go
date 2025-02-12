@@ -62,9 +62,14 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppCon
         return
     }
 
-    // Format the transfer reply
-    sendLength := netio.FormatTransferReply(filePath, fileSize, &buffer,
-                                            globals.START_TRANSFER_PREFIX)
+    // Format transfer reply to inform client of selected file name and size
+    sendLength, err := netio.FormatTransferReply(filePath, fileSize, &buffer,
+                                                 globals.START_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error formatting transfer reply in server handleTransfer()")
+        return
+    }
 
     // Send the transfer reply with file name and size
     _, err = netio.WriteHandler(connection, buffer, sendLength)
