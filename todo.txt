@@ -1,4 +1,5 @@
 - Write and run unit tests
+    - Write most tests for kloudlogs
     - Write tests for netio
     - Write tests for wordlist
 
@@ -21,7 +22,7 @@
 
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS
 
-- Do unit tests for Kloudlogs now that AWS code is added
+- Do unit remaining tests for Kloudlogs now that AWS code is added
 
 - Add needed docstrings in kloudlogs
 

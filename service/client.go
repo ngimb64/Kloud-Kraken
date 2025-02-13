@@ -81,7 +81,6 @@ func logAndRemove(filePath string, output []byte, fileSize int64, transferManage
 
     // Delete the processed file
     os.Remove(filePath)
-
     // Remove the file size from transfer manager after deletion
     transferManager.RemoveTransferSize(fileSize)
 }
