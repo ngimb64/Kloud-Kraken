@@ -1,8 +1,6 @@
 - Write and run unit tests
     - Write tests for netio
     - Write tests for wordlist
-    - Write tests for main
-    - Write tests for client
 
 - Might (but probably not) have to add more messaging logic if client is unable to proceed with file transfer due to disk space
     - The server uses a sync map to ensure unique files are selected so the file path should be removed

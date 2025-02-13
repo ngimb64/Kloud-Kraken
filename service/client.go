@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -10,16 +11,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/hashcat"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 	"go.uber.org/zap"
@@ -56,64 +58,6 @@ var MessagePort32 int32        // Initial port for messaging communication
 var RulesetFilePath string     // Stores ruleset file when received
 
 
-// Parses the final section of hashcat output where result statistics reside,
-// splits the parsed section by newlines into slice, iterates through split slice
-// and trims the data before and after the colon delimiter into key-value variables
-// that are mapped to a map. The keys are sorted and iterated over to log the parsed
-// output in order established by the keys.
-//
-// @Parameters
-// - output:  Buffer where hashcat output is stored and to be parsed
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-//
-func parseHashcatOutput(output []byte, logMan *kloudlogs.LoggerManager) {
-    var keys []string
-    var logArgs []any
-    // Make a map to store parsed data
-    outputMap := make(map[string]string)
-
-    // Trim up to the end section with result data
-    parsedOutput, err := data.TrimAfterLast(output, []byte("=>"))
-    if err != nil {
-        log.Fatalf("Error pre-trimming:  %v", err)
-    }
-
-    // Split the byte slice into lines base on newlines
-    lines := bytes.Split(parsedOutput, []byte("\n"))
-
-    // Iterate through slice of byte slice lines
-    for _, line := range lines {
-        // Find the first occurance of the colon separator
-        index := bytes.Index(line, []byte(":"))
-        // If the line does not contain the index, skip it
-        if index == -1 {
-            continue
-        }
-
-        // Extract the key/value based on the colon separator
-        key := bytes.TrimSpace(line[:index])
-        value := bytes.TrimSpace(line[index+1:])
-        keyStr := string(key)
-
-        // Append the key to the keys string slice
-        keys = append(keys, keyStr)
-        // Store the key and value as strings in map
-        outputMap[keyStr] = string(value)
-    }
-
-    // Sort the keys by alphabetical order
-    sort.Strings(keys)
-
-    // Iterate through the sorted keys
-    for _, key := range keys {
-        // Add the key/value from output map based on sorted key value
-        logArgs = append(logArgs, zap.String(key, outputMap[key]))
-    }
-
-    kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
-}
-
-
 // Parse the hashcat output and log via kloudlogs, delete the processed file, and subtract
 // the delete file size from the transfer manager.
 //
@@ -130,38 +74,16 @@ func logAndRemove(filePath string, output []byte, fileSize int64, transferManage
     // Decrement wait group on local exit
     waitGroup.Done()
 
-    // Parse and log the hashcat output
-    parseHashcatOutput(output, logMan)
+    // Parse the hashcat output
+    logArgs := hashcat.ParseHashcatOutput(output, []byte("=>"))
+    // Log the hashcat output with kloudlogs
+    kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
+
     // Delete the processed file
     os.Remove(filePath)
 
     // Remove the file size from transfer manager after deletion
     transferManager.RemoveTransferSize(fileSize)
-}
-
-
-// Iterate through the parsed charsets and append them to the command options slice
-// until an empty charset is met.
-//
-// @Parameters
-// - cmdOptions:  The string slice of command args to be passed into hashcat
-//
-func appendCharsets(cmdOptions *[]string) {
-    charsets := []string{HashcatArgsStruct.CharSet1, HashcatArgsStruct.CharSet2,
-                         HashcatArgsStruct.CharSet3, HashcatArgsStruct.CharSet4}
-    var counter int32 = 1
-
-    // Iterate through hashcat charsets
-    for _, charset := range charsets {
-        // Exit loop is charset is empty or counter is greater than max charset
-        if charset == "" || counter > 4 {
-            break
-        }
-
-        // Append the formated charset flag and corresponding charset
-        *cmdOptions = append(*cmdOptions, fmt.Sprintf("-%d", counter), charset)
-        counter += 1
-    }
 }
 
 
@@ -204,6 +126,8 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
 
+    charsets := []string{HashcatArgsStruct.CharSet1, HashcatArgsStruct.CharSet2,
+                         HashcatArgsStruct.CharSet3, HashcatArgsStruct.CharSet4}
     cmdOptions := []string{}
 
     // If GPU optimization is to be applied, append it to options slice
@@ -259,19 +183,19 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
         case "3":
             // Appened incremental mode and available charsets for hash mask
             cmdArgs = append(cmdOptions, "--incremental")
-            appendCharsets(&cmdArgs)
+            hashcat.AppendCharsets(&cmdArgs, charsets)
             // Append the hash mask
             cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask)
         case "6":
             // Appened incremental mode and available charsets for hash mask
             cmdArgs = append(cmdOptions, "--incremental")
-            appendCharsets(&cmdArgs)
+            hashcat.AppendCharsets(&cmdArgs, charsets)
             // Append the wordlist path then the hash mask
             cmdArgs = append(cmdArgs, filePath, HashcatArgsStruct.HashMask)
         case "7":
             // Appened incremental mode and available charsets for hash mask
             cmdArgs = append(cmdOptions, "--incremental")
-            appendCharsets(&cmdArgs)
+            hashcat.AppendCharsets(&cmdArgs, charsets)
             // Append the hash mask then the wordlist path
             cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask, filePath)
         default:
@@ -335,14 +259,14 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
-    // Wait for the brain server to send the start transfer message
+    // Wait to receive the start transfer message from the server
     _, err = netio.ReadHandler(connection, &buffer)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %w", err)
         return
     }
 
-    // If the brain has completed transferring all data
+    // If the server has completed transferring all data
     if bytes.Contains(buffer, globals.END_TRANSFER_MARKER) {
         *transferComplete = true
         return
@@ -403,6 +327,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Now synchronized messages finished, handle transfer with new connection and
     // decrement counter when complete
     go func() {
+        defer listener.Close()
         netio.HandleTransferRecv(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
         MaxTransfers.Add(-1)
     }()
@@ -574,7 +499,6 @@ func main() {
     var awsRegion string
     var awsAccessKey string
     var awsSecretKey string
-    var awsConfig aws.Config
     var maxTransfers int
 
     // Define command line flags with default values and descriptions
@@ -609,12 +533,22 @@ func main() {
     // Create directories for client
     makeClientDirs()
 
+    var awsConfig aws.Config
+    var err error
+    // Set the AWS credentials provider
+    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
+
     // If AWS access and secret key are present
     if awsAccessKey != "" && awsSecretKey != "" {
-        // Set AWS config for CloudWatch logging
-        awsConfig = aws.Config {
-            Region:      awsRegion,
-            Credentials: credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""),
+        // Load default config and override with custom credentials and region
+        awsConfig, err = config.LoadDefaultConfig(
+            context.TODO(),
+            config.WithRegion(awsRegion),
+            config.WithCredentialsProvider(awsCreds),
+        )
+
+        if err != nil {
+            log.Fatalf("Error loading client AWS config:  %v", err)
         }
     // Otherwise if the logging is not set to local
     } else if logMode != "local" {
@@ -622,7 +556,7 @@ func main() {
     }
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig)
+    logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

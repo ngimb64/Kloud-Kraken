@@ -219,3 +219,27 @@ func TestTrimAfterLast(t *testing.T) {
         assert.Equal(test.output, output)
     }
 }
+
+
+func TestTrimEndChars(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    tests := []struct {
+        buffer []byte
+        char   byte
+        output []byte
+    } {
+        {[]byte("test.."), byte('.'), []byte("test")},
+        {[]byte("string."), byte('.'), []byte("string")},
+        {[]byte("foo...."), byte('.'), []byte("foo")},
+    }
+
+    // Iterate through slice of test structs
+    for _, test := range tests {
+        // Use struct members as input to call function and trim chars on end
+        output := data.TrimEndChars(test.buffer, test.char)
+        // Compare expected output to function output
+        assert.Equal(test.output, output)
+    }
+}

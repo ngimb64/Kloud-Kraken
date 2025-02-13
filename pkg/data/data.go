@@ -231,3 +231,25 @@ func TrimAfterLast(input []byte, delimiter []byte) ([]byte, error) {
 
     return input[position+len(delimiter):], nil
 }
+
+// Trims any number of specified byte char from the end of the byte slice.
+//
+// @Parameters
+// - buffer:  The buffer storing the data to end trim
+// - char:  The character to shave off the end of the buffer
+//
+// @Returns
+// - The parsed byte slice without any chars on the end
+//
+func TrimEndChars(buffer []byte, char byte) []byte {
+    // Get the index of the last element
+    index := len(buffer) - 1
+
+    // Loop backwards to find first instance of non-specified char
+    for index >= 0 && buffer[index] == char {
+        index--
+    }
+
+    // Return the slice up to last valid character
+    return buffer[:index+1]
+}

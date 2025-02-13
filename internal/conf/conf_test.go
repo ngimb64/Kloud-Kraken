@@ -1,4 +1,4 @@
-package config_test
+package conf_test
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ngimb64/Kloud-Kraken/internal/config"
+	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/stretchr/testify/assert"
 )
@@ -84,7 +84,7 @@ client_config:
     assert.Equal(nil, err)
 
     // Load the config into AppConfig struct
-    config := config.LoadConfig(yamlPath)
+    config := conf.LoadConfig(yamlPath)
 
     // Validate local config fields to original data
     assert.Equal("us-east-1", config.LocalConfig.Region)

@@ -100,9 +100,9 @@ func TestCreateRandFile(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the file path exists
-    assert.Equal(true, exists)
+    assert.True(exists)
     // Ensure the path is not a directory
-    assert.NotEqual(true, isDir)
+    assert.False(isDir)
     // Ensure the dummy file is empty
     assert.False(hasData)
 

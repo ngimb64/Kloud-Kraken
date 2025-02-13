@@ -1,6 +1,8 @@
 package kloudlogs
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -8,10 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Logger interface defines logging methods
 type Logger interface {
+    GetMemoryLog () string
     Debug(msg string, field ...zap.Field)
     Info(msg string, fields ...zap.Field)
     Warn(msg string, fields ...zap.Field)
@@ -21,113 +25,6 @@ type Logger interface {
     Fatal(msg string, fields ...zap.Field)
 }
 
-// ZapLogger implements Logger interface using file
-type ZapLogger struct {
-    logger *zap.Logger
-}
-
-// Logs an debug message to zap logger
-func (zapLog *ZapLogger) Debug(msg string, fields ...zap.Field) {
-    zapLog.logger.Debug(msg, fields...)
-}
-
-// Logs an info message to zap logger
-func (zapLog *ZapLogger) Info(msg string, fields ...zap.Field) {
-    zapLog.logger.Info(msg, fields...)
-}
-
-// Logs a warning message to zap logger
-func (zapLog *ZapLogger) Warn(msg string, fields ...zap.Field) {
-    zapLog.logger.Warn(msg, fields...)
-}
-
-// Logs a error message to zap logger
-func (zapLog *ZapLogger) Error(msg string, fields ...zap.Field) {
-    zapLog.logger.Error(msg, fields...)
-}
-
-// Logs a developer panic message to zap logger
-func (zapLog *ZapLogger) DPanic(msg string, fields ...zap.Field) {
-    zapLog.logger.DPanic(msg, fields...)
-}
-
-// Logs a panic message to zap logger
-func (zapLog *ZapLogger) Panic(msg string, fields ...zap.Field) {
-    zapLog.logger.Panic(msg, fields...)
-}
-
-// Logs a fatal message to zap logger
-func (zapLog *ZapLogger) Fatal(msg string, fields ...zap.Field) {
-    zapLog.logger.Fatal(msg, fields...)
-}
-
-// NewZapLogger creates a new zap logger instance with file logging
-func NewZapLogger(logFile string) (Logger, error) {
-    // Create a production config
-    cfg := zap.NewProductionConfig()
-    // Log to both stdout and file
-    cfg.OutputPaths = []string{"stdout", logFile}
-    // Log errors to stderr and file
-    cfg.ErrorOutputPaths = []string{"stderr", logFile}
-
-    // Build the logger with the config
-    logger, err := cfg.Build()
-    if err != nil {
-        return nil, fmt.Errorf("could not create zap logger: %w", err)
-    }
-
-    return &ZapLogger{logger: logger}, nil
-}
-
-
-// CloudWatchLogger implements Logger interface for CloudWatch
-type CloudWatchLogger struct {
-    client *cloudwatchlogs.Client
-}
-
-func (cwLogger *CloudWatchLogger) Debug(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch DEBUG:", msg)
-}
-
-func (cwLogger *CloudWatchLogger) Info(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch INFO:", msg)
-}
-
-func (cwLogger *CloudWatchLogger) Warn(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch WARN:", msg)
-}
-
-func (cwLogger *CloudWatchLogger) Error(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
-}
-
-func (cwLogger *CloudWatchLogger) DPanic(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
-}
-
-func (cwLogger *CloudWatchLogger) Panic(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
-}
-
-func (cwLogger *CloudWatchLogger) Fatal(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
-}
-
-// NewCloudWatchLogger creates a CloudWatch logger instance
-func NewCloudWatchLogger(awsConfig aws.Config) (Logger, error) {
-    client := cloudwatchlogs.NewFromConfig(awsConfig)
-    // Create and return CloudWatch logger
-    return &CloudWatchLogger{client: client}, nil
-}
-
-
 // LoggerManager manages multiple loggers (local, CloudWatch)
 type LoggerManager struct {
     localLogger  Logger
@@ -135,14 +32,15 @@ type LoggerManager struct {
 }
 
 // NewLoggerManager initializes local and CloudWatch loggers based on the flag
-func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config) (*LoggerManager, error) {
+func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
+                      logToMemory bool) (*LoggerManager, error) {
     var localLogger Logger
     var cloudLogger Logger
     var err error
 
-    // Initialize local logger (file-based)
+    // Initialize local logger (file-based) with optional memory logging
     if logDestination == "local" || logDestination == "both" {
-        localLogger, err = NewZapLogger(localLogFile)
+        localLogger, err = NewZapLogger(localLogFile, logToMemory)
         if err != nil {
             return nil, err
         }
@@ -160,6 +58,11 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config)
         localLogger:  localLogger,
         cloudLogger: cloudLogger,
     }, nil
+}
+
+// Get the zap log and stores it in memory
+func (logMan *LoggerManager) GetLog() string {
+    return logMan.localLogger.GetMemoryLog()
 }
 
 // Logs info message using both local and CloudWatch loggers
@@ -245,15 +148,171 @@ func (logMan *LoggerManager) LogFatal(msg string, fields ...zap.Field) {
 }
 
 
-// Wrapper to ensure logging always occurs in goroutines
-func LogMessage(manager *LoggerManager, level string, message string, args ...any) {
-    go LogMessageWithFields(manager, level, message, args...)
+// ZapLogger implements Logger interface using file
+// and optional memory logging
+type ZapLogger struct {
+    logger       *zap.Logger
+    memoryBuffer *bytes.Buffer
+}
+
+// NewZapLogger creates a new zap logger instance with either file logging or memory logging
+func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
+    var logger *zap.Logger
+    var err error
+
+    // If logging to memory
+    if logToMemory {
+        // Create a buffer to capture logs in memory
+        memoryBuffer := new(bytes.Buffer)
+
+        // Use zapcore directly for logging to memory
+        core := zapcore.NewCore(
+            zapcore.NewJSONEncoder(zap.NewProductionConfig().EncoderConfig),
+            zapcore.AddSync(memoryBuffer),
+            zap.InfoLevel,
+        )
+
+        // Create the logger with the custom core
+        logger := zap.New(core)
+
+        // Return the logger along with the memory buffer
+        return &ZapLogger{
+            logger:       logger,
+            memoryBuffer: memoryBuffer,
+        }, nil
+    } else {
+        // If logging to file
+        cfg := zap.NewProductionConfig()
+        cfg.OutputPaths = []string{"stdout", logFile}
+        cfg.ErrorOutputPaths = []string{"stderr", logFile}
+
+        // Build the file-based logger
+        logger, err = cfg.Build()
+        if err != nil {
+            return nil, fmt.Errorf("could not create file logger: %w", err)
+        }
+
+        return &ZapLogger{
+            logger:       logger,
+            memoryBuffer: nil,
+        }, nil
+    }
+}
+
+// Get the zap log and stores it in memory
+func (zapLog *ZapLogger) GetMemoryLog() string {
+    if zapLog.memoryBuffer != nil {
+        return zapLog.memoryBuffer.String()
+    }
+    return ""
+}
+
+// Logs an debug message to zap logger
+func (zapLog *ZapLogger) Debug(msg string, fields ...zap.Field) {
+    zapLog.logger.Debug(msg, fields...)
+}
+
+// Logs an info message to zap logger
+func (zapLog *ZapLogger) Info(msg string, fields ...zap.Field) {
+    zapLog.logger.Info(msg, fields...)
+}
+
+// Logs a warning message to zap logger
+func (zapLog *ZapLogger) Warn(msg string, fields ...zap.Field) {
+    zapLog.logger.Warn(msg, fields...)
+}
+
+// Logs a error message to zap logger
+func (zapLog *ZapLogger) Error(msg string, fields ...zap.Field) {
+    zapLog.logger.Error(msg, fields...)
+}
+
+// Logs a developer panic message to zap logger
+func (zapLog *ZapLogger) DPanic(msg string, fields ...zap.Field) {
+    zapLog.logger.DPanic(msg, fields...)
+}
+
+// Logs a panic message to zap logger
+func (zapLog *ZapLogger) Panic(msg string, fields ...zap.Field) {
+    zapLog.logger.Panic(msg, fields...)
+}
+
+// Logs a fatal message to zap logger
+func (zapLog *ZapLogger) Fatal(msg string, fields ...zap.Field) {
+    zapLog.logger.Fatal(msg, fields...)
 }
 
 
-func LogMessageWithFields(manager *LoggerManager, level string, message string, args ...any) {
+// CloudWatchLogger implements Logger interface for CloudWatch
+type CloudWatchLogger struct {
+    client *cloudwatchlogs.Client
+}
+
+// NewCloudWatchLogger creates a CloudWatch logger instance
+func NewCloudWatchLogger(awsConfig aws.Config) (Logger, error) {
+    client := cloudwatchlogs.NewFromConfig(awsConfig)
+    // Create and return CloudWatch logger
+    return &CloudWatchLogger{client: client}, nil
+}
+
+// Get the zap log and stores it in memory
+func (cwLogger *CloudWatchLogger) GetMemoryLog() string {
+    return ""
+}
+
+func (cwLogger *CloudWatchLogger) Debug(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch DEBUG:", msg)
+}
+
+func (cwLogger *CloudWatchLogger) Info(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch INFO:", msg)
+}
+
+func (cwLogger *CloudWatchLogger) Warn(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch WARN:", msg)
+}
+
+func (cwLogger *CloudWatchLogger) Error(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch ERROR:", msg)
+}
+
+func (cwLogger *CloudWatchLogger) DPanic(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch ERROR:", msg)
+}
+
+func (cwLogger *CloudWatchLogger) Panic(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch ERROR:", msg)
+}
+
+func (cwLogger *CloudWatchLogger) Fatal(msg string, fields ...zap.Field) {
+    // TODO:  implement CloudWatch code
+    fmt.Println("CloudWatch ERROR:", msg)
+}
+
+
+func LogToMap(jsonStr string) (map[string]interface{}, error) {
+    var logMap map[string]interface{}
+
+    // Store the json string data as key-values in log map
+    err := json.Unmarshal([]byte(jsonStr), &logMap)
+    if err != nil {
+        return nil, fmt.Errorf("failed to unmarshal JSON log: %w", err)
+    }
+
+    return logMap, nil
+}
+
+
+func LogMessage(manager *LoggerManager, level string, message string, args ...any) {
     argList := []any{}
     zapFields := []zap.Field {}
+    formattedMessage := ""
 
     // Iterate through passed in arg list
     for _, arg := range args {
@@ -268,8 +327,12 @@ func LogMessageWithFields(manager *LoggerManager, level string, message string, 
         }
     }
 
-    // Format the message with the args
-    formattedMessage := fmt.Sprintf(message, argList)
+    // If there are any non-zap args to format into the message
+    if len(argList) > 0 {
+        formattedMessage = fmt.Sprintf(message, argList)
+    } else {
+        formattedMessage = message
+    }
 
     // Log based on the level (info, error, warn) and include the fields
     switch level {

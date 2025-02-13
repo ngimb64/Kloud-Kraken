@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -11,9 +12,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/ngimb64/Kloud-Kraken/internal/config"
+	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
@@ -40,7 +41,7 @@ var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client lo
 // - appConfig:  The configuration struct with loaded yaml program data
 // - logMan:  The kloudlogs logger manager for local logging
 //
-func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppConfig,
+func handleTransfer(connection net.Conn, buffer []byte, appConfig *conf.AppConfig,
                     logMan *kloudlogs.LoggerManager) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
@@ -121,7 +122,7 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *config.AppCon
 // - logMan:  The kloudlogs logger manager for local logging
 //
 func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
-                      appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
+                      appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Close connection and decrement waitGroup counter on local exit
     defer connection.Close()
     defer waitGroup.Done()
@@ -184,7 +185,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 // - appConfig:  The configuration struct with loaded yaml program data
 // - logMan:  The kloudlogs logger manager for local logging
 //
-func startServer(appConfig *config.AppConfig, logMan *kloudlogs.LoggerManager) {
+func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Format listener port with parsed YAML data
     listenerPort := fmt.Sprintf(":%v", appConfig.LocalConfig.ListenerPort)
     // Establish listener on specified port
@@ -248,7 +249,7 @@ func makeServerDirs() {
 // @Returns
 // - AppConfig struct populated from yaml data
 //
-func parseArgs() *config.AppConfig {
+func parseArgs() *conf.AppConfig {
     var configFilePath string
 
     // If the config file path was not passed in
@@ -277,7 +278,7 @@ func parseArgs() *config.AppConfig {
     }
 
     // Load the configuration from the YAML file
-    return config.LoadConfig(configFilePath)
+    return conf.LoadConfig(configFilePath)
 }
 
 
@@ -286,8 +287,6 @@ func parseArgs() *config.AppConfig {
 // instance, set up EC2 code passing command line args via user data, and start server.
 //
 func main() {
-    var awsConfig aws.Config
-
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
@@ -310,14 +309,22 @@ func main() {
         log.Fatal("Missing either the access or the secret key for AWS")
     }
 
-    // Set AWS config for CloudWatch logging
-    awsConfig = aws.Config {
-        Region:      appConfig.LocalConfig.Region,
-        Credentials: credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, ""),
+    // Set the AWS credentials provider
+    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
+
+    // Load default config and override with custom credentials and region
+    awsConfig, err := config.LoadDefaultConfig(
+        context.TODO(),
+        config.WithRegion(appConfig.LocalConfig.Region),
+        config.WithCredentialsProvider(awsCreds),
+    )
+
+    if err != nil {
+        log.Fatalf("Error loading server AWS config:  %v", err)
     }
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig)
+    logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
