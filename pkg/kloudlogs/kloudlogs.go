@@ -203,6 +203,7 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
             logger:       logger,
             memoryBuffer: memoryBuffer,
         }, nil
+    // Othwise logging to file
     } else {
         // If logging to file
         cfg := zap.NewProductionConfig()

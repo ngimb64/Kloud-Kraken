@@ -118,7 +118,7 @@ Stopped: Wed Feb 12 23:01:47 2025$
     assert.Equal(nil, err)
 
     // Log the hashcat output with kloudlogs
-    kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
+    kloudlogs.LogMessage(logMan, "info", "TestParseHashcatOutput test message", logArgs...)
     // Get the log message from memory and parse it as a map
     logMap, err := kloudlogs.LogToMap(logMan.GetLog())
     // Ensure the error is nil meaning successful operation

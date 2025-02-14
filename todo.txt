@@ -1,7 +1,6 @@
 - Write and run unit tests
-    - Write most tests for kloudlogs
-    - Write tests for netio
     - Write tests for wordlist
+    - Write tests for netio
 
 - Might (but probably not) have to add more messaging logic if client is unable to proceed with file transfer due to disk space
     - The server uses a sync map to ensure unique files are selected so the file path should be removed
@@ -22,9 +21,9 @@
 
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS
 
-- Do unit remaining tests for Kloudlogs now that AWS code is added
+- Do remaining unit tests for Kloudlogs after AWS code is added
 
-- Add needed docstrings in kloudlogs
+- Add needed docstrings in kloudlogs if needed
 
 - Rerun integration tests in AWS environment
 
