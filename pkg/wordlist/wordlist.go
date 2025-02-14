@@ -27,14 +27,17 @@ import (
 //
 func CatAndDelete(catFiles *[]string, catPath string,
                   stringMap map[string]struct{}) error {
-    cmdArgs := []string{}
-    // Append the file paths to be run via cat
-    cmdArgs = append(cmdArgs, *catFiles...)
+    catCmd := "cat"
+    // Iterate through the file path and apppend them
+    for _, file := range *catFiles {
+        catCmd += fmt.Sprintf(" %s", file)
+    }
+
     // Append the rest of the command args
-    cmdArgs = append(cmdArgs, "2>/dev/null", ">", catPath)
+    catCmd += fmt.Sprintf(" 2>/dev/null > %s", catPath)
 
     // Format the unique merging command with current file to output file
-    cmd := exec.Command("cat", cmdArgs...)
+    cmd := exec.Command("sh", "-c", catCmd)
     // Execute the command and wait until it is complete
     err := cmd.Run()
     if err != nil {
@@ -75,20 +78,21 @@ func CatAndDelete(catFiles *[]string, catPath string,
 // - The size of the duplicut output file
 //
 func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
-                       stringMap map[string]struct{}) (int32, int64) {
+                       stringMap map[string]struct{}) (int32, int64, error) {
+    duplicutCmd := fmt.Sprintf("../../duplicut/duplicut %s -o %s 1>/dev/null 2>/dev/null",
+                               srcPath, destPath)
     // Format duplicut command to be executed
-    cmd := exec.Command("../../duplicut/duplicut", srcPath, "-o", destPath,
-                        "1>/dev/null", "2>/dev/null")
+    cmd := exec.Command("sh", "-c", duplicutCmd)
     // Execute the command and wait until it is complete
     err := cmd.Run()
     if err != nil {
-        log.Fatalf("Error running duplicut:  %v", err)
+        return -1, -1, err
     }
 
     // Delete the source file after duplicut
     err = os.Remove(srcPath)
     if err != nil {
-        log.Fatalf("Error deleting %s:  %v", srcPath, err)
+        return -1, -1, err
     }
 
     // Delete the source path from string map
@@ -97,7 +101,7 @@ func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
     // Get the size of resulting output file
     destPathInfo, err := os.Stat(destPath)
     if err != nil {
-        log.Fatalf("Error getting file info:  %v", err)
+        return -1, -1, err
     }
 
     // Get the output file size
@@ -105,13 +109,13 @@ func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
 
     // If the output file size is less than max
     if outfileSize < maxFileSize {
-        return 0, outfileSize
+        return 0, outfileSize, nil
     // If the output file size is equal max
     } else if outfileSize == maxFileSize {
-        return 1, outfileSize
+        return 1, outfileSize, nil
     // If the output file size is greater than max
     } else {
-        return 2, outfileSize
+        return 2, outfileSize, nil
     }
 }
 
@@ -235,8 +239,12 @@ func MergeWordlistDir(dirPath string, maxFileSize int64, maxRange float64) {
         filterPath := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE, "txt", fileNameMap)
 
         // Run the oversized file via duplicut to output file, deleting original file
-        sizeComparison, destFileSize := DuplicutAndDelete(catPath, filterPath,
-                                                          maxFileSize, fileNameMap)
+        sizeComparison, destFileSize, walkErr := DuplicutAndDelete(catPath, filterPath,
+                                                                   maxFileSize, fileNameMap)
+        if walkErr != nil {
+            return walkErr
+        }
+
         // If the size of the dest file is equal to max
         // OR resides within the top 15 percent of the max
         if sizeComparison == 1 || (sizeComparison == 0 &&
