@@ -295,7 +295,8 @@ func main() {
     // Merge the wordlists in the load dir based on max file size
     wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
                               appConfig.ClientConfig.MaxFileSizeInt64,
-                              appConfig.LocalConfig.MaxSizeRange)
+                              appConfig.LocalConfig.MaxSizeRange,
+                              int64(75 * globals.GB))
 
 
     // TODO:  create function to delete leftover directories after wordlist merging

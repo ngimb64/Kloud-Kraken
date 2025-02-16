@@ -27,7 +27,8 @@ func TestGenerateRandomBytes (t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Create a random file for testing
-    testFile := disk.CreateRandFile(path, globals.RAND_STRING_SIZE, "txt", nameMap)
+    testFile, _ := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
+                                       "kloudkraken-data", "", nameMap, false)
     // Open the file with write permissions
     file, err := os.OpenFile(testFile, os.O_RDWR|os.O_CREATE, 0644)
     // Ensure the error is nil meaning successful operation

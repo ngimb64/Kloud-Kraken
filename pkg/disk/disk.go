@@ -127,14 +127,18 @@ func CheckDirFiles(path string) (string, int64, error) {
 // @Parameters
 // - dirPath:  The path to the directory where the file will be created
 // - nameLen:  The number of random characters for the name
+// - baseName:  The base of file name which random random chars will be appended
 // - externsion:  The file extension to use (ex: "txt" leave out the .)
 // - nameMap:  Map used to ensure unique file names are enforced
+// - retHandler:  Boolean used to return the open file descriptor or not
 //
 // @Returns
 // - The formatted path to the newly create random file
 //
-func CreateRandFile(dirPath string, nameLen int, extension string,
-                    nameMap map[string]struct{}) string {
+func CreateRandFile(dirPath string, nameLen int, baseName string,
+                    extension string, nameMap map[string]struct{},
+                    retHandler bool) (string, *os.File) {
+    var randoPath string
     var randoString string
 
     for {
@@ -146,21 +150,42 @@ func CreateRandFile(dirPath string, nameLen int, extension string,
             continue
         }
 
+        // If a base file name is specified
+        if baseName != "" {
+            // Format randomly generate string appended on base name
+            randoString = fmt.Sprintf("%s%s", baseName, randoString)
+        }
+
         break
     }
 
     // Set the random string in the string map
     nameMap[randoString] = struct{}{}
-    // Format generate string into path
-    randoPath := fmt.Sprintf("%s/%s.%s", dirPath, randoString, extension)
+
+    // If no file extension specified
+    if extension == "" {
+        // Format generate string into path
+        randoPath = fmt.Sprintf("%s/%s", dirPath, randoString)
+    // If there is a file extension to format
+    } else {
+        // Format generate string into path
+        randoPath = fmt.Sprintf("%s/%s.%s", dirPath, randoString, extension)
+    }
 
     // Create file for the wordlist output
-    _, err := os.Create(randoPath)
+    file, err := os.Create(randoPath)
     if err != nil {
         log.Fatal(err)
     }
 
-    return randoPath
+    // If the return handler is true, return open file
+    if retHandler {
+        return randoPath, file
+    }
+
+    // Close the file descriptor since not in use
+    file.Close()
+    return randoPath, nil
 }
 
 

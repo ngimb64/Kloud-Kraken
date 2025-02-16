@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
 	"github.com/stretchr/testify/assert"
 )
@@ -80,7 +81,7 @@ func TestDuplicutAndDelete(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
-    testData := []byte("test\nstring\nfile\nmmmk\nfoo\nbar\nsham\nshamar")
+    testData := []byte("test\nstring\nfile\nmmmk\nfoo\nbar\nsham\nshamar\n")
     fileNameMap := make(map[string]struct{})
 
     // Create a random test file
@@ -128,7 +129,84 @@ func TestDuplicutAndDelete(t *testing.T) {
     // Ensure the size comparison is equal to less than indicator
     assert.Equal(int32(0), sizeComp)
     // Ensure the size is equal to the expected data
-    assert.Equal(int64(53), size)
+    assert.Equal(int64(len(testData)), size)
+
     // Delete the result file after test complete
-    os.Remove(duplicutOutFile.Name())
+    err = os.Remove(duplicutOutFile.Name())
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 }
+
+
+func TestReduceBlockSize(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Get the recommended block size
+    blockSize, err := disk.GetBlockSize()
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Reduce the block size to a reusable size
+    blockSize = wordlist.ReduceBlockSize(int64(10), int64(blockSize))
+    // Ensure the block size is is reduced to nearest binary chunk
+    assert.Equal(8, blockSize)
+}
+
+
+// func TestFileShaveDD(t *testing.T) {
+//     // Make reusable assert instance
+//     assert := assert.New(t)
+
+//     // Create a random test file for input data to shave
+//     inFile, err := os.CreateTemp("", "testfile")
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+
+//     // Set the random data size
+//     randomDataSize := 20 * globals.MB
+//     // Make a byte buffer based off iteration index
+//     buffer := make([]byte, randomDataSize)
+//     // Fill the buffer up with random data
+//     data.GenerateRandomBytes(buffer, randomDataSize)
+//     // Write the random data to the output file
+//     bytesWrote, err := inFile.Write(buffer)
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+//     // Close the file after data has been written
+//     inFile.Close()
+//     // Ensure the bytes wrote matches the buffer size
+//     assert.Equal(bytesWrote, randomDataSize)
+
+//     // Create a random test file for output shaved data
+//     outFile, err := os.CreateTemp("", "testfile")
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+//     // Close the output file
+//     outFile.Close()
+
+//     // Get the recommended block size
+//     blockSize, err := disk.GetBlockSize()
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+//     // Shave exceeding half of wordlist into new file
+//     err = wordlist.FileShaveDD(inFile.Name(), outFile.Name(),
+//                          blockSize, int64((10 * globals.MB)/blockSize))
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+
+//     // Get the file info of input file
+//     inFileInfo, err := os.Stat(inFile.Name())
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+
+//     // Get the file info of the resulting output file
+//     outFileInfo, err := os.Stat(outFile.Name())
+//     // Ensure the error is nil meaning successful operation
+//     assert.Equal(nil, err)
+
+//     // Ensure the input file is shaved down to half size
+//     assert.Equal(inFileInfo.Size(), int64(10 * globals.MB))
+//     // Ensure the input and output file sizes are equal
+//     assert.Equal(inFileInfo.Size(), outFileInfo.Size())
+// }
