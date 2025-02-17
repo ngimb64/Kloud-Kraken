@@ -134,6 +134,7 @@ func CheckDirFiles(path string) (string, int64, error) {
 //
 // @Returns
 // - The formatted path to the newly create random file
+// - The open file handler of create file is retHandler is true
 //
 func CreateRandFile(dirPath string, nameLen int, baseName string,
                     extension string, nameMap map[string]struct{},
@@ -153,7 +154,7 @@ func CreateRandFile(dirPath string, nameLen int, baseName string,
         // If a base file name is specified
         if baseName != "" {
             // Format randomly generate string appended on base name
-            randoString = fmt.Sprintf("%s%s", baseName, randoString)
+            randoString = baseName + randoString
         }
 
         break
@@ -165,11 +166,11 @@ func CreateRandFile(dirPath string, nameLen int, baseName string,
     // If no file extension specified
     if extension == "" {
         // Format generate string into path
-        randoPath = fmt.Sprintf("%s/%s", dirPath, randoString)
+        randoPath = dirPath + "/" + randoString
     // If there is a file extension to format
     } else {
         // Format generate string into path
-        randoPath = fmt.Sprintf("%s/%s.%s", dirPath, randoString, extension)
+        randoPath = dirPath + "/" + randoString + "." + extension
     }
 
     // Create file for the wordlist output
@@ -365,7 +366,7 @@ func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
         defer FileSelectionLock.Unlock()
 
         // Format the current file path
-        itemPath := fmt.Sprintf("%s/%s", loadDir, item.Name())
+        itemPath := loadDir + "/" + item.Name()
 
         // Get the file statistics for the current file
         itemInfo, err := os.Stat(itemPath)

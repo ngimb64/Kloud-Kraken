@@ -94,7 +94,7 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
         port := rand.Int31n(maxPort - minPort+1) + minPort
 
         // Attempt to establish a local listener for incoming connect
-        testListener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+        testListener, err := net.Listen("tcp", ":" + strconv.Itoa(int(port)))
         // If the listener was succefully established
         if err != nil {
             kloudlogs.LogMessage(logMan, "info",
@@ -301,7 +301,8 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
     // Wait for the start transfer message
     _, err := ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash transfer message from server:  %w", err)
+        kloudlogs.LogMessage(logMan, "fatal",
+                             "Error receiving hash transfer message from server:  %w", err)
     }
 
     // If the read data does not start with special delimiter or end with closed bracket
@@ -317,7 +318,7 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
     }
 
     // Format the file path based on received file name
-    filePath := fmt.Sprintf("%s/%s", storePath, fileName)
+    filePath := storePath + "/" + string(fileName)
     // Receive the file from server
     HandleTransferRecv(connection, filePath, fileSize, messagingPort, logMan, nil)
 
@@ -363,7 +364,8 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string,
     // Get the IP address from the ip:port host address
     _, port, err := GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error occcurred spliting host address to get IP/port:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error occcurred spliting host address to get IP/port:  %w", err)
         return
     }
 

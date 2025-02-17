@@ -2,10 +2,10 @@ package hashcat
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"go.uber.org/zap"
@@ -18,7 +18,7 @@ import (
 // - cmdOptions:  The string slice of command args to be passed into hashcat
 //
 func AppendCharsets(cmdOptions *[]string, charsets []string) {
-    var counter int32 = 1
+    var counter int = 1
 
     // Iterate through hashcat charsets
     for _, charset := range charsets {
@@ -28,7 +28,7 @@ func AppendCharsets(cmdOptions *[]string, charsets []string) {
         }
 
         // Append the formated charset flag and corresponding charset
-        *cmdOptions = append(*cmdOptions, fmt.Sprintf("-%d", counter), charset)
+        *cmdOptions = append(*cmdOptions, "-" + strconv.Itoa(counter), charset)
         counter += 1
     }
 }

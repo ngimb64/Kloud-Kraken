@@ -32,18 +32,18 @@ func GenerateRandomBytes(buffer []byte, maxBytes int) {
 }
 
 
-// Check if the file size is within the percentage range of the max size.
+// Check if the size is within the percentage range of the max size.
 //
 // @Parameters
 // - maxSize:  The max allowed file size
-// - fileSize:  The current size of the file
+// - currentSize:  The current size to compare to max range
 // - percent:  The upper allowed percentange within max size
 //
 // @Returns
-// - true/false boolean whether the file size is within upper max range
+// - true/false boolean whether the size is within upper max range
 //
-func IsWithinPercentageRange(maxSize float64, fileSize float64,
-                             percent float64) bool {
+func IsInPercentRange(maxSize float64, currentSize float64,
+                      percent float64) bool {
     // Calculate the margin based on the percentage
     margin := (percent / 100) * maxSize
 
@@ -52,7 +52,7 @@ func IsWithinPercentageRange(maxSize float64, fileSize float64,
     upperBound := maxSize
 
     // Check if the file size is within the range
-    return fileSize >= lowerBound && fileSize <= upperBound
+    return currentSize >= lowerBound && currentSize <= upperBound
 }
 
 
@@ -128,6 +128,7 @@ func StringSliceContains(slice []string, target string) bool {
             return true
         }
     }
+
     return false
 }
 
@@ -149,6 +150,7 @@ func StringSliceHasItem(slice []string, target string) bool {
             return true
         }
     }
+
     return false
 }
 

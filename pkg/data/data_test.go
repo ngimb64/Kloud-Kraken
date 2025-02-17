@@ -55,7 +55,7 @@ func TestGenerateRandomBytes (t *testing.T) {
 }
 
 
-func TestIsWithinPercentageRange(t *testing.T) {
+func TestIsInPercentRange(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
@@ -71,9 +71,9 @@ func TestIsWithinPercentageRange(t *testing.T) {
 
     // Iterate through slice of struct and pass its members into function
     for _, test := range tests {
-        assert.True(data.IsWithinPercentageRange(test.maxSize,
-                                                 test.fileSize,
-                                                 test.percent))
+        assert.True(data.IsInPercentRange(test.maxSize,
+                                          test.fileSize,
+                                          test.percent))
     }
 
     tests = []struct {
@@ -84,14 +84,13 @@ func TestIsWithinPercentageRange(t *testing.T) {
         {256.0 * globals.MB, 123.0 * globals.MB, 10.0},
         {64.0 * globals.KB, 16.0 * globals.KB, 20.0},
         {480.0 *globals.GB, 10.0 * globals.GB, 35.0},
-
     }
 
     // Iterate through slice of struct and pass its members into function
     for _, test := range tests {
-        assert.False(data.IsWithinPercentageRange(test.maxSize,
-                                                  test.fileSize,
-                                                  test.percent))
+        assert.False(data.IsInPercentRange(test.maxSize,
+                                           test.fileSize,
+                                           test.percent))
     }
 }
 

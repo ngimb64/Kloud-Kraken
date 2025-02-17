@@ -31,11 +31,11 @@ func CatAndDelete(catFiles *[]string, catPath string,
     catCmd := "cat"
     // Iterate through the file path and apppend them
     for _, file := range *catFiles {
-        catCmd += fmt.Sprintf(" %s", file)
+        catCmd += " " + file
     }
 
     // Append the rest of the command args
-    catCmd += fmt.Sprintf(" 2>/dev/null > %s", catPath)
+    catCmd += " 2>/dev/null > " + catPath
 
     // Format the unique merging command with current file to output file
     cmd := exec.Command("sh", "-c", catCmd)
@@ -80,9 +80,9 @@ func CatAndDelete(catFiles *[]string, catPath string,
 //
 func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
                        stringMap map[string]struct{}) (int32, int64, error) {
-    duplicutCmd := fmt.Sprintf("../../duplicut/duplicut %s -o %s 1>/dev/null 2>/dev/null",
-                               srcPath, destPath)
     // Format duplicut command to be executed
+    duplicutCmd := "../../duplicut/duplicut " + srcPath + " -o " +
+                   destPath + " 1>/dev/null 2>/dev/null"
     cmd := exec.Command("sh", "-c", duplicutCmd)
     // Execute the command and wait until it is complete
     err := cmd.Run()
@@ -190,16 +190,15 @@ func FileShaveDD (filterPath string, shavePath string, originalPath string,
     // the number of blocks to skip
     skipSize := float64(maxFileSize) / float64(blockSize)
     countSize := skipSize
+    blockSizeStr := strconv.Itoa(blockSize)
     // If the max file size divided by the block size has a remainder
     if maxFileSize % int64(blockSize) != 0 {
         skipSize += 1
     }
 
     // Format the dd command to copy exceeding data to new file
-    cmd := exec.Command("dd", fmt.Sprintf("if=%s", filterPath),
-                        fmt.Sprintf("of=%s", shavePath),
-                        fmt.Sprintf("bs=%d", blockSize),
-                        fmt.Sprintf("skip=%d", int(skipSize)))
+    cmd := exec.Command("dd", "if=" + filterPath, "of=" + shavePath, "bs=" + blockSizeStr,
+                        "skip=" + strconv.Itoa(int(skipSize)))
     // Execute the dd command
     err = cmd.Run()
     if err != nil {
@@ -207,10 +206,8 @@ func FileShaveDD (filterPath string, shavePath string, originalPath string,
     }
 
     // Format the dd command to copy original data to new file
-    cmd = exec.Command("dd", fmt.Sprintf("if=%s", filterPath),
-                       fmt.Sprintf("of=%s", originalPath),
-                       fmt.Sprintf("bs=%d", blockSize),
-                       fmt.Sprintf("count=%d", int(countSize)))
+    cmd = exec.Command("dd", "if=" + filterPath, "of=" + originalPath, "bs=" + blockSizeStr,
+                       "count=" + strconv.Itoa(int(countSize)))
     // Execute the dd command
     err = cmd.Run()
     if err != nil {
@@ -257,7 +254,7 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
 
     for {
         // Format the current count on the end of the output path
-        outPath := fmt.Sprintf("%s0%d", shavePath, count)
+        outPath := shavePath + "0" + strconv.Itoa(count)
 
         // Get the current file info
         fileInfo, err := os.Stat(outPath)
@@ -269,7 +266,7 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
         }
 
         // If file is within the top 5% of max file size meaning its full
-        if data.IsWithinPercentageRange(maxSizeFloat, float64(fileInfo.Size()), 5.0) {
+        if data.IsInPercentRange(maxSizeFloat, float64(fileInfo.Size()), 5.0) {
             // Add the current file to map for managing output files
             outFilesMap[outPath] = struct{}{}
         } else {
@@ -361,7 +358,7 @@ func MergeWordlistDir(dirPath string, maxFileSize int64,
         // If the size of the dest file is equal to max
         // OR resides within the top 15 percent of the max
         if sizeComparison == 1 || (sizeComparison == 0 &&
-        data.IsWithinPercentageRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
+        data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
             // Add the resulting path to out files map
             outFilesMap[filterPath] = struct{}{}
             return nil
