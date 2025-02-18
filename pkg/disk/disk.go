@@ -122,14 +122,14 @@ func CheckDirFiles(path string) (string, int64, error) {
 
 
 // Creates a random text file based on length of name and extension.
-// Unique files names are ensured utilizing a map.
+// Provides boolean toggle to specify whether file handle should stay open and
+// returned or be closed and not be returned.
 //
 // @Parameters
 // - dirPath:  The path to the directory where the file will be created
 // - nameLen:  The number of random characters for the name
 // - baseName:  The base of file name which random random chars will be appended
 // - externsion:  The file extension to use (ex: "txt" leave out the .)
-// - nameMap:  Map used to ensure unique file names are enforced
 // - retHandler:  Boolean used to return the open file descriptor or not
 //
 // @Returns
@@ -137,19 +137,13 @@ func CheckDirFiles(path string) (string, int64, error) {
 // - The open file handler of create file is retHandler is true
 //
 func CreateRandFile(dirPath string, nameLen int, baseName string,
-                    extension string, nameMap map[string]struct{},
-                    retHandler bool) (string, *os.File) {
+                    extension string, retHandler bool) (string, *os.File) {
     var randoPath string
     var randoString string
 
     for {
         // Re-create a random size string based on passed on length
         randoString = data.RandStringBytes(nameLen)
-        // Check to see if created file name string exists in string name map
-        _, exists := nameMap[randoString]
-        if exists {
-            continue
-        }
 
         // If a base file name is specified
         if baseName != "" {
@@ -157,36 +151,31 @@ func CreateRandFile(dirPath string, nameLen int, baseName string,
             randoString = baseName + randoString
         }
 
-        break
+        // If no file extension specified
+        if extension == "" {
+            // Format generate string into path
+            randoPath = dirPath + "/" + randoString
+        // If there is a file extension to format
+        } else {
+            // Format generate string into path
+            randoPath = dirPath + "/" + randoString + "." + extension
+        }
+
+        // Attempt to open the generated file, skip if it already exists
+        file, err := os.OpenFile(randoPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
+        if os.IsExist(err) {
+            continue
+        }
+
+        // If the return handler is true, return open file
+        if retHandler {
+            return randoPath, file
+        }
+
+        // Close the file descriptor since not in use
+        file.Close()
+        return randoPath, nil
     }
-
-    // Set the random string in the string map
-    nameMap[randoString] = struct{}{}
-
-    // If no file extension specified
-    if extension == "" {
-        // Format generate string into path
-        randoPath = dirPath + "/" + randoString
-    // If there is a file extension to format
-    } else {
-        // Format generate string into path
-        randoPath = dirPath + "/" + randoString + "." + extension
-    }
-
-    // Create file for the wordlist output
-    file, err := os.Create(randoPath)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // If the return handler is true, return open file
-    if retHandler {
-        return randoPath, file
-    }
-
-    // Close the file descriptor since not in use
-    file.Close()
-    return randoPath, nil
 }
 
 

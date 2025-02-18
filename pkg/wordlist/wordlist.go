@@ -21,13 +21,11 @@ import (
 // @Parameters
 // - catFiles:  Slice of the file paths of files to be concatenated via cat
 // - catPath:  The path to the resulting output file of the cat command
-// - stringMap:  Map used to ensure file names are unique
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func CatAndDelete(catFiles *[]string, catPath string,
-                  stringMap map[string]struct{}) error {
+func CatAndDelete(catFiles *[]string, catPath string) error {
     catCmd := "cat"
     // Iterate through the file path and apppend them
     for _, file := range *catFiles {
@@ -52,9 +50,6 @@ func CatAndDelete(catFiles *[]string, catPath string,
         if err != nil {
             return err
         }
-
-        // Delete the current file from string map
-        delete(stringMap, filePath)
     }
 
     // Reset the cat files list
@@ -71,15 +66,14 @@ func CatAndDelete(catFiles *[]string, catPath string,
 // - srcPath:  The path to the source file that needs de-deplication
 // - destPath:  The path to the resulting output file of duplicut
 // - maxFileSize:  The max allowed file size for wordlists
-// - stringMap:  The map used to enforce unique string names
 //
 // @Returns
 // - numerical indicator of output size comparison to max file size
 //   0 = less than, 1 = equal to, 2 = greater than
 // - The size of the duplicut output file
 //
-func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
-                       stringMap map[string]struct{}) (int32, int64, error) {
+func DuplicutAndDelete(srcPath string, destPath string,
+                       maxFileSize int64) (int32, int64, error) {
     // Format duplicut command to be executed
     duplicutCmd := "../../duplicut/duplicut " + srcPath + " -o " +
                    destPath + " 1>/dev/null 2>/dev/null"
@@ -95,9 +89,6 @@ func DuplicutAndDelete(srcPath string, destPath string, maxFileSize int64,
     if err != nil {
         return -1, -1, err
     }
-
-    // Delete the source path from string map
-    delete(stringMap, srcPath)
 
     // Get the size of resulting output file
     destPathInfo, err := os.Stat(destPath)
@@ -163,14 +154,15 @@ func ReduceBlockSize(srcSize int64, blockSize64 int64) int {
 // - maxFileSize:  The max allowed size for wordlist file
 //
 // @Returns
+// - The size of resulting file where extra data is shaved
 // - Error if it occurs, otherwise nil on success
 //
 func FileShaveDD(filterPath string, shavePath string, originalPath string,
-                 blockSize int, maxFileSize int64) error {
+                 blockSize int, maxFileSize int64) (int64, error) {
     // Get the file info of the source file
     fileInfo, err := os.Stat(filterPath)
     if err != nil {
-        return err
+        return -1, err
     }
 
     srcSize := fileInfo.Size()
@@ -182,7 +174,7 @@ func FileShaveDD(filterPath string, shavePath string, originalPath string,
         blockSize = ReduceBlockSize(srcSize, blockSize64)
         // If the source size was less than 2 (lowest binary)
         if blockSize == -1 {
-            return fmt.Errorf("source size was less than 2 - %d", srcSize)
+            return -1, fmt.Errorf("source size was less than 2 - %d", srcSize)
         }
     }
 
@@ -202,7 +194,7 @@ func FileShaveDD(filterPath string, shavePath string, originalPath string,
     // Execute the dd command
     err = cmd.Run()
     if err != nil {
-        return err
+        return -1, err
     }
 
     // Format the dd command to copy original data to new file
@@ -211,16 +203,22 @@ func FileShaveDD(filterPath string, shavePath string, originalPath string,
     // Execute the dd command
     err = cmd.Run()
     if err != nil {
-        return err
+        return -1, err
     }
 
     // Delete the original file once process is complete
     err = os.Remove(filterPath)
     if err != nil {
-        return err
+        return -1, err
     }
 
-    return nil
+    // Get the file info for the shave path
+    fileInfo, err = os.Stat(shavePath)
+    if err != nil {
+        return -1, err
+    }
+
+    return fileInfo.Size(), nil
 }
 
 
@@ -310,10 +308,12 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
 // - maxRange:  The range within the max that makes a file register as full
 // - maxCutSize:  The max size threshold where dd is utilized instead of cut
 //
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func MergeWordlistDir(dirPath string, maxFileSize int64,
-                      maxRange float64, maxCutSize int64) {
+                      maxRange float64, maxCutSize int64) error {
     catFiles := []string{}
-    fileNameMap := make(map[string]struct{})
     outFilesMap := make(map[string]struct{})
 
     // Get the recommended block size for if dd is utilized
@@ -339,44 +339,42 @@ func MergeWordlistDir(dirPath string, maxFileSize int64,
             return nil
         }
 
-        // Append the current file path to cat files list
+        // Append the current file path to cat files slice
         catFiles = append(catFiles, path)
 
-        // If there is less than 2 files in the cat files list, skip to next
+        // If there is less than 2 files in the cat files slice, skip to next
         if len(catFiles) < 2 {
             return nil
         }
 
         // Create random file for cat command output
         catPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                          "kloudkraken-data", "", fileNameMap, false)
+                                          "kloudkraken-data", "", false)
 
-        // Cat files in cat list into result deleting originals
-        walkErr = CatAndDelete(&catFiles, catPath, fileNameMap)
+        // Cat files in cat slice into result deleting originals
+        walkErr = CatAndDelete(&catFiles, catPath)
         if walkErr != nil {
             return walkErr
         }
 
         // Create a new file for final duplicut command output
         filterPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                             "kloudkraken-data", "", fileNameMap, false)
+                                             "kloudkraken-data", "", false)
 
         // Run the oversized file via duplicut to output file, deleting original file
-        sizeComparison, destFileSize, walkErr := DuplicutAndDelete(catPath, filterPath,
-                                                                   maxFileSize, fileNameMap)
+        sizeComp, destFileSize, walkErr := DuplicutAndDelete(catPath, filterPath, maxFileSize)
         if walkErr != nil {
             return walkErr
         }
 
-        // If the size of the dest file is equal to max
-        // OR resides within the top 15 percent of the max
-        if sizeComparison == 1 || (sizeComparison == 0 &&
+        // If the size of the dest file is equal to max OR resides within the max range
+        if sizeComp == 1 || (sizeComp == 0 &&
         data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
             // Add the resulting path to out files map
             outFilesMap[filterPath] = struct{}{}
             return nil
         // If the size of the dest file is less than max, skip to next
-        } else if sizeComparison == 0 {
+        } else if sizeComp == 0 {
             // Add the output file to cat files list for further processing
             catFiles = append(catFiles, filterPath)
             return nil
@@ -384,35 +382,53 @@ func MergeWordlistDir(dirPath string, maxFileSize int64,
 
         // Create a new file for final duplicut command output
         shavePath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                            "kloudkraken-data", "", fileNameMap, false)
+                                            "kloudkraken-data", "", false)
 
         // For file greater than threshold, dd is optimal for resource scalability
         if destFileSize > maxCutSize {
-            // Create a new file for original file data after excess filtered
-            originalPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                                   "kloudkraken-data", "", fileNameMap, false)
-            // Shaves any data large than excess size into new file
-            walkErr = FileShaveDD(filterPath, shavePath, originalPath, blockSize, maxFileSize)
+            for {
+                // Create a new file for original file data after excess filtered
+                originalPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                                    "kloudkraken-data", "", false)
+                // Shaves any data large than excess size into new file
+                shaveFileSize, walkErr := FileShaveDD(filterPath, shavePath, originalPath,
+                                                    blockSize, maxFileSize)
+                if walkErr != nil {
+                    return walkErr
+                }
+
+                // Add the maxed out file to the out files map
+                outFilesMap[originalPath] = struct{}{}
+
+                // If the shaved file still exceeds max file size
+                if shaveFileSize > maxFileSize {
+                    // Set result path as input and make new shave path for next iteration
+                    filterPath = shavePath
+                    shavePath, _ = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                                       "kloudkraken-data", "", false)
+                    continue
+                }
+
+                // Add the file with extra shaved data to cat files slice
+                catFiles = append(catFiles, shavePath)
+                break
+            }
         // For files less than threshold, split is optimal for efficiency
         } else {
             // Shaves any data large than excess size into new file
             walkErr = FileShaveSplit(filterPath, shavePath, maxFileSize,
                                      &catFiles, outFilesMap)
+            if walkErr != nil {
+                return walkErr
+            }
         }
-
-        if walkErr != nil {
-            return walkErr
-        }
-
-        // Add the maxed out file to the out files map
-        outFilesMap[filterPath] = struct{}{}
-        // Add the file with extra shaved data to cat files list
-        catFiles = append(catFiles, shavePath)
 
         return nil
     })
 
     if err != nil {
-        log.Fatalf("Error merging wordlists:  %v", err)
+        return err
     }
+
+    return nil
 }

@@ -90,11 +90,9 @@ func TestCreateRandFile(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
-    // Make a map to enforce unique string names
-    nameMap := make(map[string]struct{})
     // Create a random file and return the path
     filePath, _ := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
-                                       "kloudkraken-data", "", nameMap, false)
+                                       "kloudkraken-data", "", false)
 
     // Check to see if the file exists
     exists, isDir, hasData, err := disk.PathExists(filePath)

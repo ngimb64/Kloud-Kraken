@@ -12,27 +12,21 @@ import (
 )
 
 
-func TestGenerateRandomBytes (t *testing.T) {
+func TestGenerateRandomBytes(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
     // Create buffer and generate half with random bytes
     buffer := make([]byte, 128)
     data.GenerateRandomBytes(buffer, 128)
-    // Create map for ensuring unique file names
-    nameMap := make(map[string]struct{})
 
     //Get the current working directory
     path, err := os.Getwd()
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Create a random file for testing
-    testFile, _ := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
-                                       "kloudkraken-data", "", nameMap, false)
-    // Open the file with write permissions
-    file, err := os.OpenFile(testFile, os.O_RDWR|os.O_CREATE, 0644)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    testFile, file := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
+                                       "kloudkraken-data", "", true)
     // Write the random bytes to file
     bytesWrote, err := file.Write(buffer)
     // Ensure the error is nil meaning successful operation

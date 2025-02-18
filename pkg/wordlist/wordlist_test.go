@@ -17,14 +17,11 @@ func TestCatAndDelete(t *testing.T) {
 
     file1Data := []byte("test\nstring\nfile\nmmmk\n")
     file2Data := []byte("foo\nbar\nsham\nshamar")
-    fileNameMap := make(map[string]struct{})
 
     // Create a random test file
     file1, err := os.CreateTemp("", "testfile")
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
-    // Add the file name to unique map
-    fileNameMap[file1.Name()] = struct{}{}
 
     // Write the data to the file
     bytesWrote, err := file1.Write(file1Data)
@@ -39,8 +36,6 @@ func TestCatAndDelete(t *testing.T) {
     file2, err := os.CreateTemp("", "testfile")
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
-    // Add the file name to unique map
-    fileNameMap[file2.Name()] = struct{}{}
 
     // Write the data to the file
     bytesWrote, err = file2.Write(file2Data)
@@ -62,7 +57,7 @@ func TestCatAndDelete(t *testing.T) {
     catOutfile.Close()
 
     // Execute the cat command that deletes the input files
-    err = wordlist.CatAndDelete(&catFiles, catOutfile.Name(), fileNameMap)
+    err = wordlist.CatAndDelete(&catFiles, catOutfile.Name())
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
@@ -84,14 +79,11 @@ func TestDuplicutAndDelete(t *testing.T) {
     assert := assert.New(t)
 
     testData := []byte("test\nstring\nfile\nmmmk\nfoo\nbar\nsham\nshamar\n")
-    fileNameMap := make(map[string]struct{})
 
     // Create a random test file
     file1, err := os.CreateTemp("", "testfile")
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
-    // Add the file name to unique map
-    fileNameMap[file1.Name()] = struct{}{}
 
     // Write the data to the file
     bytesWrote, err := file1.Write(testData)
@@ -125,7 +117,7 @@ func TestDuplicutAndDelete(t *testing.T) {
 
     // Execute the cat command that filters duplicates in files
     sizeComp, size, err := wordlist.DuplicutAndDelete(file1.Name(), duplicutOutFile.Name(),
-                                                      int64(104857600), fileNameMap)
+                                                      int64(104857600))
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the size comparison is equal to less than indicator
@@ -199,13 +191,9 @@ func TestFileShaveDD(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Shave exceeding half of wordlist into new file
-    err = wordlist.FileShaveDD(inFile.Name(), shaveFile.Name(), originFile.Name(),
-                               blockSize, int64((10 * globals.MB)))
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Get the file info of the resulting output file
-    shaveFileInfo, err := os.Stat(shaveFile.Name())
+    shaveFileSize, err := wordlist.FileShaveDD(inFile.Name(), shaveFile.Name(),
+                                               originFile.Name(), blockSize,
+                                               int64((10 * globals.MB)))
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
@@ -217,7 +205,7 @@ func TestFileShaveDD(t *testing.T) {
     // Ensure the input file is shaved down to half size
     assert.Equal(originFileInfo.Size(), int64(10 * globals.MB))
     // Ensure the input and output file sizes are equal
-    assert.Equal(originFileInfo.Size(), shaveFileInfo.Size())
+    assert.Equal(originFileInfo.Size(), shaveFileSize)
 
     deleteFiles := []string{shaveFile.Name(), originFile.Name()}
 
