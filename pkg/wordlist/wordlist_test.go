@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
 	"github.com/stretchr/testify/assert"
@@ -154,59 +156,114 @@ func TestReduceBlockSize(t *testing.T) {
 }
 
 
-// func TestFileShaveDD(t *testing.T) {
-//     // Make reusable assert instance
-//     assert := assert.New(t)
+func TestFileShaveDD(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
 
-//     // Create a random test file for input data to shave
-//     inFile, err := os.CreateTemp("", "testfile")
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
+    // Create a random test file for input data to shave
+    inFile, err := os.CreateTemp("", "testfile")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 
-//     // Set the random data size
-//     randomDataSize := 20 * globals.MB
-//     // Make a byte buffer based off iteration index
-//     buffer := make([]byte, randomDataSize)
-//     // Fill the buffer up with random data
-//     data.GenerateRandomBytes(buffer, randomDataSize)
-//     // Write the random data to the output file
-//     bytesWrote, err := inFile.Write(buffer)
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
-//     // Close the file after data has been written
-//     inFile.Close()
-//     // Ensure the bytes wrote matches the buffer size
-//     assert.Equal(bytesWrote, randomDataSize)
+    // Set the size of random data
+    randomDataSize := 20 * globals.MB
+    // Make a byte buffer based off random data size
+    buffer := make([]byte, randomDataSize)
+    // Fill the buffer up with random data
+    data.GenerateRandomBytes(buffer, randomDataSize)
+    // Write the random data to the output file
+    bytesWrote, err := inFile.Write(buffer)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Close the file after data has been written
+    inFile.Close()
+    // Ensure the bytes wrote matches the buffer size
+    assert.Equal(bytesWrote, randomDataSize)
 
-//     // Create a random test file for output shaved data
-//     outFile, err := os.CreateTemp("", "testfile")
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
-//     // Close the output file
-//     outFile.Close()
+    // Create a random test file for output shaved data
+    shaveFile, err := os.CreateTemp("", "testfile")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Close the output file
+    shaveFile.Close()
 
-//     // Get the recommended block size
-//     blockSize, err := disk.GetBlockSize()
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
-//     // Shave exceeding half of wordlist into new file
-//     err = wordlist.FileShaveDD(inFile.Name(), outFile.Name(),
-//                          blockSize, int64((10 * globals.MB)/blockSize))
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
+    // Create a random test file for original data
+    originFile, err := os.CreateTemp("", "testfile")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Close the output file
+    originFile.Close()
 
-//     // Get the file info of input file
-//     inFileInfo, err := os.Stat(inFile.Name())
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
+    // Get the recommended block size
+    blockSize, err := disk.GetBlockSize()
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Shave exceeding half of wordlist into new file
+    err = wordlist.FileShaveDD(inFile.Name(), shaveFile.Name(), originFile.Name(),
+                               blockSize, int64((10 * globals.MB)))
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 
-//     // Get the file info of the resulting output file
-//     outFileInfo, err := os.Stat(outFile.Name())
-//     // Ensure the error is nil meaning successful operation
-//     assert.Equal(nil, err)
+    // Get the file info of the resulting output file
+    shaveFileInfo, err := os.Stat(shaveFile.Name())
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 
-//     // Ensure the input file is shaved down to half size
-//     assert.Equal(inFileInfo.Size(), int64(10 * globals.MB))
-//     // Ensure the input and output file sizes are equal
-//     assert.Equal(inFileInfo.Size(), outFileInfo.Size())
-// }
+    // Get the file info of orgiginal data before exceeding was shaved
+    originFileInfo, err := os.Stat(originFile.Name())
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Ensure the input file is shaved down to half size
+    assert.Equal(originFileInfo.Size(), int64(10 * globals.MB))
+    // Ensure the input and output file sizes are equal
+    assert.Equal(originFileInfo.Size(), shaveFileInfo.Size())
+
+    deleteFiles := []string{shaveFile.Name(), originFile.Name()}
+
+    // Iterate through resulting files and delete them
+    for _,file := range deleteFiles {
+        err = os.Remove(file)
+        assert.Equal(nil, err)
+    }
+}
+
+
+func TestFileShaveSplit(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Create a random test file for input data to shave
+    inFile, err := os.CreateTemp("", "testfile")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Set the size of random data
+    randomDataSize := 21 * globals.MB
+    // Make a byte buffer based off random data size
+    buffer := make([]byte, randomDataSize)
+    // Fill the buffer up with random data
+    data.GenerateRandomBytes(buffer, randomDataSize)
+    // Write the random data to the output file
+    bytesWrote, err := inFile.Write(buffer)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Close the file after data has been written
+    inFile.Close()
+    // Ensure the bytes wrote matches the buffer size
+    assert.Equal(bytesWrote, randomDataSize)
+
+    catFiles := []string{}
+    outFilesMap := make(map[string]struct{})
+
+    // Cut file into 10 2MB files and a 1MB overflow file
+    wordlist.FileShaveSplit(inFile.Name(), "/tmp/testfile", 2 * globals.MB,
+                            &catFiles, outFilesMap)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Ensure proper number of output files
+    assert.Equal(10, len(outFilesMap))
+    // Ensure proper number of file to pass back into cat
+    assert.Equal(1, len(catFiles))
+}

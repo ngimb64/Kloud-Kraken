@@ -165,8 +165,8 @@ func ReduceBlockSize(srcSize int64, blockSize64 int64) int {
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func FileShaveDD (filterPath string, shavePath string, originalPath string,
-                  blockSize int, maxFileSize int64) error {
+func FileShaveDD(filterPath string, shavePath string, originalPath string,
+                 blockSize int, maxFileSize int64) error {
     // Get the file info of the source file
     fileInfo, err := os.Stat(filterPath)
     if err != nil {
@@ -241,7 +241,7 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
     // Convert the max file size to string
     maxFileSizeStr := strconv.Itoa(int(maxFileSize))
     // Format the cut command to be executed
-    cmd := exec.Command("cut", "--numeric-suffixes", "-C",
+    cmd := exec.Command("split", "--numeric-suffixes", "-C",
                         maxFileSizeStr, filterPath, shavePath)
     // Execute the cut command
     err := cmd.Run()
@@ -249,8 +249,18 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
         return err
     }
 
+    // Delete the original file after it is split
+    err = os.Remove(filterPath)
+    if err != nil {
+        return err
+    }
+
     count := 0
     maxSizeFloat := float64(maxFileSize)
+
+
+    // TODO:  currently only supports 0-9 need to figure a way to increment the second column in
+
 
     for {
         // Format the current count on the end of the output path
@@ -346,7 +356,7 @@ func MergeWordlistDir(dirPath string, maxFileSize int64,
 
         // Create a new file for final duplicut command output
         filterPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                            "kloudkraken-data", "", fileNameMap, false)
+                                             "kloudkraken-data", "", fileNameMap, false)
 
         // Run the oversized file via duplicut to output file, deleting original file
         sizeComparison, destFileSize, walkErr := DuplicutAndDelete(catPath, filterPath,
