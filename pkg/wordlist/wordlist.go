@@ -255,16 +255,13 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
         return err
     }
 
-    count := 0
+    outerCount := 0
+    innerCount := 0
     maxSizeFloat := float64(maxFileSize)
-
-
-    // TODO:  currently only supports 0-9 need to figure a way to increment the second column in
-
 
     for {
         // Format the current count on the end of the output path
-        outPath := shavePath + "0" + strconv.Itoa(count)
+        outPath := shavePath + strconv.Itoa(innerCount) + strconv.Itoa(outerCount)
 
         // Get the current file info
         fileInfo, err := os.Stat(outPath)
@@ -284,7 +281,13 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
             *catFiles = append(*catFiles, outPath)
         }
 
-        count += 1
+        if outerCount >= 9 {
+            innerCount += 1
+            outerCount = 0
+            continue
+        }
+
+        outerCount += 1
     }
 
     return nil

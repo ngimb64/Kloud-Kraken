@@ -266,4 +266,16 @@ func TestFileShaveSplit(t *testing.T) {
     assert.Equal(10, len(outFilesMap))
     // Ensure proper number of file to pass back into cat
     assert.Equal(1, len(catFiles))
+
+    // Delete the file in cat files slice
+    err = os.Remove(catFiles[0])
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Iterate through output files and delete them
+    for fileName := range outFilesMap {
+        err = os.Remove(fileName)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+    }
 }
