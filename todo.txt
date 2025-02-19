@@ -1,5 +1,4 @@
 - Write and run unit tests
-    - Write tests for wordlist
     - Write tests for netio
 
 - Might (but probably not) have to add more messaging logic if client is unable to proceed with file transfer due to disk space

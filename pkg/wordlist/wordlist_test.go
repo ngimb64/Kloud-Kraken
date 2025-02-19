@@ -267,3 +267,77 @@ func TestFileShaveSplit(t *testing.T) {
         assert.Equal(nil, err)
     }
 }
+
+
+func TestMergeWordlistDir(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    dirPath := "testdir"
+    // Create the test directory
+    err := os.Mkdir(dirPath, os.ModePerm)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Copy the directory with test wordlist data to test dir
+    err = os.CopyFS(dirPath, os.DirFS("../../testdata"))
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    maxFileSize := int64(20 * globals.MB)
+    // Merge the created wordlists in the wordlist dir
+    err = wordlist.MergeWordlistDir(dirPath, maxFileSize, 15.0,
+                                    int64(75 * globals.GB))
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    dirItems, err := os.ReadDir(dirPath)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    fullFiles := []string{}
+    shaveFiles := []string{}
+
+    // Iterate through the items in the test dir
+    for _, item := range dirItems {
+        if item.IsDir() {
+            continue
+        }
+
+        itemPath := dirPath + "/" + item.Name()
+
+        // Get the current file info
+        itemInfo, err := os.Stat(itemPath)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+
+        // Get the current file size and ensure it is less than max
+        fileSize := itemInfo.Size()
+        assert.Less(fileSize, maxFileSize)
+
+        // If the file is within 5 percent or equal to the max file size
+        if data.IsInPercentRange(float64(maxFileSize), float64(fileSize), 5.0) ||
+        fileSize == maxFileSize {
+            fullFiles = append(fullFiles, itemPath)
+        } else {
+            shaveFiles = append(shaveFiles, itemPath)
+        }
+    }
+
+    // Ensure there are 5 full files
+    assert.Equal(5, len(fullFiles))
+    // Ensure there is one leftover file
+    assert.Equal(1, len(shaveFiles))
+
+    // Get the size of the leftover file
+    fileInfo, err := os.Stat(shaveFiles[0])
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the leftover file is expected size
+    assert.Equal(int64(6369586), fileInfo.Size())
+
+    // Delete test directory and its contents after test
+    err = os.RemoveAll(dirPath)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+}
