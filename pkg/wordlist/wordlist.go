@@ -300,6 +300,43 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
 }
 
 
+// Sets up the cat files slice and out files map, gets the block size, and
+// call filepath walk with closure function above until complete.
+//
+// @Parameters
+// - dirPath:  The path to the directory where wordlist merging occurs
+// - maxFileSize:  The maximum size a wordlist should be
+// - maxRange:  The range within the max that makes a file register as full
+// - maxCutSize:  The max size threshold where dd is utilized instead of cut
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func MergeWordlistDir(dirPath string, maxFileSize int64,
+                      maxRange float64, maxCutSize int64) error {
+    catFiles := []string{}
+    outFilesMap := make(map[string]struct{})
+
+    // Get the recommended block size for if dd is utilized
+    blockSize, err := disk.GetBlockSize()
+    if err != nil {
+        return err
+    }
+
+    // Iterate through the contents of the directory and any subdirectories
+    err = filepath.Walk(dirPath, func(path string, itemInfo os.FileInfo, walkErr error) error {
+        return MergeWordlists(dirPath, maxFileSize, maxRange, maxCutSize, &catFiles,
+                              outFilesMap, blockSize, path, itemInfo, walkErr)
+    })
+
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+
 // Walks through passed in dir path appending files to the cat list until
 // multiple are available, then performing cat on them while original files
 // are deleted. After the cat result is passed into duplicut where the original
@@ -326,7 +363,7 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func MergeWordLists(dirPath string, maxFileSize int64, maxRange float64, maxCutSize int64,
+func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutSize int64,
                     catFiles *[]string, outFilesMap map[string]struct{}, blockSize int,
                     path string, itemInfo os.FileInfo, walkErr error) error {
     if walkErr != nil {
@@ -432,37 +469,35 @@ func MergeWordLists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
 }
 
 
-// Sets up the cat files slice and out files map, gets the block size, and
-// call filepath walk with closure function above until complete.
+// Deletes any subdirs and their contents in passed in dir path.
 //
 // @Parameters
-// - dirPath:  The path to the directory where wordlist merging occurs
-// - maxFileSize:  The maximum size a wordlist should be
-// - maxRange:  The range within the max that makes a file register as full
-// - maxCutSize:  The max size threshold where dd is utilized instead of cut
+// - dirPath:  The path to the directory to delete subdirs
 //
-// @Returns
+// Returns
 // - Error if it occurs, otherwise nil on success
 //
-func MergeWordlistDir(dirPath string, maxFileSize int64,
-                      maxRange float64, maxCutSize int64) error {
-    catFiles := []string{}
-    outFilesMap := make(map[string]struct{})
-
-    // Get the recommended block size for if dd is utilized
-    blockSize, err := disk.GetBlockSize()
+func RemoveMergeSubdirs(dirPath string) error {
+    // Get the contents of the wordlist merge dirs
+    dirItems, err := os.ReadDir(dirPath)
     if err != nil {
         return err
     }
 
-    // Iterate through the contents of the directory and any subdirectories
-    err = filepath.Walk(dirPath, func(path string, itemInfo os.FileInfo, walkErr error) error {
-        return MergeWordLists(dirPath, maxFileSize, maxRange, maxCutSize, &catFiles,
-                              outFilesMap, blockSize, path, itemInfo, walkErr)
-    })
+    // Iterate through wordlist merge dir contents
+    for _, item := range dirItems {
+        if !item.IsDir() {
+            continue
+        }
 
-    if err != nil {
-        return err
+        // Format the dir name onto path
+        subdirPath := dirPath + "/" + item.Name()
+
+        // Remove the subdir and any contents
+        err = os.RemoveAll(subdirPath)
+        if err != nil {
+            return err
+        }
     }
 
     return nil

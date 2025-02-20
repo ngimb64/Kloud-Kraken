@@ -341,3 +341,53 @@ func TestMergeWordlistDir(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
+
+
+func TestRemoveMergeSubdirs(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    dirPath := "testdir"
+    // Create the test directory
+    err := os.Mkdir(dirPath, os.ModePerm)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Copy the directory with test wordlist data to test dir
+    err = os.CopyFS(dirPath, os.DirFS("../../testdata"))
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    testDirs := []string{dirPath + "/" + "testdir1",
+                         dirPath + "/" + "testdir2",
+                         dirPath + "/" + "testdir3",
+                         dirPath + "/" + "testdir4"}
+
+    // Iterate through the test dirs and create them
+    for _, testDir := range testDirs {
+        err = os.Mkdir(testDir, os.ModePerm)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+    }
+
+    // Delete any subdirectories just created leaving only files
+    err = wordlist.RemoveMergeSubdirs(dirPath)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Read the items in the wordlist merge dir
+    dirItems, err := os.ReadDir(dirPath)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Iterate through the items in the test dir and
+    // ensure there are no subdirectories
+    for _, item := range dirItems {
+        assert.False(item.IsDir())
+    }
+
+    // Delete test directory and its contents after test
+    err = os.RemoveAll(dirPath)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+}
