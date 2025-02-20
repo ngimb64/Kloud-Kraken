@@ -301,9 +301,11 @@ func main() {
         log.Fatalf("Error merging wordlists:  %v", err)
     }
 
-
-    // TODO:  create function to delete leftover directories after wordlist merging
-
+    // Delete any leftover folders in load dir
+    err = wordlist.RemoveMergeSubdirs(appConfig.LocalConfig.LoadDir)
+    if err != nil {
+        log.Fatalf("Error deleting load dir subdirs:  %v", err)
+    }
 
     // Get the AWS access and secret key environment variables
     awsAccessKey := os.Getenv("AWS_ACCESS_KEY")

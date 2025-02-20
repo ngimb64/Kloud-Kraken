@@ -292,7 +292,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Make a small int32 buffer
     int32Buffer := make([]byte, 4)
     // Get random available port as a listener
-    listener, port := netio.GetAvailableListener(logMan)
+    listener, port := netio.GetAvailableListener()
 
     // Convert int32 port to bytes and write it into the buffer
     err = binary.Write(bytes.NewBuffer(int32Buffer), binary.LittleEndian, port)

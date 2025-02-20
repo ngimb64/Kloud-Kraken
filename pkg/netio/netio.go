@@ -78,14 +78,11 @@ func FormatTransferReply(filePath string, fileSize int64, buffer *[]byte,
 // If there is an error it will re-iterate until a listener is found and
 // returned with its corresponding port number.
 //
-// @Parameters
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-//
 // @Returns
 // - The established listener
 // - The port number the listener is established on
 //
-func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32) {
+func GetAvailableListener() (net.Listener, int32) {
     var minPort int32 = 1001
     var maxPort int32 = 65535
 
@@ -97,9 +94,6 @@ func GetAvailableListener(logMan *kloudlogs.LoggerManager) (net.Listener, int32)
         testListener, err := net.Listen("tcp", ":" + strconv.Itoa(int(port)))
         // If the listener was succefully established
         if err != nil {
-            kloudlogs.LogMessage(logMan, "info",
-                                "Unable to obtain random listener port:  %w", err,
-                                zap.Int32("listener port", port))
             continue
         }
 
@@ -163,13 +157,13 @@ func GetIpPort(connection net.Conn) (string, int32, error) {
     // Split the IP and port from address, saving IP in variable
     ipAddr, strPort, err := net.SplitHostPort(stringAddr)
     if err != nil {
-        return "", -1, fmt.Errorf("unable to split IP and port from client address - %w", err)
+        return "", -1, err
     }
 
     // Convert the parsed string port to integer
     port, err := strconv.Atoi(strPort)
     if err != nil {
-        return "", -1, fmt.Errorf("unable to convert string address %s to port - %w", strPort, err)
+        return "", -1, err
     }
 
     // Cast int port conversion to int32
