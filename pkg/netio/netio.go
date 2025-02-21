@@ -12,8 +12,6 @@ import (
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
-	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
-	"go.uber.org/zap"
 )
 
 // Handle reading data from the passed in file descriptor and write to
@@ -23,18 +21,22 @@ import (
 // - connection:  The active TCP socket connection to transmit data
 // - transferBuffer:  The buffer used to store file data that is transferred
 // - file:  A pointer to the open file descriptor
-// - logMan:  The kloudlogs logger manager for local logging
 //
-func FileToSocketHandler(connection net.Conn, transferBuffer []byte, file *os.File,
-                         logMan *kloudlogs.LoggerManager) {
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func FileToSocketHandler(connection net.Conn, transferBuffer []byte,
+                         file *os.File) error {
     // Close the file on local exit
     defer file.Close()
 
     // Transfer data from open file to connection
     _, err := io.CopyBuffer(connection, file, transferBuffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending file transfer:  %w", err)
+        return err
     }
+
+    return nil
 }
 
 
@@ -211,11 +213,13 @@ func GetOptimalBufferSize(fileSize int64) int {
 // - filePath:  The path of the file to be stored on disk from read socket data
 // - fileSize:  The size of the to be stored on disk from read socket data
 // - messagingPort:  The original port where the server-client messaging occurs
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - waitGroup:  Used to synchronize the Goroutines running
 //
-func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64, messagingPort int32,
-                        logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64,
+                        messagingPort int32, waitGroup *sync.WaitGroup) error {
     // If a waitgroup was passed in
     if waitGroup != nil {
         // Decrement wait group on local exit
@@ -225,9 +229,7 @@ func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64, me
     // Get the IP address from the ip:port host address
     _, port, err := GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error occcurred spliting host address to get IP/port:  %w", err)
-        return
+        return err
     }
 
     // If the parsed port of the passed in connection does not
@@ -240,18 +242,19 @@ func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64, me
     //  Create buffer to optimal size based on expected file size
     transferBuffer := make([]byte, GetOptimalBufferSize(fileSize))
 
-    kloudlogs.LogMessage(logMan, "info", "File transfer initiated", zap.String("file path", filePath),
-                         zap.Int64("file size", fileSize))
-
     // Open the file for writing
     file, err := os.Create(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error creating the file %s:  %w", filePath, err)
-        return
+        return err
     }
 
     // Read data from the socket and write to the file path
-    SocketToFileHander(connection, transferBuffer, file, logMan)
+    err = SocketToFileHander(connection, transferBuffer, file)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
 
@@ -283,40 +286,42 @@ func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
 // - connection:  Active socket connection for reading data to be stored and processed
 // - buffer:  The buffer used for processing socket messaging
 // - messagingPort:  The original port used for server-client messaging
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - storePath:  The path where the received file will be stored
 // - prefix:  The expected prefix for the transfer reply
 //
 // @Returns
 // - The formatted file path with the received file name
+// - Error if it occurs, otherwise nil on success
 //
 func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
-                 logMan *kloudlogs.LoggerManager, storePath string, prefix []byte) string {
+                 storePath string, prefix []byte) (string, error) {
     // Wait for the start transfer message
     _, err := ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error receiving hash transfer message from server:  %w", err)
+        return "", err
     }
 
-    // If the read data does not start with special delimiter or end with closed bracket
-    if !bytes.HasPrefix(buffer, prefix) || !bytes.HasSuffix(buffer, globals.TRANSFER_SUFFIX) {
-        kloudlogs.LogMessage(logMan, "fatal", "Unusual format in receieved transfer message")
+    // If read data does not start with special delimiter or end with closed bracket
+    if !bytes.HasPrefix(buffer, prefix) ||
+    !bytes.HasSuffix(buffer, globals.TRANSFER_SUFFIX) {
+        return "", err
     }
 
     // Extract the file name and size from the initial transfer message
     fileName, fileSize, err := GetFileInfo(buffer, prefix)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error extracting the file name and size from transfer message:  %w", err)
+        return "", err
     }
 
     // Format the file path based on received file name
     filePath := storePath + "/" + string(fileName)
     // Receive the file from server
-    HandleTransferRecv(connection, filePath, fileSize, messagingPort, logMan, nil)
+    err = HandleTransferRecv(connection, filePath, fileSize, messagingPort, nil)
+    if err != nil {
+        return "", err
+    }
 
-    return filePath
+    return filePath, nil
 }
 
 
@@ -327,18 +332,22 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
 // - connection:  Active socket connection for reading data to be stored and processed
 // - transferBuffer:  Buffer allocated for file transfer based on file size
 // - file:  The open file descriptor of where the data to be processed will be stored
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func SocketToFileHander(connection net.Conn, transferBuffer []byte, file *os.File,
-                        logMan *kloudlogs.LoggerManager) {
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func SocketToFileHander(connection net.Conn, transferBuffer []byte,
+                        file *os.File) error {
     // Close file on local exit
     defer file.Close()
 
     // Transfer data from connection to open file
     _, err := io.CopyBuffer(file, connection, transferBuffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error receiving file transfer:  %w", err)
+        return err
     }
+
+    return nil
 }
 
 
@@ -351,16 +360,16 @@ func SocketToFileHander(connection net.Conn, transferBuffer []byte, file *os.Fil
 // - messagingPort:  The port where the server-client messaging occurs
 // - filePath:  The path to the file to be transfered
 // - fileSize:  The size of the file to be transfered
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func TransferFile(connection net.Conn, messagingPort int32, filePath string,
-                  fileSize int64, logMan *kloudlogs.LoggerManager) {
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func TransferFile(connection net.Conn, messagingPort int32,
+                  filePath string, fileSize int64) error {
     // Get the IP address from the ip:port host address
     _, port, err := GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error occcurred spliting host address to get IP/port:  %w", err)
-        return
+        return err
     }
 
     // If the parsed port of the passed in connection does not
@@ -376,19 +385,22 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string,
     // Open the file
     file, err := os.Open(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error opening file to be transfered:  %w", err)
-        return
+        return err
     }
 
     // Read the file chunk by chunk and send to client
-    FileToSocketHandler(connection, transferBuffer, file, logMan)
+    err = FileToSocketHandler(connection, transferBuffer, file)
+    if err != nil {
+        return err
+    }
 
     // Delete the transfered file
     err = os.Remove(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error deleting the file:  %w", err)
-        return
+        return err
     }
+
+    return nil
 }
 
 
@@ -398,33 +410,40 @@ func TransferFile(connection net.Conn, messagingPort int32, filePath string,
 // - connection:  The network connection where the file will be sent
 // - buffer:  The buffer used for server-client messaging
 // - listenerPort:  The port used for the listener for incomming connection
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - filePath:  The path to the file to be uploaded
 // - prefix:  The prefix of the transfer reply
 //
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
-                logMan *kloudlogs.LoggerManager, filePath string, prefix []byte) {
+                filePath string, prefix []byte) error {
     // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error getting file size:  %w", err)
+        return err
     }
 
     fileSize := fileInfo.Size()
     // Format the transfer reply
     sendLength, err := FormatTransferReply(filePath, fileSize, &buffer, prefix)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error formatting transfer reply:  %w", err)
+        return err
     }
 
     // Send the file transfer reply with file name and size
     _, err = WriteHandler(connection, buffer, sendLength)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error sending file name and size:  %w", err)
+        return err
     }
 
     // Transfer the file to client
-    TransferFile(connection, listenerPort, filePath, fileSize, logMan)
+    err = TransferFile(connection, listenerPort, filePath, fileSize)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
 
@@ -443,7 +462,7 @@ func WriteHandler(conn net.Conn, buffer []byte, writeBytes int) (int, error) {
     // Perform the write operation
     bytesWrote, err := conn.Write(buffer[:writeBytes])
     if err != nil {
-        return 0, fmt.Errorf("error writing to connection - %w", err)
+        return 0, err
     }
 
     return bytesWrote, nil

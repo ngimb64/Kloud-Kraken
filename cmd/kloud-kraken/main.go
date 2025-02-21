@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -107,7 +108,14 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *conf.AppConfi
 
     kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
 
-    go netio.TransferFile(transferConn, appConfig.LocalConfig.ListenerPort, filePath, fileSize, logMan)
+    go func() {
+        err = netio.TransferFile(transferConn, appConfig.LocalConfig.ListenerPort,
+                                 filePath, fileSize)
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "error",
+                                 "Error occured transfering file to client:  %w", err)
+        }
+    } ()
 }
 
 
@@ -129,15 +137,24 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 
     // Set message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+
     // Upload the hash file to connection client
-    netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort, logMan,
-                     appConfig.LocalConfig.HashFilePath, globals.HASHES_TRANSFER_PREFIX)
+    err := netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
+                            appConfig.LocalConfig.HashFilePath, globals.HASHES_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal",
+                             "Error occured sending the hash file to client:  %w", err)
+    }
 
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
         // Upload the ruleset file to connection client
-        netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort, logMan,
-                         appConfig.LocalConfig.RulesetPath, globals.RULESET_TRANSFER_PREFIX)
+        err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
+                               appConfig.LocalConfig.RulesetPath, globals.RULESET_TRANSFER_PREFIX)
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "fatal",
+                                 "Error occured sending the ruleset to server:  %w", err)
+        }
     }
 
     for {
@@ -162,11 +179,18 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     }
 
     // Receive cracked user hash file from client
-    netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort, logMan,
-                      ReceivedDir, globals.LOOT_TRANSFER_PREFIX)
+    _, err = netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
+                               ReceivedDir, globals.LOOT_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal", "Error receiving cracked user hashes:  %w", err)
+    }
+
     // Receive log file from client
-    netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort, logMan,
-                      ReceivedDir, globals.LOG_TRANSFER_PREFIX)
+    _, err = netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
+                               ReceivedDir, globals.LOG_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal", "Error receiving log file:  %w", err)
+    }
 
     // Decrement the active connection count
     CurrentConnections.Add(-1)
@@ -187,7 +211,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 //
 func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Format listener port with parsed YAML data
-    listenerPort := fmt.Sprintf(":%v", appConfig.LocalConfig.ListenerPort)
+    listenerPort := ":" + strconv.Itoa(int(appConfig.LocalConfig.ListenerPort))
     // Establish listener on specified port
     listener, err := net.Listen("tcp", listenerPort)
     if err != nil {

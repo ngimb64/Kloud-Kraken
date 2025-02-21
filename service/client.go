@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -287,7 +288,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Format the wordlist file path based on received file name
-    filePath := fmt.Sprintf("%s/%s", WordlistPath, fileName)
+    filePath := WordlistPath + "/" + string(fileName)
 
     // Make a small int32 buffer
     int32Buffer := make([]byte, 4)
@@ -327,7 +328,11 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // decrement counter when complete
     go func() {
         defer listener.Close()
-        netio.HandleTransferRecv(transferConn, filePath, fileSize, MessagePort32, logMan, waitGroup)
+        err = netio.HandleTransferRecv(transferConn, filePath, fileSize,
+                                       MessagePort32, waitGroup)
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "fatal", "Error during file transfer:  %w", err)
+        }
         MaxTransfers.Add(-1)
     }()
 }
@@ -350,20 +355,29 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
                       transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager,
                       maxFileSizeInt64 int64) {
+    var err error
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
 
     transferComplete := false
     // Set the message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+
     // Receive the hash file from the server
-    HashFilePath = netio.ReceiveFile(connection, buffer, MessagePort32, logMan, HashesPath,
-                                     globals.HASHES_TRANSFER_PREFIX)
+    HashFilePath, err = netio.ReceiveFile(connection, buffer, MessagePort32, HashesPath,
+                                          globals.HASHES_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash file:  %w", err)
+    }
+
     // If a rule set was specified
     if HasRuleset {
         // Receive the ruleset from the server
-        RulesetFilePath = netio.ReceiveFile(connection, buffer, MessagePort32, logMan, RulesetPath,
-                                            globals.RULESET_TRANSFER_PREFIX)
+        RulesetFilePath, err = netio.ReceiveFile(connection, buffer, MessagePort32, RulesetPath,
+                                                 globals.RULESET_TRANSFER_PREFIX)
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "fatal", "Error receiving ruleset file:  %w", err)
+        }
     }
 
     for {
@@ -401,11 +415,20 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     }
 
     // Transfer the cracked user hash file to server
-    netio.UploadFile(connection, buffer, MessagePort32, logMan,
-                     Loot, globals.LOOT_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, MessagePort32, Loot,
+                           globals.LOOT_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal",
+                             "Error occured sending the cracked hashes to server:  %w", err)
+    }
+
     // Transfer the log file to server
-    netio.UploadFile(connection, buffer, MessagePort32, logMan,
-                     LogPath, globals.LOG_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, MessagePort32, LogPath,
+                           globals.LOG_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal",
+                             "Error occured sending the log file to server:  %w", err)
+    }
 }
 
 
@@ -450,7 +473,7 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 //
 func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Define the address of the server to connect to
-    serverAddress := fmt.Sprintf("%s:%d", ipAddr, MessagePort32)
+    serverAddress := ipAddr + ":" + strconv.Itoa(int(MessagePort32))
 
     // Make a connection to the remote brain server
     connection, err := net.Dial("tcp", serverAddress)
