@@ -19,21 +19,63 @@ import (
 //
 // @Parameters
 // - connection:  The active TCP socket connection to transmit data
-// - transferBuffer:  The buffer used to store file data that is transferred
 // - file:  A pointer to the open file descriptor
+// - transferBuffer:  The buffer used to store file data that is transferred
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func FileToSocketHandler(connection net.Conn, transferBuffer []byte,
-                         file *os.File) error {
-    // Close the file on local exit
+func FileToSocketCopy(connection net.Conn, file *os.File,
+                      transferBuffer []byte) error {
+    // Close the connection and file on local exit
+    defer connection.Close()
     defer file.Close()
 
     // Transfer data from open file to connection
     _, err := io.CopyBuffer(connection, file, transferBuffer)
     if err != nil {
         return err
+    }
+
+    return nil
+}
+
+
+// Handle reading data from the passed in file descriptor and write to the socket to client.
+//
+// @Params:
+// - file:  A pointer to the open file descriptor
+// - connection:  The active TCP socket connection to transmit data
+// - transferBuffer:  The buffer used to store file data that is transferred
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func FileToSocketHandler(file *os.File, connection net.Conn,
+                         transferBuffer []byte) error {
+    // Close the file on local exit
+    defer file.Close()
+
+    for {
+        // Read buffer size from file
+        bytesRead, err := file.Read(transferBuffer)
+        // If bytes were read from the file
+        if bytesRead > 0 {
+            // Write the read bytes to the client
+            _, err = WriteHandler(connection, transferBuffer, bytesRead)
+            if err != nil {
+                return err
+            }
+        }
+
+        if err != nil {
+            // If the error was not the end of file
+            if err != io.EOF {
+                return err
+            }
+
+            break
+        }
     }
 
     return nil
@@ -212,31 +254,20 @@ func GetOptimalBufferSize(fileSize int64) int {
 // - connection:  Active socket connection for reading data to be stored and processed
 // - filePath:  The path of the file to be stored on disk from read socket data
 // - fileSize:  The size of the to be stored on disk from read socket data
-// - messagingPort:  The original port where the server-client messaging occurs
 // - waitGroup:  Used to synchronize the Goroutines running
+// - transferMode:  Boolean to specify whether to transfer the file by
+//                  io.CopyBuffer method (effiency but closes connection)
+//                  or traditional handler method (retains connection).
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
 func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64,
-                        messagingPort int32, waitGroup *sync.WaitGroup) error {
+                        waitGroup *sync.WaitGroup, transferMode bool) error {
     // If a waitgroup was passed in
     if waitGroup != nil {
         // Decrement wait group on local exit
         defer waitGroup.Done()
-    }
-
-    // Get the IP address from the ip:port host address
-    _, port, err := GetIpPort(connection)
-    if err != nil {
-        return err
-    }
-
-    // If the parsed port of the passed in connection does not
-    // match the original port used to manage messaging
-    if port != messagingPort {
-        // Ensure the transfer connection is closed upon local exit
-        defer connection.Close()
     }
 
     //  Create buffer to optimal size based on expected file size
@@ -249,7 +280,12 @@ func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64,
     }
 
     // Read data from the socket and write to the file path
-    err = SocketToFileHander(connection, transferBuffer, file)
+    if transferMode {
+        err = SocketToFileCopy(file, connection, transferBuffer)
+    } else {
+        err = SocketToFileHander(connection, file, transferBuffer)
+    }
+
     if err != nil {
         return err
     }
@@ -285,16 +321,18 @@ func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
 // @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
 // - buffer:  The buffer used for processing socket messaging
-// - messagingPort:  The original port used for server-client messaging
 // - storePath:  The path where the received file will be stored
 // - prefix:  The expected prefix for the transfer reply
+// - transferMode:  Boolean to specify whether to transfer the file by
+//                  io.CopyBuffer method (effiency but closes connection)
+//                  or traditional handler method (retains connection).
 //
 // @Returns
 // - The formatted file path with the received file name
 // - Error if it occurs, otherwise nil on success
 //
-func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
-                 storePath string, prefix []byte) (string, error) {
+func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
+                 prefix []byte, transferMode bool) (string, error) {
     // Wait for the start transfer message
     _, err := ReadHandler(connection, &buffer)
     if err != nil {
@@ -316,7 +354,7 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
     // Format the file path based on received file name
     filePath := storePath + "/" + string(fileName)
     // Receive the file from server
-    err = HandleTransferRecv(connection, filePath, fileSize, messagingPort, nil)
+    err = HandleTransferRecv(connection, filePath, fileSize, nil, transferMode)
     if err != nil {
         return "", err
     }
@@ -329,22 +367,65 @@ func ReceiveFile(connection net.Conn, buffer []byte, messagingPort int32,
 // of file has been reached or error occurs with socket operation.
 //
 // @Parameters
+// - file:  The open file descriptor of where the data to be processed will be stored
 // - connection:  Active socket connection for reading data to be stored and processed
 // - transferBuffer:  Buffer allocated for file transfer based on file size
-// - file:  The open file descriptor of where the data to be processed will be stored
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func SocketToFileHander(connection net.Conn, transferBuffer []byte,
-                        file *os.File) error {
-    // Close file on local exit
+func SocketToFileCopy(file *os.File, connection net.Conn,
+                        transferBuffer []byte) error {
+    // Close file and connection on local exit
     defer file.Close()
+    defer connection.Close()
 
     // Transfer data from connection to open file
     _, err := io.CopyBuffer(file, connection, transferBuffer)
     if err != nil {
         return err
+    }
+
+    return nil
+}
+
+
+// Reads data from the socket and write it to the passed in open file descriptor until end
+// of file has been reached or error occurs with socket operation.
+//
+// @Parameters:
+// - connection:  Active socket connection for reading data to be stored and processed
+// - file:  The open file descriptor of where the data to be processed will be stored
+// - transferBuffer:  Buffer allocated for file transfer based on file size
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func SocketToFileHander(connection net.Conn, file *os.File,
+                        transferBuffer []byte) error {
+    // Close file on local exit
+    defer file.Close()
+
+    for {
+        // Read data into the buffer
+        bytesRead, err := ReadHandler(connection, &transferBuffer)
+        // If bytes were read from the socket
+        if bytesRead > 0 {
+            // Write the data to the file
+            _, err = file.Write(transferBuffer[:bytesRead])
+            if err != nil {
+                return err
+            }
+        }
+
+        if err != nil {
+            // If the error is not End Of File reached
+            if err != io.EOF {
+                return err
+            }
+
+            break
+        }
     }
 
     return nil
@@ -357,28 +438,17 @@ func SocketToFileHander(connection net.Conn, transferBuffer []byte,
 //
 // @Parameters
 // - connection:  The network connection where the file will be sent
-// - messagingPort:  The port where the server-client messaging occurs
 // - filePath:  The path to the file to be transfered
 // - fileSize:  The size of the file to be transfered
+// - transferMode:  Boolean to specify whether to transfer the file by
+//                  io.CopyBuffer method (effiency but closes connection)
+//                  or traditional handler method (retains connection).
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func TransferFile(connection net.Conn, messagingPort int32,
-                  filePath string, fileSize int64) error {
-    // Get the IP address from the ip:port host address
-    _, port, err := GetIpPort(connection)
-    if err != nil {
-        return err
-    }
-
-    // If the parsed port of the passed in connection does not
-    // match the original port used to manage messaging
-    if port != messagingPort {
-        // Ensure the transfer connection is closed upon local exit
-        defer connection.Close()
-    }
-
+func TransferFile(connection net.Conn, filePath string, fileSize int64,
+                  transferMode bool) error {
     // Create buffer to optimal size based on expected file size
     transferBuffer := make([]byte, GetOptimalBufferSize(fileSize))
 
@@ -389,7 +459,12 @@ func TransferFile(connection net.Conn, messagingPort int32,
     }
 
     // Read the file chunk by chunk and send to client
-    err = FileToSocketHandler(connection, transferBuffer, file)
+    if transferMode {
+        err = FileToSocketCopy(connection, file, transferBuffer)
+    } else {
+        err = FileToSocketHandler(file, connection, transferBuffer)
+    }
+
     if err != nil {
         return err
     }
@@ -409,22 +484,26 @@ func TransferFile(connection net.Conn, messagingPort int32,
 // @Parameters
 // - connection:  The network connection where the file will be sent
 // - buffer:  The buffer used for server-client messaging
-// - listenerPort:  The port used for the listener for incomming connection
 // - filePath:  The path to the file to be uploaded
 // - prefix:  The prefix of the transfer reply
+// - transferMode:  Boolean to specify whether to transfer the file by
+//                  io.CopyBuffer method (effiency but closes connection)
+//                  or traditional handler method (retains connection).
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
-                filePath string, prefix []byte) error {
+func UploadFile(connection net.Conn, buffer []byte, filePath string,
+                prefix []byte, transferMode bool) error {
     // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
         return err
     }
 
+    // Get the size of the file for transfer reply
     fileSize := fileInfo.Size()
+
     // Format the transfer reply
     sendLength, err := FormatTransferReply(filePath, fileSize, &buffer, prefix)
     if err != nil {
@@ -438,7 +517,7 @@ func UploadFile(connection net.Conn, buffer []byte, listenerPort int32,
     }
 
     // Transfer the file to client
-    err = TransferFile(connection, listenerPort, filePath, fileSize)
+    err = TransferFile(connection, filePath, fileSize, transferMode)
     if err != nil {
         return err
     }

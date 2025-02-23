@@ -97,7 +97,7 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *conf.AppConfi
     }
 
     // Format remote address with IP and port
-    remoteAddr := fmt.Sprintf("%s:%d", ipAddr, port)
+    remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
 
     // Make a connection to the remote brain server
     transferConn, err := net.Dial("tcp", remoteAddr)
@@ -109,8 +109,7 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *conf.AppConfi
     kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
 
     go func() {
-        err = netio.TransferFile(transferConn, appConfig.LocalConfig.ListenerPort,
-                                 filePath, fileSize)
+        err = netio.TransferFile(transferConn, filePath, fileSize, true)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
                                  "Error occured transfering file to client:  %w", err)
@@ -139,8 +138,8 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Upload the hash file to connection client
-    err := netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
-                            appConfig.LocalConfig.HashFilePath, globals.HASHES_TRANSFER_PREFIX)
+    err := netio.UploadFile(connection, buffer, appConfig.LocalConfig.HashFilePath,
+                            globals.HASHES_TRANSFER_PREFIX, false)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error occured sending the hash file to client:  %w", err)
@@ -149,8 +148,8 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
         // Upload the ruleset file to connection client
-        err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
-                               appConfig.LocalConfig.RulesetPath, globals.RULESET_TRANSFER_PREFIX)
+        err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.RulesetPath,
+                               globals.RULESET_TRANSFER_PREFIX, false)
         if err != nil {
             kloudlogs.LogMessage(logMan, "fatal",
                                  "Error occured sending the ruleset to server:  %w", err)
@@ -179,15 +178,15 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     }
 
     // Receive cracked user hash file from client
-    _, err = netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
-                               ReceivedDir, globals.LOOT_TRANSFER_PREFIX)
+    _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
+                               globals.LOOT_TRANSFER_PREFIX, false)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error receiving cracked user hashes:  %w", err)
     }
 
     // Receive log file from client
-    _, err = netio.ReceiveFile(connection, buffer, appConfig.LocalConfig.ListenerPort,
-                               ReceivedDir, globals.LOG_TRANSFER_PREFIX)
+    _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
+                               globals.LOG_TRANSFER_PREFIX, false)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error receiving log file:  %w", err)
     }

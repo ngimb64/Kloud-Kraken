@@ -173,7 +173,7 @@ func FileShaveDD(filterPath string, shavePath string, originalPath string,
         blockSize = ReduceBlockSize(srcSize, blockSize64)
         // If the source size was less than 2 (lowest binary)
         if blockSize == -1 {
-            return -1, fmt.Errorf("source size was less than 2 - %d", srcSize)
+            return -1, fmt.Errorf("source size was less than 2 or not binary - %d", srcSize)
         }
     }
 
@@ -486,6 +486,7 @@ func RemoveMergeSubdirs(dirPath string) error {
 
     // Iterate through wordlist merge dir contents
     for _, item := range dirItems {
+        // Skip if not a dir
         if !item.IsDir() {
             continue
         }

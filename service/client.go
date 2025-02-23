@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -55,7 +54,6 @@ var HasRuleset bool            // Toggle for specifying whether ruleset is in us
 var LogPath string             // Stores log file to be returned to client
 var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
-var MessagePort32 int32        // Initial port for messaging communication
 var RulesetFilePath string     // Stores ruleset file when received
 
 
@@ -136,7 +134,7 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
     }
 
     // Append command args used by all attack modes
-    cmdOptions = append(cmdOptions, "--remove", fmt.Sprintf("-o=%s", Cracked), "-a",
+    cmdOptions = append(cmdOptions, "--remove", "-o=" + Cracked, "-a",
                         HashcatArgsStruct.CrackingMode, "-m", HashcatArgsStruct.HashType,
                         "-w", HashcatArgsStruct.Workload, HashFilePath)
 
@@ -156,9 +154,9 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
         }
 
         select {
-        // Poll channel for transfer complete message
+        // Poll channel for complete signal
         case isComplete := <-channel:
-            // If transfers are complete and there is no wordlist in designated directory
+            // If transfers are complete and there is no wordlist in dir
             if isComplete && filePath == "" {
                 // Send the processing complete message to server
                 sendProcessingComplete(connection, logMan)
@@ -328,11 +326,12 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // decrement counter when complete
     go func() {
         defer listener.Close()
-        err = netio.HandleTransferRecv(transferConn, filePath, fileSize,
-                                       MessagePort32, waitGroup)
+
+        err = netio.HandleTransferRecv(transferConn, filePath, fileSize, waitGroup, true)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "fatal", "Error during file transfer:  %w", err)
+            kloudlogs.LogMessage(logMan, "error", "Error during file transfer:  %w", err)
         }
+
         MaxTransfers.Add(-1)
     }()
 }
@@ -355,17 +354,17 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
                       transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager,
                       maxFileSizeInt64 int64) {
-    var err error
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
 
+    var err error
     transferComplete := false
     // Set the message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Receive the hash file from the server
-    HashFilePath, err = netio.ReceiveFile(connection, buffer, MessagePort32, HashesPath,
-                                          globals.HASHES_TRANSFER_PREFIX)
+    HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
+                                          globals.HASHES_TRANSFER_PREFIX, false)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash file:  %w", err)
     }
@@ -373,8 +372,8 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     // If a rule set was specified
     if HasRuleset {
         // Receive the ruleset from the server
-        RulesetFilePath, err = netio.ReceiveFile(connection, buffer, MessagePort32, RulesetPath,
-                                                 globals.RULESET_TRANSFER_PREFIX)
+        RulesetFilePath, err = netio.ReceiveFile(connection, buffer, RulesetPath,
+                                                 globals.RULESET_TRANSFER_PREFIX, false)
         if err != nil {
             kloudlogs.LogMessage(logMan, "fatal", "Error receiving ruleset file:  %w", err)
         }
@@ -415,16 +414,14 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     }
 
     // Transfer the cracked user hash file to server
-    err = netio.UploadFile(connection, buffer, MessagePort32, Loot,
-                           globals.LOOT_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX, false)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error occured sending the cracked hashes to server:  %w", err)
     }
 
     // Transfer the log file to server
-    err = netio.UploadFile(connection, buffer, MessagePort32, LogPath,
-                           globals.LOG_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX, false)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error occured sending the log file to server:  %w", err)
@@ -467,13 +464,15 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 // remote brain server, then pass the connection to Goroutine handler.
 //
 // @Parameters
-// - ipAddr:  The ip address of the remote brain server
+// - ipAddr:  The ip address of the remote server
+// - port:  The port of the remote server
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
+func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
+                   maxFileSizeInt64 int64) {
     // Define the address of the server to connect to
-    serverAddress := ipAddr + ":" + strconv.Itoa(int(MessagePort32))
+    serverAddress := ipAddr + ":" + strconv.Itoa(port)
 
     // Make a connection to the remote brain server
     connection, err := net.Dial("tcp", serverAddress)
@@ -486,7 +485,7 @@ func connectRemote(ipAddr string, logMan *kloudlogs.LoggerManager, maxFileSizeIn
     defer connection.Close()
 
     kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
-                         zap.String("ip address", ipAddr), zap.Int32("port", MessagePort32))
+                         zap.String("ip address", ipAddr), zap.Int("port", port))
 
     // Set up goroutines for receiving and processing data
     handleConnection(connection, logMan, maxFileSizeInt64)
@@ -549,8 +548,7 @@ func main() {
 
     // Parse the command line flags
     flag.Parse()
-    // Parsed int args are int32
-    MessagePort32 = int32(port)
+
     MaxTransfersInt32 = int32(maxTransfers)
     // Create directories for client
     makeClientDirs()
@@ -584,5 +582,5 @@ func main() {
     }
 
     // Connect to remote server to begin receiving data for processing
-    connectRemote(ipAddr, logMan, maxFileSizeInt64)
+    connectRemote(ipAddr, port, logMan, maxFileSizeInt64)
 }
