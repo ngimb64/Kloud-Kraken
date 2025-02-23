@@ -322,12 +322,13 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Add the file size of the file to be transfered to transfer manager
     transferManager.AddTransferSize(fileSize)
 
-    // Now synchronized messages finished, handle transfer with new connection and
-    // decrement counter when complete
     go func() {
+        // Close listener and transfer connection on local exit
         defer listener.Close()
+        defer transferConn.Close()
 
-        err = netio.HandleTransferRecv(transferConn, filePath, fileSize, waitGroup, true)
+        // Receive the file from remote server
+        err = netio.HandleTransferRecv(transferConn, filePath, fileSize, waitGroup)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error during file transfer:  %w", err)
         }
@@ -364,7 +365,7 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
 
     // Receive the hash file from the server
     HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
-                                          globals.HASHES_TRANSFER_PREFIX, false)
+                                          globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash file:  %w", err)
     }
@@ -373,7 +374,7 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     if HasRuleset {
         // Receive the ruleset from the server
         RulesetFilePath, err = netio.ReceiveFile(connection, buffer, RulesetPath,
-                                                 globals.RULESET_TRANSFER_PREFIX, false)
+                                                 globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
             kloudlogs.LogMessage(logMan, "fatal", "Error receiving ruleset file:  %w", err)
         }
@@ -414,14 +415,14 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
     }
 
     // Transfer the cracked user hash file to server
-    err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX, false)
+    err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error occured sending the cracked hashes to server:  %w", err)
     }
 
     // Transfer the log file to server
-    err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX, false)
+    err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error occured sending the log file to server:  %w", err)

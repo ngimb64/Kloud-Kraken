@@ -19,7 +19,7 @@ func TestFileToSocketCopy(t *testing.T) {
     assert := assert.New(t)
 
     testFiles := []string{}
-    // Get available listener and what port it is on
+    // Get available listener and its corresponding port
     listener, listenerPort := netio.GetAvailableListener()
     // Close listener on local exit
     defer listener.Close()
@@ -93,6 +93,9 @@ func TestFileToSocketCopy(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
+    // Close the connection after copying
+    serverConn.Close()
+
     // Wait for the channel to send complete signal
     <-isComplete
 
@@ -116,12 +119,6 @@ func TestFileToSocketCopy(t *testing.T) {
         assert.Equal(nil, err)
     }
 }
-
-
-// func TestFileToSocketHandler(t *testing.T) {
-//     // Make reusable assert instance
-//     assert := assert.New(t)
-// }
 
 
 func TestFormatTransferReply(t *testing.T) {
@@ -167,7 +164,7 @@ func TestGetAvailableListener(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
-    // Get the next avail able listener on random port
+    // Get available listener and its corresponding port
     testListener, port := netio.GetAvailableListener()
     // Ensure the port is a non-privileged
     assert.Greater(port, int32(1001))
@@ -212,7 +209,7 @@ func TestGetIpPort(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
-    // Format listener port with parsed YAML data
+    // Get available listener and its corresponding port
     listener, listenerPort := netio.GetAvailableListener()
     // Close listener on local exit
     defer listener.Close()
@@ -287,10 +284,82 @@ func TestGetOptimalBufferSize(t *testing.T) {
 // }
 
 
-// func TestReadHandler(t *testing.T) {
-//     // Make reusable assert instance
-//     assert := assert.New(t)
-// }
+func TestReadHandler(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Get available listener and its corresponding port
+    listener, listenerPort := netio.GetAvailableListener()
+    // Close listener on local exit
+    defer listener.Close()
+
+    isComplete := make(chan bool)
+    testMessage := []byte("This is a test message that is used for testing purposes")
+    testMessage2 := []byte("This is another test message that is used for testing")
+
+    go func() {
+        // Wait for an incoming connection
+        clientConn, err := listener.Accept()
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+        // Close connection on local exit
+        defer clientConn.Close()
+
+        // Make buffer for receiving data
+        receiveBuffer := make([]byte, 64)
+        // Read the message from server and store into buffer
+        bytesRead, err := netio.ReadHandler(clientConn, &receiveBuffer)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+
+        // Ensure bytes read equals the expected message
+        assert.Equal(len(testMessage), bytesRead)
+        // Ensure content in the buffer matches expected message
+        assert.Equal(testMessage, receiveBuffer[:len(testMessage)])
+
+        // Perform write operation via passed in connection
+        bytesWrote, err := clientConn.Write(testMessage2)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+        // Ensure bytes wrote equals the expected message
+        assert.Equal(len(testMessage2), bytesWrote)
+
+        // Send complete signal via channel
+        isComplete <- true
+    } ()
+
+    // Format connection address for testing
+    connectAddr := ":" + strconv.Itoa(int(listenerPort))
+
+    // Make a connection to the remote brain server
+    serverConn, err := net.Dial("tcp", connectAddr)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Close connection on local exit
+    defer serverConn.Close()
+
+    // Perform write operation via passed in connection
+    bytesWrote, err := serverConn.Write(testMessage)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure bytes wrote equals the expected message
+    assert.Equal(len(testMessage), bytesWrote)
+
+    // Make buffer to receive data
+    buffer := make([]byte, 64)
+    // Read the message from server and store into buffer
+    bytesRead, err := netio.ReadHandler(serverConn, &buffer)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Ensure bytes read equals the expected message length
+    assert.Equal(len(testMessage2), bytesRead)
+    // Ensure content in the buffer matches expected message
+    assert.Equal(testMessage2, buffer[:len(testMessage2)])
+
+    // Wait for the channel to send complete signal
+    <-isComplete
+}
 
 
 // func TestReceiveFile(t *testing.T) {
@@ -304,7 +373,7 @@ func TestSocketToFileCopy(t *testing.T) {
     assert := assert.New(t)
 
     testFiles := []string{}
-    // Get available listener and what port it is on
+    // Get available listener and its corresponding port
     listener, listenerPort := netio.GetAvailableListener()
     // Close listener on local exit
     defer listener.Close()
@@ -315,9 +384,6 @@ func TestSocketToFileCopy(t *testing.T) {
         // Create the input file and return handle
         outFilePath, outFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                     "output_test", "txt", true)
-        // Close the output file on local exit
-        defer outFile.Close()
-
         // Add the created file to slice for later removal
         testFiles = append(testFiles, outFilePath)
 
@@ -325,14 +391,13 @@ func TestSocketToFileCopy(t *testing.T) {
         clientConn, err := listener.Accept()
         // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
-        // Close connection on local exit
-        defer clientConn.Close()
 
         // Make 64KB buffer for receiving file transfer
         receiveBuffer := make([]byte, 64 * globals.KB)
 
         // Transfer received data from connection to file
-        err = netio.SocketToFileCopy(outFile, clientConn, receiveBuffer)
+        err = netio.SocketToFileCopy(outFile, clientConn, receiveBuffer,
+                                     int64(20 * globals.MB))
         // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
@@ -385,11 +450,11 @@ func TestSocketToFileCopy(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
-    // Close the connection after copying
-    serverConn.Close()
-
     // Wait for the channel to send complete signal
     <-isComplete
+
+    // Close the connection after signal (normally would hang without limited reader)
+    serverConn.Close()
 
     // Get the size of the input file
     inFileInfo, err := os.Stat(testFiles[1])
@@ -413,12 +478,6 @@ func TestSocketToFileCopy(t *testing.T) {
 }
 
 
-// func TestSocketToFileHandler(t *testing.T) {
-//     // Make reusable assert instance
-//     assert := assert.New(t)
-// }
-
-
 // func TestTransferFile(t *testing.T) {
 //     // Make reusable assert instance
 //     assert := assert.New(t)
@@ -431,7 +490,81 @@ func TestSocketToFileCopy(t *testing.T) {
 // }
 
 
-// func TestWriteHandler(t *testing.T) {
-//     // Make reusable assert instance
-//     assert := assert.New(t)
-// }
+func TestWriteHandler(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Get available listener and its corresponding port
+    listener, listenerPort := netio.GetAvailableListener()
+    // Close listener on local exit
+    defer listener.Close()
+
+    isComplete := make(chan bool)
+    testMessage := []byte("This is a test message that is used for testing purposes")
+    testMessage2 := []byte("This is another test message that is used for testing")
+
+    go func() {
+        // Wait for an incoming connection
+        clientConn, err := listener.Accept()
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+        // Close connection on local exit
+        defer clientConn.Close()
+
+        // Make buffer for receiving data
+        receiveBuffer := make([]byte, 64)
+        // Read the message from server and store into buffer
+        bytesRead, err := clientConn.Read(receiveBuffer)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+
+        // Ensure bytes read equals the expected message
+        assert.Equal(len(testMessage), bytesRead)
+        // Ensure content in the buffer matches expected message
+        assert.Equal(testMessage, receiveBuffer[:len(testMessage)])
+
+        // Perform write operation via passed in connection
+        bytesWrote, err := netio.WriteHandler(clientConn, testMessage2,
+                                              len(testMessage2))
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+        // Ensure bytes wrote equals the expected message
+        assert.Equal(len(testMessage2), bytesWrote)
+
+        // Send complete signal via channel
+        isComplete <- true
+    } ()
+
+    // Format connection address for testing
+    connectAddr := ":" + strconv.Itoa(int(listenerPort))
+
+    // Make a connection to the remote brain server
+    serverConn, err := net.Dial("tcp", connectAddr)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Close connection on local exit
+    defer serverConn.Close()
+
+    // Perform write operation via passed in connection
+    bytesWrote, err := netio.WriteHandler(serverConn, testMessage,
+                                          len(testMessage))
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure bytes wrote equals the expected message
+    assert.Equal(len(testMessage), bytesWrote)
+
+    // Make buffer to receive data
+    buffer := make([]byte, 64)
+    // Read the message from server and store into buffer
+    bytesRead, err := serverConn.Read(buffer)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Ensure bytes read equals the expected message length
+    assert.Equal(len(testMessage2), bytesRead)
+    // Ensure content in the buffer matches expected message
+    assert.Equal(testMessage2, buffer[:len(testMessage2)])
+
+    // Wait for the channel to send complete signal
+    <-isComplete
+}
