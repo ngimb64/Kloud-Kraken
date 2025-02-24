@@ -39,11 +39,12 @@ var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client lo
 // @Parameters
 // - connection:  Network socket connection for handling messaging
 // - buffer:  The buffer storing network messaging
+// - waitGroup:  Used to synchronize the Goroutines running
 // - appConfig:  The configuration struct with loaded yaml program data
 // - logMan:  The kloudlogs logger manager for local logging
 //
-func handleTransfer(connection net.Conn, buffer []byte, appConfig *conf.AppConfig,
-                    logMan *kloudlogs.LoggerManager) {
+func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGroup,
+                    appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
                                                appConfig.ClientConfig.MaxFileSizeInt64)
@@ -108,10 +109,13 @@ func handleTransfer(connection net.Conn, buffer []byte, appConfig *conf.AppConfi
     }
 
     kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
+    // Increment waitgroup counter
+    waitGroup.Add(1)
 
     go func() {
-        // Close transfer connection on local exit
+        // Close transfer connection and decrement waitgroup counter on local exit
         defer transferConn.Close()
+        defer waitGroup.Done()
 
         // Transfer the file to client
         err = netio.TransferFile(transferConn, filePath, fileSize)
@@ -178,7 +182,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         // If the read data contains transfer request message
         if bytes.Contains(buffer, globals.TRANSFER_REQUEST_MARKER) {
             // Call method to handle file transfer based
-            handleTransfer(connection, buffer, appConfig, logMan)
+            handleTransfer(connection, buffer, waitGroup, appConfig, logMan)
         }
     }
 
@@ -215,7 +219,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 //
 func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Format listener port with parsed YAML data
-    listenerPort := ":" + strconv.Itoa(int(appConfig.LocalConfig.ListenerPort))
+    listenerPort := ":" + strconv.Itoa(appConfig.LocalConfig.ListenerPort)
     // Establish listener on specified port
     listener, err := net.Listen("tcp", listenerPort)
     if err != nil {
@@ -275,7 +279,7 @@ func makeServerDirs() {
 // or invalid then proceeds to user input until valid yaml file is specified.
 //
 // @Returns
-// - AppConfig struct populated from yaml data
+// - Pointer to AppConfig struct populated from yaml data
 //
 func parseArgs() *conf.AppConfig {
     var configFilePath string
@@ -358,7 +362,8 @@ func main() {
     }
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig, false)
+    logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath,
+                                              awsConfig, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

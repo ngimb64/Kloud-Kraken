@@ -88,7 +88,7 @@ client_config:
 
     // Validate local config fields to original data
     assert.Equal("us-east-1", config.LocalConfig.Region)
-    assert.Equal(int32(6969), config.LocalConfig.ListenerPort)
+    assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(int32(3), config.LocalConfig.NumberInstances)
     assert.Equal(testDir, config.LocalConfig.LoadDir)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)

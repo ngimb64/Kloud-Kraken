@@ -228,9 +228,9 @@ func TestValidateListenerPort(t *testing.T) {
     assert := assert.New(t)
 
     // Test with a port below or equal 1000
-    assert.False(validate.ValidateListenerPort(int32(420)))
+    assert.False(validate.ValidateListenerPort(420))
     // Test with a port above 1000
-    assert.True(validate.ValidateListenerPort(int32(4444)))
+    assert.True(validate.ValidateListenerPort(4444))
 }
 
 

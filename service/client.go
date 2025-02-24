@@ -258,7 +258,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Wait to receive the start transfer message from the server
-    _, err = netio.ReadHandler(connection, &buffer)
+    bytesRead, err := netio.ReadHandler(connection, &buffer)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %w", err)
         return
@@ -278,15 +278,12 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Extract the file name and size from the stripped initial transfer message
-    fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX)
+    fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX, bytesRead)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error extracting file name and size from start transfer message:  %w", err)
         return
     }
-
-    // Format the wordlist file path based on received file name
-    filePath := WordlistPath + "/" + string(fileName)
 
     // Make a small int32 buffer
     int32Buffer := make([]byte, 4)
@@ -294,7 +291,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     listener, port := netio.GetAvailableListener()
 
     // Convert int32 port to bytes and write it into the buffer
-    err = binary.Write(bytes.NewBuffer(int32Buffer), binary.LittleEndian, port)
+    err = binary.Write(bytes.NewBuffer(int32Buffer), binary.LittleEndian, int32(port))
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error occurred converting int32 port to byte array:  %w", err)
@@ -326,9 +323,11 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         // Close listener and transfer connection on local exit
         defer listener.Close()
         defer transferConn.Close()
+        // Decrement the waitgroup on local exit
+        defer waitGroup.Done()
 
         // Receive the file from remote server
-        err = netio.HandleTransferRecv(transferConn, filePath, fileSize, waitGroup)
+        _, err = netio.HandleTransferRecv(transferConn, WordlistPath, string(fileName), fileSize)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error during file transfer:  %w", err)
         }

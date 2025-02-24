@@ -241,7 +241,7 @@ func ValidateHashType(hashType string) bool {
 // @Returns
 // - true/false boolean depending on whether the port is above 1000 or not
 //
-func ValidateListenerPort(listenerPort int32) bool {
+func ValidateListenerPort(listenerPort int) bool {
     return listenerPort > 1000
 }
 

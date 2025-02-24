@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"sync"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
@@ -84,17 +83,17 @@ func FormatTransferReply(filePath string, fileSize int64, buffer *[]byte,
 // - The established listener
 // - The port number the listener is established on
 //
-func GetAvailableListener() (net.Listener, int32) {
-    var minPort int32 = 1001
-    var maxPort int32 = 65535
+func GetAvailableListener() (net.Listener, int) {
+    var minPort int = 1001
+    var maxPort int = 65535
 
     for {
         // Select a random port inside min-max range
-        port := rand.Int31n(maxPort - minPort+1) + minPort
+        port := rand.Intn(maxPort - minPort+1) + minPort
 
         // Attempt to establish a local listener for incoming connect
-        testListener, err := net.Listen("tcp", ":" + strconv.Itoa(int(port)))
-        // If the listener was succefully established
+        testListener, err := net.Listen("tcp", ":" + strconv.Itoa(port))
+        // If the listener not was succefully established
         if err != nil {
             continue
         }
@@ -109,15 +108,17 @@ func GetAvailableListener() (net.Listener, int32) {
 // @Parameters
 // - buffer:  The data read from socket buffer to be parsed
 // - prefix:  The message prefix format
+// - bytesRead:  The number of bytes read into the buffer
 //
 // @Returns
 // - The byte slice with the file name
 // - A integer file size
 // - Error if it occurs, otherwise nil on success
 //
-func GetFileInfo(buffer []byte, prefix []byte) ([]byte, int64, error) {
+func GetFileInfo(buffer []byte, prefix []byte, bytesRead int) ([]byte, int64, error) {
     // Trim the delimiters around the file info
-    buffer = buffer[len(prefix):len(buffer)-len(globals.TRANSFER_SUFFIX)]
+    buffer = buffer[len(prefix):bytesRead-1]
+
     // Get the position of the colon delimiter
     colonPos := bytes.IndexByte(buffer, ':')
     // If the colon separator is missing
@@ -149,7 +150,7 @@ func GetFileInfo(buffer []byte, prefix []byte) ([]byte, int64, error) {
 // - The parsed port
 // - Error if it occurs, otherwise nil on success
 //
-func GetIpPort(connection net.Conn) (string, int32, error) {
+func GetIpPort(connection net.Conn) (string, int, error) {
     // Get the ip:port adress of the connected client
     stringAddr := connection.RemoteAddr().String()
     if stringAddr == "" {
@@ -168,10 +169,7 @@ func GetIpPort(connection net.Conn) (string, int32, error) {
         return "", -1, err
     }
 
-    // Cast int port conversion to int32
-    port32 := int32(port)
-
-    return ipAddr, port32, nil
+    return ipAddr, port, nil
 }
 
 
@@ -210,37 +208,44 @@ func GetOptimalBufferSize(fileSize int64) int {
 //
 // @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
-// - filePath:  The path of the file to be stored on disk from read socket data
+// - storePath:  The directory where read socket data will be stored as files
+// - fileName:  The name of the file to store
 // - fileSize:  The size of the to be stored on disk from read socket data
-// - waitGroup:  Used to synchronize the Goroutines running
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func HandleTransferRecv(connection net.Conn, filePath string, fileSize int64,
-                        waitGroup *sync.WaitGroup) error {
-    // If a waitgroup was passed in
-    if waitGroup != nil {
-        // Decrement wait group on local exit
-        defer waitGroup.Done()
-    }
-
+func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
+                        fileSize int64) (string, error) {
+    var file *os.File
+    var err error
     //  Create buffer to optimal size based on expected file size
     transferBuffer := make([]byte, GetOptimalBufferSize(fileSize))
 
-    // Open the file for writing
-    file, err := os.Create(filePath)
-    if err != nil {
-        return err
+    filePath := storePath + "/" + fileName
+
+    for {
+        // Open the file for writing
+        file, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
+        // If a file with the same name already exists
+        if os.IsExist(err) {
+            // Add some some random characters to the beginning of the name
+            filePath = storePath + "/" + data.RandStringBytes(8) + "_" + fileName
+            continue
+        } else if err != nil {
+            return "", err
+        }
+
+        break
     }
 
     // Read data from the socket and write to the file path
     err = SocketToFileCopy(file, connection, transferBuffer, fileSize)
     if err != nil {
-        return err
+        return "", err
     }
 
-    return nil
+    return filePath, nil
 }
 
 
@@ -281,27 +286,26 @@ func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
 func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
                  prefix []byte) (string, error) {
     // Wait for the start transfer message
-    _, err := ReadHandler(connection, &buffer)
+    bytesRead, err := ReadHandler(connection, &buffer)
     if err != nil {
         return "", err
     }
 
-    // If read data does not start with special delimiter or end with closed bracket
+    // If read data does not start with delimiter or end with closed bracket
     if !bytes.HasPrefix(buffer, prefix) ||
-    !bytes.HasSuffix(buffer, globals.TRANSFER_SUFFIX) {
-        return "", err
+    !bytes.HasSuffix(buffer[:bytesRead], globals.TRANSFER_SUFFIX) {
+        return "", fmt.Errorf("improper prefix or suffix in transfer message")
     }
 
     // Extract the file name and size from the initial transfer message
-    fileName, fileSize, err := GetFileInfo(buffer, prefix)
+    fileName, fileSize, err := GetFileInfo(buffer, prefix, bytesRead)
     if err != nil {
         return "", err
     }
 
-    // Format the file path based on received file name
-    filePath := storePath + "/" + string(fileName)
     // Receive the file from server
-    err = HandleTransferRecv(connection, filePath, fileSize, nil)
+    filePath, err := HandleTransferRecv(connection, storePath,
+                                        string(fileName), fileSize)
     if err != nil {
         return "", err
     }
@@ -433,7 +437,8 @@ func UploadFile(connection net.Conn, buffer []byte, filePath string,
 // - The number of bytes wrote from the buffer
 // - Error if it occurs, otherwise nil on success
 //
-func WriteHandler(connection net.Conn, buffer []byte, writeBytes int) (int, error) {
+func WriteHandler(connection net.Conn, buffer []byte,
+                  writeBytes int) (int, error) {
     // Perform write operation via passed in connection
     bytesWrote, err := connection.Write(buffer[:writeBytes])
     if err != nil {
