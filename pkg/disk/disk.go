@@ -5,9 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"sync"
-	"unicode"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
@@ -198,37 +196,6 @@ func DiskCheck() (int64, int64, error) {
     remainingSpace := free - globals.OS_RESERVED_SPACE
 
     return remainingSpace, total, nil
-}
-
-
-// Get the recommended IO block size and convert it to int.
-//
-// @Returns
-// - The recommended block size
-// - Error if it occurs, otherwise nil on success
-//
-func GetBlockSize() (int, error) {
-    var blockSize int
-
-    // Format command to get recommended block size
-    cmd := exec.Command("sh", "-c", "stat / | grep 'IO Block:' | cut -d':' -f4 | cut -d' ' -f2")
-
-    // Execute command to get block size
-    byteBlockSize, err := cmd.Output()
-    if err != nil {
-        return 0, err
-    }
-
-    // Iterate through the range of bytes in slice
-    for _, b := range byteBlockSize {
-        // If the byte rune is a digit
-        if unicode.IsDigit(rune(b)) {
-            // Convert from byte ('0' to '9') to int
-            blockSize = blockSize*10 + int(b-'0')
-        }
-    }
-
-    return blockSize, nil
 }
 
 

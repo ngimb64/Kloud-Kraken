@@ -126,19 +126,6 @@ func TestDiskCheck(t *testing.T) {
 }
 
 
-func TestGetBlockSize(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Get the recommended block size
-    blockSize, err := disk.GetBlockSize()
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-    // Ensure the block size is greater than 0
-    assert.Less(int(0), blockSize)
-}
-
-
 func TestGetDiskSpace(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)

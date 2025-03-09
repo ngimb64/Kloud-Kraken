@@ -120,7 +120,7 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
                        transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
     var cmd *exec.Cmd
-    exitLoop := false
+    completed := false
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
 
@@ -156,11 +156,14 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
         select {
         // Poll channel for complete signal
         case isComplete := <-channel:
-            // If transfers are complete and there is no wordlist in dir
-            if isComplete && filePath == "" {
-                // Send the processing complete message to server
-                sendProcessingComplete(connection, logMan)
-                exitLoop = true
+            // If the receiving handler routine is complete
+            if isComplete {
+                // Set outer boolean toggle
+                completed = isComplete
+            // If unexpected data received from channel (only should be true)
+            } else {
+                kloudlogs.LogMessage(logMan, "error",
+                                     "Received unexpected data from channel %v", isComplete)
             }
         default:
             // If there was no wordlist available in designated directory
@@ -171,7 +174,11 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
             }
         }
 
-        if exitLoop {
+        // If the receiving handler routine is complete and
+        // there are no more files to be processed
+        if completed && filePath == "" {
+            // Send the processing complete message to server
+            sendProcessingComplete(connection, logMan)
             break
         }
 
@@ -285,13 +292,13 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
-    // Make a small int32 buffer
-    int32Buffer := make([]byte, 4)
+    // Make buffer for int port bytes
+    intBuffer := make([]byte, 8)
     // Get random available port as a listener
     listener, port := netio.GetAvailableListener()
 
-    // Convert int32 port to bytes and write it into the buffer
-    err = binary.Write(bytes.NewBuffer(int32Buffer), binary.LittleEndian, int32(port))
+    // Convert int port to bytes and write it into the buffer
+    err = binary.Write(bytes.NewBuffer(intBuffer), binary.LittleEndian, port)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error occurred converting int32 port to byte array:  %w", err)
@@ -299,7 +306,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Send the converted port bytes to server to notify open port to connect for transfer
-    _, err = netio.WriteHandler(connection, int32Buffer, len(int32Buffer))
+    _, err = netio.WriteHandler(connection, intBuffer, len(intBuffer))
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error occurred sending converted int32 port to server:  %w", err)

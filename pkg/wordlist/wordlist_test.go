@@ -6,7 +6,6 @@ import (
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
-	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
 	"github.com/stretchr/testify/assert"
 )
@@ -132,12 +131,25 @@ func TestDuplicutAndDelete(t *testing.T) {
 }
 
 
+func TestGetBlockSize(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Get the recommended block size
+    blockSize, err := wordlist.GetBlockSize()
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the block size is greater than 0
+    assert.Less(int(0), blockSize)
+}
+
+
 func TestReduceBlockSize(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
     // Get the recommended block size
-    blockSize, err := disk.GetBlockSize()
+    blockSize, err := wordlist.GetBlockSize()
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
@@ -187,7 +199,7 @@ func TestFileShaveDD(t *testing.T) {
     originFile.Close()
 
     // Get the recommended block size
-    blockSize, err := disk.GetBlockSize()
+    blockSize, err := wordlist.GetBlockSize()
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Shave exceeding half of wordlist into new file

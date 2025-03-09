@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
@@ -90,7 +91,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         return
     }
 
-    var port int32
+    var port int
     // Receive bytes of port of client port to connect to for file transfer
     err = binary.Read(connection, binary.LittleEndian, &port)
     if err != nil {
@@ -99,7 +100,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     }
 
     // Format remote address with IP and port
-    remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
+    remoteAddr := ipAddr + ":" + strconv.Itoa(port)
 
     // Make a connection to the remote brain server
     transferConn, err := net.Dial("tcp", remoteAddr)
@@ -265,6 +266,41 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 }
 
 
+// Set up the AWS config with credentials and region stored in passed in app config.
+//
+// @Paramters
+// - appConfig:  The configuration struct for application
+//
+// @Returns:
+// - The initialized AWS credentials config
+//
+func awsConfigSetup(appConfig conf.AppConfig) aws.Config {
+    // Get the AWS access and secret key environment variables
+    awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
+    awsSecretKey := os.Getenv("AWS_SECRET_KEY")
+    // If AWS access and secret key are present
+    if awsAccessKey == "" || awsSecretKey == "" {
+        log.Fatal("Missing either the access or the secret key for AWS")
+    }
+
+    // Set the AWS credentials provider
+    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
+
+    // Load default config and override with custom credentials and region
+    awsConfig, err := config.LoadDefaultConfig(
+        context.TODO(),
+        config.WithRegion(appConfig.LocalConfig.Region),
+        config.WithCredentialsProvider(awsCreds),
+    )
+
+    if err != nil {
+        log.Fatalf("Error loading server AWS config:  %v", err)
+    }
+
+    return awsConfig
+}
+
+
 // Create the required dirs for program operation.
 //
 func makeServerDirs() {
@@ -339,27 +375,8 @@ func main() {
         log.Fatalf("Error deleting load dir subdirs:  %v", err)
     }
 
-    // Get the AWS access and secret key environment variables
-    awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
-    awsSecretKey := os.Getenv("AWS_SECRET_KEY")
-    // If AWS access and secret key are present
-    if awsAccessKey == "" || awsSecretKey == "" {
-        log.Fatal("Missing either the access or the secret key for AWS")
-    }
-
-    // Set the AWS credentials provider
-    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
-
-    // Load default config and override with custom credentials and region
-    awsConfig, err := config.LoadDefaultConfig(
-        context.TODO(),
-        config.WithRegion(appConfig.LocalConfig.Region),
-        config.WithCredentialsProvider(awsCreds),
-    )
-
-    if err != nil {
-        log.Fatalf("Error loading server AWS config:  %v", err)
-    }
+    // Set up the AWS credentials based on environment variables
+    awsConfig := awsConfigSetup(*appConfig)
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath,
