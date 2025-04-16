@@ -340,6 +340,8 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         }
 
         MaxTransfers.Add(-1)
+        // Subtract the file size of the file transfer that is complete
+        transferManager.RemoveTransferSize(fileSize)
     }()
 }
 

@@ -63,8 +63,7 @@ builder "amazon-instance" {
 # Inital shell provisioner to update and setup image
 provisioner "shell" {
     inline = [
-        "apk update && apk upgrade",         # Update and upgrade Alpines package manager
-        "mkdir /opt/provisioning"            # Create provisioning folder
+        "mkdir /opt/provisioning"   # Create provisioning folder
     ]
 }
 
@@ -76,7 +75,7 @@ provisioner "file" {
 
 # Shell provisioner for running initialization script of all the tools to be installed
 provisioner "shell" {
-    script            = "scripts/init.sh"    # Local script location
-    environment_vars  = ["HOSTNAME=test"]    # Enviroment variables used in script
-    remote_folder     = "/opt/provisioning"  # Folder where the script will reside on the AMI
+    script            = "scripts/init.sh"           # Local script location
+    environment_vars  = ["PACKAGES=\"hashcat\""]    # Enviroment variables used in script
+    remote_folder     = "/opt/provisioning"         # Folder where the script will reside on the AMI
 }
