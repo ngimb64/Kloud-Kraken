@@ -2,19 +2,18 @@
 
 - Run integration tests locally to get baseline working
 
-- Build provisioner script for AMI to upload compiled client code and setup clients
-
 - Implement mutual TLS over TCP for connections (Network Programming With Go book is great reference)
 
 - Implement tests for above TLS code
 
-- Add docstrings to added TLS code and wherever needed
+- Add docstrings to added TLS code and ensure code is documented
 
 - Rerun testing locally
 
 - Test and modify Makefile
 
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS
+    - Ensure user data include bash script which updates and installs hashcat, then transfers compiled client service binary from server
 
 - Do remaining unit tests for Kloudlogs after AWS code is added
 
