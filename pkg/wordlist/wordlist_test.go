@@ -334,7 +334,7 @@ func TestMergeWordlistDir(t *testing.T) {
         if data.IsInPercentRange(float64(maxFileSize), float64(fileSize), 5.0) ||
         fileSize == maxFileSize {
             fullFiles = append(fullFiles, itemPath)
-        } else {
+        } else if (fileSize != 0) {
             shaveFiles = append(shaveFiles, itemPath)
         }
     }
