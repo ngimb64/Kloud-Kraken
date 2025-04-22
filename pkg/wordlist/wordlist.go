@@ -219,15 +219,10 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
         return err
     }
 
-    // Set the files to be deleted as slice
-    removeFiles := []string{filterPath, shavePath}
-
-    // Iterate through files and delete them
-    for _, file := range removeFiles {
-        err = os.Remove(file)
-        if err != nil {
-            return err
-        }
+    // Delete the original file after split
+    err = os.Remove(filterPath)
+    if err != nil {
+        return err
     }
 
     outerCount := 0

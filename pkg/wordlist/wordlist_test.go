@@ -222,7 +222,7 @@ func TestFileShaveDD(t *testing.T) {
     deleteFiles := []string{shaveFile.Name(), originFile.Name()}
 
     // Iterate through resulting files and delete them
-    for _,file := range deleteFiles {
+    for _, file := range deleteFiles {
         err = os.Remove(file)
         assert.Equal(nil, err)
     }
@@ -268,10 +268,12 @@ func TestFileShaveSplit(t *testing.T) {
     // Ensure proper number of file to pass back into cat
     assert.Equal(1, len(catFiles))
 
-    // Delete the file in cat files slice
-    err = os.Remove(catFiles[0])
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    // Iterate through leftover files for cat and delete them
+    for _, file := range catFiles {
+        err = os.Remove(file)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+    }
 
     // Iterate through output files and delete them
     for fileName := range outFilesMap {
