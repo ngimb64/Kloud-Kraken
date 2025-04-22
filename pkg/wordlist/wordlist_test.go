@@ -257,7 +257,8 @@ func TestFileShaveSplit(t *testing.T) {
     outFilesMap := make(map[string]struct{})
 
     // Cut file into 10 2MB files and a 1MB overflow file
-    wordlist.FileShaveSplit(inFile.Name(), "/tmp/testfile", 2 * globals.MB,
+    wordlist.FileShaveSplit(inFile.Name(), "/tmp/testfile",
+                            int64(2 * globals.MB),
                             &catFiles, outFilesMap)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)

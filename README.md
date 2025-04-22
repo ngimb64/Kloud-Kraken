@@ -1,4 +1,6 @@
-- This project uses duplicut as submodule for de-duplicating wordlists
+- This project uses duplicut for de-duplicating wordlists
+    - Ensure the binary has executable permissions with `ls -la duplicut`
+        - If not set them with `chmod +x duplicut/duplicut`
 
 - Ensure Go is installed `sudo apt install -y golang`
     - Add these to shell rc file (usually .zshrc or .bashrc, echo $SHELL to find out)
