@@ -212,8 +212,7 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
     // Convert the max file size to string
     maxFileSizeStr := strconv.Itoa(int(maxFileSize))
     // Format the cut command to be executed
-    cmd := exec.Command("split", "--numeric-suffixes", "-C",
-                        maxFileSizeStr, filterPath, shavePath)
+    cmd := exec.Command("split", "-d", "-C", maxFileSizeStr, filterPath, shavePath)
     // Execute split command
     err := cmd.Run()
     if err != nil {
