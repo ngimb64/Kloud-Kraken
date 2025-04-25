@@ -27,7 +27,7 @@ import (
 //
 func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool {
     if hashMask == "" {
-        return false
+        return true
     }
 
     supportedModes := []string{"3", "6", "7"}
@@ -196,8 +196,11 @@ func ValidateHashFile(filePath string) error {
 //   with a supported cracking mode
 //
 func ValidateHashMask(crackingMode string, hashMask string) bool {
-    supportedModes := []string{"3", "6", "7"}
+    if hashMask == "" {
+        return true
+    }
 
+    supportedModes := []string{"3", "6", "7"}
     // Check to see if passed in cracking mode is in supported modes and hashmask is present
     return data.StringSliceHasItem(supportedModes, crackingMode) && hashMask != ""
 }
@@ -440,6 +443,11 @@ func ValidateRegion(region string) bool {
 // - Error if it occurs, otherwise nil on success
 //
 func ValidateRulesetFile(filePath string) error {
+    // If the ruleset path is empty return early
+    if filePath == "" {
+        return nil
+    }
+
     // Validate the ruleset file path
     validPath, err := ValidatePath(filePath)
     if err != nil {
