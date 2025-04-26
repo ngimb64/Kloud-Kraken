@@ -385,8 +385,11 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
     }
 
     // Create random file for cat command output
-    catPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                      "kloudkraken-data-", "", false)
+    catPath, _, err := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                           "kloudkraken-data-", "txt", false)
+    if err != nil {
+        return err
+    }
 
     // Cat files in cat slice into result deleting originals
     err = CatAndDelete(catFiles, catPath)
@@ -395,8 +398,11 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
     }
 
     // Create a new file for final duplicut command output
-    filterPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                         "kloudkraken-data-", "", false)
+    filterPath, _, err := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                              "kloudkraken-data-", "txt", false)
+    if err != nil {
+        return err
+    }
 
     // Run the oversized file via duplicut to output file, deleting original file
     sizeComp, destFileSize, err := DuplicutAndDelete(catPath, filterPath, maxFileSize)
@@ -418,15 +424,22 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
     }
 
     // Create a new file for file shaving process
-    shavePath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                        "kloudkraken-data-", "", false)
+    shavePath, _, err := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                             "kloudkraken-data-", "txt", false)
+    if err != nil {
+        return err
+    }
 
     // For file greater than threshold, dd is optimal for resource scalability
     if destFileSize > maxCutSize {
         for {
             // Create a new file for original file data after excess filtered
-            originalPath, _ := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                                   "kloudkraken-data-", "", false)
+            originalPath, _, err := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                                        "kloudkraken-data-", "txt", false)
+            if err != nil {
+                return err
+            }
+
             // Shaves any data large than excess size into new file
             shaveFileSize, err := FileShaveDD(filterPath, shavePath, originalPath,
                                               blockSize, maxFileSize)
@@ -441,8 +454,12 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
             if shaveFileSize > maxFileSize {
                 // Set result path as input and make new shave path for next iteration
                 filterPath = shavePath
-                shavePath, _ = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                                   "kloudkraken-data-", "", false)
+                shavePath, _, err = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                                        "kloudkraken-data-", "txt", false)
+                if err != nil {
+                    return err
+                }
+
                 continue
             }
 

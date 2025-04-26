@@ -28,8 +28,10 @@ func TestFileToSocketCopy(t *testing.T) {
 
     go func() {
         // Create the input file and return handle
-        outFilePath, outFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                                    "output_test", "txt", true)
+        outFilePath, outFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                         "output_test", "txt", true)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
         // Close the output file on local exit
         defer outFile.Close()
 
@@ -66,8 +68,10 @@ func TestFileToSocketCopy(t *testing.T) {
     assert.Equal(nil, err)
 
     // Create the input file and return handle
-    inFilePath, inFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                              "input_test", "txt", true)
+    inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                   "input_test", "txt", true)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
     // Add the created file to slice for later removal
     testFiles = append(testFiles, inFilePath)
 
@@ -321,8 +325,10 @@ func TestHandleTransferRecv(t *testing.T) {
     defer serverConn.Close()
 
     // Create the input file and return handle
-    inFilePath, inFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                              "input_test", "txt", true)
+    inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                   "input_test", "txt", true)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
     // Add the created file to slice for later removal
     testFiles = append(testFiles, inFilePath)
 
@@ -465,8 +471,10 @@ func TestSocketToFileCopy(t *testing.T) {
 
     go func() {
         // Create the input file and return handle
-        outFilePath, outFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                                    "output_test", "txt", true)
+        outFilePath, outFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                         "output_test", "txt", true)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
         // Add the created file to slice for later removal
         testFiles = append(testFiles, outFilePath)
 
@@ -505,8 +513,11 @@ func TestSocketToFileCopy(t *testing.T) {
     assert.Equal(nil, err)
 
     // Create the input file and return handle
-    inFilePath, inFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                              "input_test", "txt", true)
+    inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                   "input_test", "txt", true)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure file hanle closes on local exit
     defer inFile.Close()
     // Add the created file to slice for later removal
     testFiles = append(testFiles, inFilePath)
@@ -572,8 +583,10 @@ func TestTransferFile(t *testing.T) {
 
     isComplete := make(chan bool)
     // Create the input file and return handle
-    outFilePath, outFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                                "output_test", "txt", true)
+    outFilePath, outFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                     "output_test", "txt", true)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 
     go func() {
         // Wait for an incoming connection
@@ -607,8 +620,10 @@ func TestTransferFile(t *testing.T) {
     defer serverConn.Close()
 
     // Create the input file and return handle
-    inFilePath, inFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                              "input_test", "txt", true)
+    inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                   "input_test", "txt", true)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 
     // Make buffer to hold random data and write random data to it
     writeBuffer := make([]byte, 20 * globals.MB)
@@ -767,8 +782,10 @@ func TestFileTransfer(t *testing.T) {
     defer serverConn.Close()
 
     // Create the input file and return handle
-    inFilePath, inFile := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
-                                              "input_test", "txt", true)
+    inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
+                                                   "input_test", "txt", true)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
 
     // Make buffer to hold random data and write random data to it
     writeBuffer := make([]byte, 20 * globals.MB)

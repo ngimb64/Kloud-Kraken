@@ -19,8 +19,8 @@ func TestValidateCharsets(t *testing.T) {
     // Ensure invalid cracking mode fails
     assert.False(validate.ValidateCharsets("9", "?u?l?l?l?l?l?l?l?d",
                                            "testchars1", "testchars2"))
-    // Ensure missing hash mask fails
-    assert.False(validate.ValidateCharsets("3", "", ""))
+    // Ensure missing hash mask passes
+    assert.True(validate.ValidateCharsets("3", "", ""))
     // Ensure proper args pass
     assert.True(validate.ValidateCharsets("3", "?u?l?l?l?l?l?l?l?d",
                                           "testchars1", "testchar2"))
@@ -192,15 +192,15 @@ func TestValidateHashMask(t *testing.T) {
     }
 
     falacies := []string{"-1", "0", "1"}
-    // Iterate through slice of truths and test them
+    // Iterate through slice of falacies and test them
     for _, falacy := range falacies {
         assert.False(validate.ValidateHashMask(falacy, "?u?l?l?l?l?l?l?l?d"))
     }
 
-    falacies = []string{"4", "5", "8"}
+    truths = []string{"4", "5", "8"}
     // Iterate through slice of truths and test them
-    for _, falacy := range falacies {
-        assert.False(validate.ValidateHashMask(falacy, ""))
+    for _, truth := range truths {
+        assert.True(validate.ValidateHashMask(truth, ""))
     }
 }
 

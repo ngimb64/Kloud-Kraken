@@ -91,9 +91,10 @@ func TestCreateRandFile(t *testing.T) {
     assert.Equal(nil, err)
 
     // Create a random file and return the path
-    filePath, _ := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
-                                       "kloudkraken-data", "", false)
-
+    filePath, _, err := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
+                                            "kloudkraken-data", "", false)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
     // Check to see if the file exists
     exists, isDir, hasData, err := disk.PathExists(filePath)
     // Ensure the error is nil meaning successful operation

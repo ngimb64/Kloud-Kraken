@@ -134,8 +134,8 @@ func CheckDirFiles(path string) (string, int64, error) {
 // - The formatted path to the newly create random file
 // - The open file handler of create file is retHandler is true
 //
-func CreateRandFile(dirPath string, nameLen int, baseName string,
-                    extension string, retHandler bool) (string, *os.File) {
+func CreateRandFile(dirPath string, nameLen int, baseName string, extension string,
+                    retHandler bool) (string, *os.File, error) {
     var randoPath string
     var randoString string
 
@@ -163,16 +163,18 @@ func CreateRandFile(dirPath string, nameLen int, baseName string,
         file, err := os.OpenFile(randoPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
         if os.IsExist(err) {
             continue
+        } else if err != nil {
+            return "", nil, err
         }
 
         // If the return handler is true, return open file
         if retHandler {
-            return randoPath, file
+            return randoPath, file, nil
         }
 
         // Close the file descriptor since not in use
         file.Close()
-        return randoPath, nil
+        return randoPath, nil, nil
     }
 }
 
@@ -285,7 +287,6 @@ func PathExists(filePath string) (bool, bool, bool, error) {
 
     // If there is an entry, the dir is not empty
     return true, true, true, nil
-
 }
 
 
