@@ -131,35 +131,6 @@ func TestDuplicutAndDelete(t *testing.T) {
 }
 
 
-func TestGetBlockSize(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Get the recommended block size
-    blockSize, err := wordlist.GetBlockSize()
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-    // Ensure the block size is greater than 0
-    assert.Less(int(0), blockSize)
-}
-
-
-func TestReduceBlockSize(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Get the recommended block size
-    blockSize, err := wordlist.GetBlockSize()
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Reduce the block size to a reusable size
-    blockSize = wordlist.ReduceBlockSize(int64(10), int64(blockSize))
-    // Ensure the block size is is reduced to nearest binary chunk
-    assert.Equal(8, blockSize)
-}
-
-
 func TestFileShaveDD(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -198,13 +169,11 @@ func TestFileShaveDD(t *testing.T) {
     // Close the output file
     originFile.Close()
 
-    // Get the recommended block size
-    blockSize, err := wordlist.GetBlockSize()
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Shave exceeding half of wordlist into new file
     shaveFileSize, err := wordlist.FileShaveDD(inFile.Name(), shaveFile.Name(),
-                                               originFile.Name(), blockSize,
+                                               originFile.Name(), int64(4096),
                                                int64((10 * globals.MB)))
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
@@ -281,6 +250,30 @@ func TestFileShaveSplit(t *testing.T) {
         // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
+}
+
+
+func TestGetOptimalBlockSize(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    blockSize, err := wordlist.GetOptimalBlockSize(5 * globals.MB)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the block size is 4MB
+    assert.Equal(8 * globals.MB, blockSize)
+
+    blockSize, err = wordlist.GetOptimalBlockSize(4 * globals.MB)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the block size is 4MB
+    assert.Equal(4 * globals.MB, blockSize)
+
+    blockSize, err = wordlist.GetOptimalBlockSize(10 * globals.KB)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the block size is 4MB
+    assert.Equal(16 * globals.KB, blockSize)
 }
 
 

@@ -186,11 +186,11 @@ func GetOptimalBufferSize(fileSize int64) int {
     // If the file is less than or equal to 1 MB
     case fileSize <= 1 * globals.MB:
         // 4 KB buffer
-        return 4 * globals.KB
+        return 8 * globals.KB
     // If the file is less than or equal to 100 MB
     case fileSize <= 100 * globals.MB:
         // 64 KB buffer
-        return 64 * globals.KB
+        return 128 * globals.KB
     // If the file is less than or equal to 1 GB
     case fileSize <= 1 * globals.GB:
         // 1 MB buffer
