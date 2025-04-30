@@ -331,8 +331,9 @@ func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
             continue
         }
 
-        // If the current file size is greater than the max file size set in YAML
-        if itemInfo.Size() > maxFileSizeInt64 {
+        // If the current file size is greater than the max file size
+        // set in YAML OR the current file is empty
+        if itemInfo.Size() > maxFileSizeInt64 || itemInfo.Size() == 0 {
             continue
         }
 

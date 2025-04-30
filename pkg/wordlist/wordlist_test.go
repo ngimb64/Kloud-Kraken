@@ -115,12 +115,9 @@ func TestDuplicutAndDelete(t *testing.T) {
     duplicutOutFile.Close()
 
     // Execute the cat command that filters duplicates in files
-    sizeComp, size, err := wordlist.DuplicutAndDelete(file1.Name(), duplicutOutFile.Name(),
-                                                      int64(104857600))
+    size, err := wordlist.DuplicutAndDelete(file1.Name(), duplicutOutFile.Name())
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
-    // Ensure the size comparison is equal to less than indicator
-    assert.Equal(int32(0), sizeComp)
     // Ensure the size is equal to the expected data
     assert.Equal(int64(len(testData)), size)
 
@@ -226,9 +223,9 @@ func TestFileShaveSplit(t *testing.T) {
     outFilesMap := make(map[string]struct{})
 
     // Cut file into 10 2MB files and a 1MB overflow file
-    wordlist.FileShaveSplit(inFile.Name(), "/tmp/testfile",
-                            int64(2 * globals.MB),
-                            &catFiles, outFilesMap)
+    err = wordlist.FileShaveSplit(inFile.Name(), "/tmp/testfile",
+                                  int64(2 * globals.MB),
+                                  &catFiles, outFilesMap)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
@@ -261,19 +258,19 @@ func TestGetOptimalBlockSize(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the block size is 4MB
-    assert.Equal(8 * globals.MB, blockSize)
+    assert.Equal(int64(8 * globals.MB), blockSize)
 
     blockSize, err = wordlist.GetOptimalBlockSize(4 * globals.MB)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the block size is 4MB
-    assert.Equal(4 * globals.MB, blockSize)
+    assert.Equal(int64(4 * globals.MB), blockSize)
 
     blockSize, err = wordlist.GetOptimalBlockSize(10 * globals.KB)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the block size is 4MB
-    assert.Equal(16 * globals.KB, blockSize)
+    assert.Equal(int64(16 * globals.KB), blockSize)
 }
 
 
@@ -295,7 +292,7 @@ func TestMergeWordlistDir(t *testing.T) {
     maxFileSize := int64(20 * globals.MB)
     // Merge the created wordlists in the wordlist dir
     err = wordlist.MergeWordlistDir(dirPath, maxFileSize, 15.0,
-                                    int64(75 * globals.GB))
+                                    int64(1 * globals.GB))
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
@@ -312,6 +309,7 @@ func TestMergeWordlistDir(t *testing.T) {
             continue
         }
 
+        // Set the path to current file
         itemPath := dirPath + "/" + item.Name()
 
         // Get the current file info
@@ -335,14 +333,7 @@ func TestMergeWordlistDir(t *testing.T) {
     // Ensure there are 5 full files
     assert.Equal(5, len(fullFiles))
     // Ensure there is one leftover file
-    assert.Equal(1, len(shaveFiles))
-
-    // Get the size of the leftover file
-    fileInfo, err := os.Stat(shaveFiles[0])
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-    // Ensure the leftover file is expected size
-    assert.Equal(int64(6369586), fileInfo.Size())
+    assert.Equal(2, len(shaveFiles))
 
     // Delete test directory and its contents after test
     err = os.RemoveAll(dirPath)

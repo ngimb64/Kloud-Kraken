@@ -63,15 +63,12 @@ func CatAndDelete(catFiles *[]string, catPath string) error {
 // @Parameters
 // - srcPath:  The path to the source file that needs de-deplication
 // - destPath:  The path to the resulting output file of duplicut
-// - maxFileSize:  The max allowed file size for wordlists
 //
 // @Returns
-// - numerical indicator of output size comparison to max file size
-//   0 = less than, 1 = equal to, 2 = greater than
 // - The size of the duplicut output file
+// - Error if it occurs, otherwise nil on success
 //
-func DuplicutAndDelete(srcPath string, destPath string,
-                       maxFileSize int64) (int32, int64, error) {
+func DuplicutAndDelete(srcPath string, destPath string) (int64, error) {
     // Format duplicut command to be executed
     duplicutCmd := "../../duplicut/duplicut " + srcPath + " -o " +
                    destPath + " 1>/dev/null 2>/dev/null"
@@ -79,34 +76,23 @@ func DuplicutAndDelete(srcPath string, destPath string,
     // Execute the command and wait until it is complete
     err := cmd.Run()
     if err != nil {
-        return -1, -1, err
+        return -1, err
     }
 
     // Delete the source file after duplicut
     err = os.Remove(srcPath)
     if err != nil {
-        return -1, -1, err
+        return -1, err
     }
 
     // Get the size of resulting output file
     destPathInfo, err := os.Stat(destPath)
     if err != nil {
-        return -1, -1, err
+        return -1, err
     }
 
     // Get the output file size
-    outfileSize := destPathInfo.Size()
-
-    // If the output file size is less than max
-    if outfileSize < maxFileSize {
-        return 0, outfileSize, nil
-    // If the output file size is equal max
-    } else if outfileSize == maxFileSize {
-        return 1, outfileSize, nil
-    // If the output file size is greater than max
-    } else {
-        return 2, outfileSize, nil
-    }
+    return destPathInfo.Size(), nil
 }
 
 
@@ -347,17 +333,12 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
         return nil
     }
 
-    // Create a new file for filtered output
-    filterPath, _, err := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                              "kloudkraken-data-", "txt", false)
-    if err != nil {
-        return err
-    }
-
+    var filterPath string
     destFileSize := itemInfo.Size()
+
     // If the current file size is not within 15% of the max size
     if destFileSize < maxFileSize &&
-    !data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), 15.0) {
+    !data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), maxRange) {
         // Append the current file path to cat files slice
         *catFiles = append(*catFiles, path)
 
@@ -379,24 +360,33 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
             return err
         }
 
+        // Create a new file for filtered output
+        filterPath, _, err = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
+                                                 "kloudkraken-data-", "txt", false)
+        if err != nil {
+            return err
+        }
+
         // Run the oversized file via duplicut to output file, deleting original file
-        sizeComp, destFileSize, err := DuplicutAndDelete(catPath, filterPath, maxFileSize)
+        destFileSize, err = DuplicutAndDelete(catPath, filterPath)
         if err != nil {
             return err
         }
 
         // If the size of the dest file is equal to max OR resides within the max range
-        if sizeComp == 1 || (sizeComp == 0 &&
+        if destFileSize == maxFileSize || (destFileSize < maxFileSize &&
         data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
             // Add the resulting path to out files map
             outFilesMap[filterPath] = struct{}{}
             return nil
         // If the size of the dest file is less than max
-        } else if sizeComp == 0 {
+        } else if destFileSize < maxFileSize {
             // Add the output file to cat files list for further processing
             *catFiles = append(*catFiles, filterPath)
             return nil
         }
+    } else {
+        filterPath = path
     }
 
     // Create a new file for file shaving process
@@ -449,6 +439,13 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
                 }
 
                 continue
+
+            // If the shaved file is within the max range
+            } else if shaveFileSize == maxFileSize ||
+            data.IsInPercentRange(float64(maxFileSize), float64(shaveFileSize), maxRange) {
+                // Add the shaved file to the out files map
+                outFilesMap[shavePath] = struct{}{}
+                break
             }
 
             // Add the file with extra shaved data to cat files slice

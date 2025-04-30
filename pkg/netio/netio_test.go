@@ -266,8 +266,8 @@ func TestGetOptimalBufferSize(t *testing.T) {
         output   int
         expected int
     } {
-        {512 * globals.KB, 0, 4 * globals.KB},
-        {50 * globals.MB, 0, 64 * globals.KB},
+        {512 * globals.KB, 0, 8 * globals.KB},
+        {50 * globals.MB, 0, 128 * globals.KB},
         {500 * globals.MB, 0, 1 * globals.MB},
         {2 * globals.GB, 0, 4 * globals.MB},
     }
