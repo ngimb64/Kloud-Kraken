@@ -301,7 +301,7 @@ func ValidateLogMode(logMode string) bool {
 // - The converted int64 max file size as raw bytes
 // - Error if it occurs, otherwise nil on success
 //
-func ValidateMaxFileSize(maxFileSize string) (int64, error) {
+func ValidateFileSize(maxFileSize string) (int64, error) {
     var byteSize int64
     var err error
 

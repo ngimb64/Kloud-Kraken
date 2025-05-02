@@ -1,5 +1,3 @@
-- Write test case for GetOptimalBlockSize
-
 - Run integration tests locally to get baseline working
 
 - Implement mutual TLS over TCP for connections (Network Programming With Go book is great reference)

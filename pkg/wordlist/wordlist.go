@@ -264,6 +264,7 @@ func GetOptimalBlockSize(fileSize int64) (int64, error) {
 //
 // @Parameters
 // - dirPath:  The path to the directory where wordlist merging occurs
+// - maxMergingSize:  The maximum allowed size until merging process is skipped
 // - maxFileSize:  The maximum size a wordlist should be
 // - maxRange:  The range within the max that makes a file register as full
 // - maxCutSize:  The max size threshold where dd is utilized instead of cut
@@ -271,15 +272,15 @@ func GetOptimalBlockSize(fileSize int64) (int64, error) {
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func MergeWordlistDir(dirPath string, maxFileSize int64,
+func MergeWordlistDir(dirPath string, maxMergingSize int64, maxFileSize int64,
                       maxRange float64, maxCutSize int64) error {
     catFiles := []string{}
     outFilesMap := make(map[string]struct{})
 
     // Iterate through the contents of the directory and any subdirectories, merging wordlists
     err := filepath.Walk(dirPath, func(path string, itemInfo os.FileInfo, walkErr error) error {
-        return MergeWordlists(dirPath, maxFileSize, maxRange, maxCutSize, &catFiles,
-                              outFilesMap, path, itemInfo, walkErr)
+        return MergeWordlists(dirPath, maxMergingSize, maxFileSize, maxRange, maxCutSize,
+                              &catFiles, outFilesMap, path, itemInfo, walkErr)
     })
 
     if err != nil {
@@ -302,7 +303,8 @@ func MergeWordlistDir(dirPath string, maxFileSize int64,
 //
 // @Parameters
 // - dirPath:  The path to the directory where wordlist merging occurs
-// - maxFileSize:  The maximum size a wordlist should be
+// - maxMergingSize:  The maximum allowed size until merging process is skipped
+// - maxFileSize:  The maximum allowed size a wordlist that can be sent
 // - maxRange:  The range within the max that makes a file register as full
 // - maxCutSize:  The max size threshold where dd is utilized instead of cut
 // - catFiles:  The slice of file paths to pass into CatAndDelete()
@@ -315,8 +317,9 @@ func MergeWordlistDir(dirPath string, maxFileSize int64,
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutSize int64,
-                    catFiles *[]string, outFilesMap map[string]struct{}, path string,
+func MergeWordlists(dirPath string, maxMergingSize int64, maxFileSize int64,
+                    maxRange float64, maxCutSize int64, catFiles *[]string,
+                    outFilesMap map[string]struct{}, path string,
                     itemInfo os.FileInfo, err error) error {
     if err != nil {
         return err
@@ -336,9 +339,18 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
     var filterPath string
     destFileSize := itemInfo.Size()
 
-    // If the current file size is not within 15% of the max size
-    if destFileSize < maxFileSize &&
-    !data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), maxRange) {
+    // If the file is within the max file size and exceeds or
+    // is within upper percentile of merging max size
+    if (destFileSize <= maxFileSize && destFileSize >= maxMergingSize) ||
+    data.IsInPercentRange(float64(maxMergingSize), float64(destFileSize), maxRange) {
+        // Add the resulting path to out files map
+        outFilesMap[path] = struct{}{}
+        return nil
+    }
+
+    // If the current file size is less than or is not within 15% of merging max size
+    if destFileSize < maxMergingSize &&
+    !data.IsInPercentRange(float64(maxMergingSize), float64(destFileSize), maxRange) {
         // Append the current file path to cat files slice
         *catFiles = append(*catFiles, path)
 
@@ -374,13 +386,13 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
         }
 
         // If the size of the dest file is equal to max OR resides within the max range
-        if destFileSize == maxFileSize || (destFileSize < maxFileSize &&
-        data.IsInPercentRange(float64(maxFileSize), float64(destFileSize), maxRange)) {
+        if destFileSize == maxMergingSize || (destFileSize < maxMergingSize &&
+        data.IsInPercentRange(float64(maxMergingSize), float64(destFileSize), maxRange)) {
             // Add the resulting path to out files map
             outFilesMap[filterPath] = struct{}{}
             return nil
         // If the size of the dest file is less than max
-        } else if destFileSize < maxFileSize {
+        } else if destFileSize < maxMergingSize {
             // Add the output file to cat files list for further processing
             *catFiles = append(*catFiles, filterPath)
             return nil
@@ -440,9 +452,10 @@ func MergeWordlists(dirPath string, maxFileSize int64, maxRange float64, maxCutS
 
                 continue
 
-            // If the shaved file is within the max range
-            } else if shaveFileSize == maxFileSize ||
-            data.IsInPercentRange(float64(maxFileSize), float64(shaveFileSize), maxRange) {
+            // If the shaved file is within or above the max merging range
+            } else if (shaveFileSize >= maxMergingSize ||
+            data.IsInPercentRange(float64(maxMergingSize), float64(shaveFileSize), maxRange)) &&
+            shaveFileSize <= maxFileSize {
                 // Add the shaved file to the out files map
                 outFilesMap[shavePath] = struct{}{}
                 break

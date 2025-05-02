@@ -17,14 +17,16 @@ type AppConfig struct {
 
 // LocalConfig contains the yaml configuration for local server settings
 type LocalConfig struct {
-    Region          string  `yaml:"region"`
-    ListenerPort    int     `yaml:"listener_port"`
-    NumberInstances int32   `yaml:"number_instances"`
-    LoadDir	   	    string  `yaml:"load_dir"`
-    HashFilePath    string  `yaml:"hash_file_path"`
-    RulesetPath     string  `yaml:"ruleset_path"`
-    MaxSizeRange    float64 `yaml:"max_size_range"`
-    LogPath         string  `yaml:"log_path"`
+    Region              string  `yaml:"region"`
+    ListenerPort        int     `yaml:"listener_port"`
+    NumberInstances     int32   `yaml:"number_instances"`
+    LoadDir	   	        string  `yaml:"load_dir"`
+    HashFilePath        string  `yaml:"hash_file_path"`
+    RulesetPath         string  `yaml:"ruleset_path"`
+    MaxMergingSize      string  `yaml:"max_merging_size"`
+    MaxMergingSizeInt64 int64   `yaml:"-"`               // Parsed later
+    MaxSizeRange        float64 `yaml:"max_size_range"`
+    LogPath             string  `yaml:"log_path"`
 }
 
 // ClientConfig contains the yaml configuration for the client settings
@@ -131,6 +133,12 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
+    // Parse and convert the max merging size to raw bytes from any units
+    localConfig.MaxMergingSizeInt64, err = validate.ValidateFileSize(localConfig.MaxMergingSize)
+    if err != nil {
+        fmt.Errorf("improper max_merging_size - %w", err)
+    }
+
     // Ensure the max size range is less or equal to 50 percent
     if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
         return fmt.Errorf("max_size_range greater than 50 percent")
@@ -164,7 +172,7 @@ func ValidateClientConfig(clientConfig *ClientConfig) error {
     }
 
     // Parse and convert the max file size to raw bytes from any units
-    clientConfig.MaxFileSizeInt64, err = validate.ValidateMaxFileSize(clientConfig.MaxFileSize)
+    clientConfig.MaxFileSizeInt64, err = validate.ValidateFileSize(clientConfig.MaxFileSize)
     if err != nil {
         return fmt.Errorf("improper max_file_size - %w", err)
     }

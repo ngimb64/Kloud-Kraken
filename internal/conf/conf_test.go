@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/stretchr/testify/assert"
 )
@@ -59,6 +60,7 @@ local_config:
   load_dir: "%s"
   hash_file_path: "%s"
   ruleset_path: "%s"
+  max_merging_size: "50MB"
   max_size_range: 25.0
   log_path: "KloudKraken.log"
 
@@ -93,12 +95,15 @@ client_config:
     assert.Equal(testDir, config.LocalConfig.LoadDir)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
     assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
+    assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
+    assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
     assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
 
     // Validate client config fields to original data
     assert.Equal("us-west-1", config.ClientConfig.Region)
     assert.Equal("100MB", config.ClientConfig.MaxFileSize)
+    assert.Equal(int64(100 * globals.MB), config.ClientConfig.MaxFileSizeInt64)
     assert.Equal("3", config.ClientConfig.CrackingMode)
     assert.Equal("1000", config.ClientConfig.HashType)
     assert.True(config.ClientConfig.ApplyOptimization)

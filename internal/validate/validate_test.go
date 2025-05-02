@@ -295,7 +295,7 @@ func TestValidateLogMode(t *testing.T) {
 }
 
 
-func TestValidateMaxFileSize(t *testing.T) {
+func TestValidateFileSize(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
@@ -311,7 +311,7 @@ func TestValidateMaxFileSize(t *testing.T) {
     // Iterate through slice of test structs
     for _, test := range tests {
         // Use struct member as input to call function
-        outputSize, err := validate.ValidateMaxFileSize(test.input)
+        outputSize, err := validate.ValidateFileSize(test.input)
         // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Ensure the expected test size equals function output

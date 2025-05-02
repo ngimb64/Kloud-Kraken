@@ -289,10 +289,11 @@ func TestMergeWordlistDir(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
-    maxFileSize := int64(20 * globals.MB)
+    maxMergingSize := int64(20 * globals.MB)
+    maxFileSize := int64(1 * globals.GB)
     // Merge the created wordlists in the wordlist dir
-    err = wordlist.MergeWordlistDir(dirPath, maxFileSize, 15.0,
-                                    int64(1 * globals.GB))
+    err = wordlist.MergeWordlistDir(dirPath, maxMergingSize, maxFileSize,
+                                    15.0, int64(1 * globals.GB))
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 

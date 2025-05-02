@@ -5,12 +5,13 @@ local_config:
   load_dir: "/home/thebugfather/Documents/project_testing/project_data"
   hash_file_path: "/home/thebugfather/Documents/project_testing/test-hashes"
   ruleset_path: ""
+  max_merging_size: "500MB"
   max_size_range: 15.0
   log_path: "KloudKraken.log"
 
 client_config:
   region: "us-east-1"
-  max_file_size: "1GB"
+  max_file_size: "16GB"
   cracking_mode: "0"
   hash_type: "1700"
   apply_optimization: false
