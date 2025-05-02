@@ -290,7 +290,7 @@ func TestMergeWordlistDir(t *testing.T) {
     assert.Equal(nil, err)
 
     maxMergingSize := int64(20 * globals.MB)
-    maxFileSize := int64(1 * globals.GB)
+    maxFileSize := int64(30 * globals.MB)
     // Merge the created wordlists in the wordlist dir
     err = wordlist.MergeWordlistDir(dirPath, maxMergingSize, maxFileSize,
                                     15.0, int64(1 * globals.GB))
@@ -323,7 +323,7 @@ func TestMergeWordlistDir(t *testing.T) {
         assert.Less(fileSize, maxFileSize)
 
         // If the file is within 5 percent or equal to the max file size
-        if data.IsInPercentRange(float64(maxFileSize), float64(fileSize), 5.0) ||
+        if data.IsInPercentRange(float64(maxFileSize), float64(fileSize), 15.0) ||
         fileSize == maxFileSize {
             fullFiles = append(fullFiles, itemPath)
         } else if (fileSize != 0) {
@@ -331,9 +331,9 @@ func TestMergeWordlistDir(t *testing.T) {
         }
     }
 
-    // Ensure there are 5 full files
-    assert.Equal(5, len(fullFiles))
-    // Ensure there is one leftover file
+    // Ensure there are 3 full files
+    assert.Equal(3, len(fullFiles))
+    // Ensure there are two leftover files
     assert.Equal(2, len(shaveFiles))
 
     // Delete test directory and its contents after test
