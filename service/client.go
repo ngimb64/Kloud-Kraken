@@ -505,7 +505,7 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
 //
 func makeClientDirs() {
     // Set the program directories
-    programDirs := []string{WordlistPath, HashFilePath}
+    programDirs := []string{WordlistPath, HashesPath}
 
     // If there is a ruleset, append its path to program dirs
     if HasRuleset {

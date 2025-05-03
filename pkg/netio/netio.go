@@ -221,7 +221,7 @@ func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
     var err error
     //  Create buffer to optimal size based on expected file size
     transferBuffer := make([]byte, GetOptimalBufferSize(fileSize))
-
+    // Format the path where the file will be stored
     filePath := storePath + "/" + fileName
 
     for {
@@ -229,7 +229,7 @@ func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
         file, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
         // If a file with the same name already exists
         if os.IsExist(err) {
-            // Add some some random characters to the beginning of the name
+            // Add random characters to beginning of name, then try again
             filePath = storePath + "/" + data.RandStringBytes(8) + "_" + fileName
             continue
         } else if err != nil {
