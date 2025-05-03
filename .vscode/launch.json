@@ -11,7 +11,11 @@
             "mode": "debug",
             "program": "${workspaceFolder}/cmd/kloud-kraken/main.go",
             "args": ["../../config/config.yml"],
-            "stopOnEntry": false
+            "stopOnEntry": false,
+            "env": {
+                "AWS_ACCESS_KEY": "blahblah",
+                "AWS_SECRET_KEY": "blahblah"
+            }
         },
         {
             "name": "Client Launch",
