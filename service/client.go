@@ -298,12 +298,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     listener, port := netio.GetAvailableListener()
 
     // Convert int port to bytes and write it into the buffer
-    err = binary.Write(bytes.NewBuffer(intBuffer), binary.LittleEndian, uint16(port))
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error occurred converting int32 port to byte array:  %w", err)
-        return
-    }
+    binary.LittleEndian.PutUint16(intBuffer, uint16(port))
 
     // Send the converted port bytes to server to notify open port to connect for transfer
     _, err = netio.WriteHandler(connection, intBuffer, len(intBuffer))
