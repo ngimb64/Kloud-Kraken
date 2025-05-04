@@ -91,7 +91,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         return
     }
 
-    var port int
+    var port uint16
     // Receive bytes of port of client port to connect to for file transfer
     err = binary.Read(connection, binary.LittleEndian, &port)
     if err != nil {
@@ -100,7 +100,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     }
 
     // Format remote address with IP and port
-    remoteAddr := ipAddr + ":" + strconv.Itoa(port)
+    remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
 
     // Make a connection to the remote brain server
     transferConn, err := net.Dial("tcp", remoteAddr)
