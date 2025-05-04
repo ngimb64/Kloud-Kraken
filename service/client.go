@@ -279,7 +279,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 
     // If the read data does not start with special delimiter or end with closed bracket
     if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
-    !bytes.HasSuffix(buffer, globals.TRANSFER_SUFFIX) {
+    !bytes.HasSuffix(buffer[:bytesRead], globals.TRANSFER_SUFFIX) {
         kloudlogs.LogMessage(logMan, "error", "Unusual format in receieved start transfer message")
         return
     }
@@ -293,12 +293,12 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // Make buffer for int port bytes
-    intBuffer := make([]byte, 8)
+    intBuffer := make([]byte, 2)
     // Get random available port as a listener
     listener, port := netio.GetAvailableListener()
 
     // Convert int port to bytes and write it into the buffer
-    err = binary.Write(bytes.NewBuffer(intBuffer), binary.LittleEndian, port)
+    err = binary.Write(bytes.NewBuffer(intBuffer), binary.LittleEndian, uint16(port))
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error occurred converting int32 port to byte array:  %w", err)

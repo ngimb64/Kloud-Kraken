@@ -292,7 +292,7 @@ func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
     }
 
     // If read data does not start with delimiter or end with closed bracket
-    if !bytes.HasPrefix(buffer[:bytesRead], prefix) ||
+    if !bytes.HasPrefix(buffer, prefix) ||
     !bytes.HasSuffix(buffer[:bytesRead], globals.TRANSFER_SUFFIX) {
         return "", fmt.Errorf("improper prefix or suffix in transfer message")
     }
