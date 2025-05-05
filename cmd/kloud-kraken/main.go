@@ -168,20 +168,23 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 
     for {
         // Read data from connected client
-        _, err := netio.ReadHandler(connection, &buffer)
+        bytesRead, err := netio.ReadHandler(connection, &buffer)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
                                  "Error occurred reading data from socket:  %w", err)
             return
         }
 
+        // Save read content into isolated buffer
+        readBuffer := buffer[:bytesRead]
+
         // If the read data contains the processing complete message
-        if bytes.Contains(buffer, globals.PROCESSING_COMPLETE) {
+        if bytes.Contains(readBuffer, globals.PROCESSING_COMPLETE) {
             break
         }
 
         // If the read data contains transfer request message
-        if bytes.Contains(buffer, globals.TRANSFER_REQUEST_MARKER) {
+        if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_MARKER) {
             // Call method to handle file transfer based
             handleTransfer(connection, buffer, waitGroup, appConfig, logMan)
         }

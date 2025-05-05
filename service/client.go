@@ -151,7 +151,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
 
     for {
         // Attempt to get the next available wordlist
-        filePath, fileSize, err := disk.CheckDirFiles(WordlistPath)
+        fileName, fileSize, err := disk.CheckDirFiles(WordlistPath)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w",
                                  err, zap.String("wordlist directory", WordlistPath))
@@ -172,7 +172,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
             }
 
             // Try again to get the next available wordlist to ensure no data is missed
-            filePath, fileSize, err = disk.CheckDirFiles(WordlistPath)
+            fileName, fileSize, err = disk.CheckDirFiles(WordlistPath)
             if err != nil {
                 kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w",
                                      err, zap.String("wordlist directory", WordlistPath))
@@ -180,7 +180,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
             }
         default:
             // If there was no wordlist available in designated directory
-            if filePath == "" {
+            if fileName == "" {
                 // Sleep a bit and re-iterate to see if wordlist is available
                 time.Sleep(3 * time.Second)
                 continue
@@ -189,11 +189,14 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
 
         // If the receiving handler routine is complete and
         // there are no more files to be processed
-        if completed && filePath == "" {
+        if completed && fileName == "" {
             // Send the processing complete message to server
             sendProcessingComplete(connection, logMan)
             break
         }
+
+        // Format the path to the wordlist
+        filePath := filepath.Join(WordlistPath, fileName)
 
         var cmdArgs []string
 
@@ -306,7 +309,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     }
 
     // If the server has completed transferring all data
-    if bytes.Contains(buffer, globals.END_TRANSFER_MARKER) {
+    if bytes.Contains(buffer[:bytesRead], globals.END_TRANSFER_MARKER) {
         *transferComplete = true
         return
     }
