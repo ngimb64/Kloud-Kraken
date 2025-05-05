@@ -165,6 +165,14 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
                 kloudlogs.LogMessage(logMan, "error",
                                      "Received unexpected data from channel %v", isComplete)
             }
+
+            // Try again to get the next available wordlist to ensure no data is missed
+            filePath, fileSize, err = disk.CheckDirFiles(WordlistPath)
+            if err != nil {
+                kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w",
+                                     err, zap.String("wordlist directory", WordlistPath))
+                return
+            }
         default:
             // If there was no wordlist available in designated directory
             if filePath == "" {
@@ -231,6 +239,27 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
         waitGroup.Add(1)
         // In a separate goroutine, which will log the output and delete processed data
         go logAndRemove(filePath, output, fileSize, transferManager, logMan, waitGroup)
+    }
+
+    // Set the message buffer size
+    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+
+    // Lock the mutex and ensure it unlocks on local exit
+    BufferMutex.Lock()
+    defer BufferMutex.Unlock()
+
+    // Transfer the cracked user hash file to server
+    err := netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal",
+                             "Error occured sending the cracked hashes to server:  %w", err)
+    }
+
+    // Transfer the log file to server
+    err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal",
+                             "Error occured sending the log file to server:  %w", err)
     }
 }
 
@@ -406,29 +435,18 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
                             &transferComplete, logMan)
             // If all the transfers are complete exit the data receiving loop
             if transferComplete {
+                // Sleep to ensure other routine has time to poll for wordlists
+                time.Sleep(5 * time.Second)
                 // Send finished inidicator to other goroutine processData()
                 channel <- true
                 break
             }
+
             continue
         }
 
         // Sleep to avoid excessive syscalls during idle activity
         time.Sleep(5 * time.Second)
-    }
-
-    // Transfer the cracked user hash file to server
-    err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error occured sending the cracked hashes to server:  %w", err)
-    }
-
-    // Transfer the log file to server
-    err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error occured sending the log file to server:  %w", err)
     }
 }
 
@@ -559,11 +577,12 @@ func main() {
 
     var awsConfig aws.Config
     var err error
-    // Set the AWS credentials provider
-    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
 
     // If AWS access and secret key are present
     if awsAccessKey != "" && awsSecretKey != "" {
+        // Set the AWS credentials provider
+        awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
+
         // Load default config and override with custom credentials and region
         awsConfig, err = config.LoadDefaultConfig(
             context.TODO(),
