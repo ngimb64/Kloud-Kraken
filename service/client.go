@@ -112,13 +112,15 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 //
 // @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
-// - channel:  Channel to transmit filenames after transfer to initiate data processing
+// - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
+// - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Acts as a barrier for the Goroutines running
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
-                       transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager) {
+func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transferChannel chan bool,
+                       waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
+                       logMan *kloudlogs.LoggerManager) {
     var cmd *exec.Cmd
     completed := false
     // Decrements the wait group counter upon local exit
@@ -132,6 +134,9 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
     if HashcatArgsStruct.ApplyOptimization {
         cmdOptions = append(cmdOptions, "-O")
     }
+
+    // Wait for signal that hash and ruleset files are received
+    <-hashcatOptChannel
 
     // Append command args used by all attack modes
     cmdOptions = append(cmdOptions, "--remove", "-o=" + Cracked, "-a",
@@ -155,7 +160,7 @@ func processingHandler(connection net.Conn, channel chan bool, waitGroup *sync.W
 
         select {
         // Poll channel for complete signal
-        case isComplete := <-channel:
+        case isComplete := <-transferChannel:
             // If the receiving handler routine is complete
             if isComplete {
                 // Set outer boolean toggle
@@ -378,15 +383,16 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 //
 // @Parameters
 // - connection:  Active socket connection for reading data to be stored and processed
-// - channel:  Channel to transmit filenames after transfer to initiate data processing
+// - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
+// - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
 // - waitGroup:  Used to synchronize the Goroutines running
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.WaitGroup,
-                      transferManager *data.TransferManager, logMan *kloudlogs.LoggerManager,
-                      maxFileSizeInt64 int64) {
+func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transferChannel chan bool,
+                      waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
+                      logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
 
@@ -411,6 +417,9 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
             kloudlogs.LogMessage(logMan, "fatal", "Error receiving ruleset file:  %w", err)
         }
     }
+
+    // Send signal to other routine that hash and ruleset file has been received
+    hashcatOptChannel <- true
 
     for {
         // Get the remaining available and total disk space
@@ -438,7 +447,7 @@ func receivingHandler(connection net.Conn, channel chan bool, waitGroup *sync.Wa
                 // Sleep to ensure other routine has time to poll for wordlists
                 time.Sleep(5 * time.Second)
                 // Send finished inidicator to other goroutine processData()
-                channel <- true
+                transferChannel <- true
                 break
             }
 
@@ -464,18 +473,20 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
     // Initialize a transfer mananager used to track the size of active file transfers
     transferManager := data.NewTransferManager()
 
-    // Create a channel for the goroutines to communicate
-    channel := make(chan bool)
+    // Create channels for the goroutines to communicate
+    hashcatOptChannel := make(chan bool)
+    transferChannel := make(chan bool)
     // Establish a wait group
     var waitGroup sync.WaitGroup
     // Add two goroutines to the wait group
     waitGroup.Add(2)
 
     // Start the goroutine to write data to the file
-    go receivingHandler(connection, channel, &waitGroup, transferManager, logMan,
-                        maxFileSizeInt64)
+    go receivingHandler(connection, hashcatOptChannel, transferChannel, &waitGroup,
+                        transferManager, logMan, maxFileSizeInt64)
     // Start the goroutine to process the file
-    go processingHandler(connection, channel, &waitGroup, transferManager, logMan)
+    go processingHandler(connection, hashcatOptChannel, transferChannel, &waitGroup,
+                         transferManager, logMan)
 
     // Wait for both goroutines to finish
     waitGroup.Wait()

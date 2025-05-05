@@ -32,7 +32,7 @@
                 "-maxFileSizeInt64=17179869184",
                 "-crackingMode=0",
                 "-hashType=1700",
-                "-applyOptimization=true",
+                "-applyOptimization=false",
                 "-workload=3",
                 "-maxTransfers=2",
                 "-logMode=local"
