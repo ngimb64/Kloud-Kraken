@@ -138,7 +138,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     <-hashcatOptChannel
 
     // Append command args used by all attack modes
-    cmdOptions = append(cmdOptions, "--remove", "-o=cracked.txt", "-a",
+    cmdOptions = append(cmdOptions, "--remove", "-o", "cracked.txt", "-a",
                         HashcatArgsStruct.CrackingMode, "-m", HashcatArgsStruct.HashType,
                         "-w", HashcatArgsStruct.Workload, HashFilePath)
 
