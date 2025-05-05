@@ -285,7 +285,7 @@ func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
 //
 func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
                  prefix []byte) (string, error) {
-    // Wait for the start transfer message
+    // Wait for the transfer reply with file name and size
     bytesRead, err := ReadHandler(connection, &buffer)
     if err != nil {
         return "", err
@@ -294,11 +294,18 @@ func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
     // If read data does not start with delimiter or end with closed bracket
     if !bytes.HasPrefix(buffer, prefix) ||
     !bytes.HasSuffix(buffer[:bytesRead], globals.TRANSFER_SUFFIX) {
-        return "", fmt.Errorf("improper prefix or suffix in transfer message")
+        return "", fmt.Errorf("improper prefix or suffix in transfer reply")
     }
 
     // Extract the file name and size from the initial transfer message
     fileName, fileSize, err := GetFileInfo(buffer, prefix, bytesRead)
+    if err != nil {
+        return "", err
+    }
+
+    // Send the transfer initiated message to receiver to ensure synchronization
+    _, err = WriteHandler(connection, globals.TRANSFER_INITIATED_MARKER,
+                          len(globals.TRANSFER_INITIATED_MARKER))
     if err != nil {
         return "", err
     }
@@ -414,6 +421,17 @@ func UploadFile(connection net.Conn, buffer []byte, filePath string,
     _, err = WriteHandler(connection, buffer, sendLength)
     if err != nil {
         return err
+    }
+
+    // Receive the transfer initiated message from client to ensure synchronization
+    bytesRead, err := ReadHandler(connection, &buffer)
+    if err != nil {
+        return err
+    }
+
+    // If the transfer initiated message format is invalid
+    if !bytes.Contains(buffer[:bytesRead], globals.TRANSFER_INITIATED_MARKER) {
+        return fmt.Errorf("transfer initiated message format invalid")
     }
 
     // Transfer the file to client
