@@ -45,13 +45,12 @@ type HashcatArgs struct {
 const HashesPath = "/tmp/hashes"       // Path where hash files are stored
 const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
 const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
-var Cracked = filepath.Join(HashesPath, "cracked.txt")  // Path to cracked hashes stored post processing
-var Loot = filepath.Join(HashesPath, "loot.txt")        // Path to cracked hashes stored permanently
 var BufferMutex = &sync.Mutex{}           // Mutex for message buffer synchronization
 var HashcatArgsStruct = new(HashcatArgs)  // Initialze struct where hashcat options stored
 var HashFilePath string        // Stores hash file path when received
 var HasRuleset bool            // Toggle for specifying whether ruleset is in use
 var LogPath string             // Stores log file to be returned to client
+var Loot = filepath.Join(HashesPath, "loot.txt")  // Path to cracked hashes stored permanently
 var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 var RulesetFilePath string     // Stores ruleset file when received
@@ -139,14 +138,14 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     <-hashcatOptChannel
 
     // Append command args used by all attack modes
-    cmdOptions = append(cmdOptions, "--remove", "-o=" + Cracked, "-a",
+    cmdOptions = append(cmdOptions, "--remove", "-o=cracked.txt", "-a",
                         HashcatArgsStruct.CrackingMode, "-m", HashcatArgsStruct.HashType,
                         "-w", HashcatArgsStruct.Workload, HashFilePath)
 
     // If a ruleset is in use and it has a path
     if HasRuleset && RulesetFilePath != "" {
         // Append it to the command args
-        cmdOptions = append(cmdOptions, "-r", RulesetFilePath)
+        cmdOptions = append(cmdOptions, "-r", RulesetFilePath, "--loopback")
     }
 
     for {
@@ -220,8 +219,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
             // Append the hash mask then the wordlist path
             cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask, filePath)
         default:
-            // For straight mode (0), append the loopback mode and wordlist path
-            cmdArgs = append(cmdOptions, "--loopback", filePath)
+            // For straight mode (0), just append the wordlist path
+            cmdArgs = append(cmdOptions, filePath)
         }
 
         // Register the hashcat command with populated arg list
@@ -235,10 +234,10 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
 
         // If there is data in cracked user hash file prior to processing,
         // append it to the final loot file
-        err = disk.AppendFile(Cracked, Loot)
+        err = disk.AppendFile("cracked.txt", Loot)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error appending data to file:  %w", err,
-                                 zap.String("source file", Cracked),
+                                 zap.String("source file", "cracked.txt"),
                                  zap.String("destination file", Loot))
             return
         }
