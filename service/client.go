@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -120,7 +121,6 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transferChannel chan bool,
                        waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
                        logMan *kloudlogs.LoggerManager) {
-    var cmd *exec.Cmd
     completed := false
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
@@ -128,6 +128,15 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     charsets := []string{HashcatArgsStruct.CharSet1, HashcatArgsStruct.CharSet2,
                          HashcatArgsStruct.CharSet3, HashcatArgsStruct.CharSet4}
     cmdOptions := []string{}
+
+    // Get the current working directory
+    cwd, err := os.Getwd()
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error getting current dir:  %v", err)
+    }
+
+    // Format the path for temp cracked hashes file
+    crackedPath := path.Join(cwd, "cracked.txt")
 
     // If GPU optimization is to be applied, append it to options slice
     if HashcatArgsStruct.ApplyOptimization {
@@ -138,7 +147,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     <-hashcatOptChannel
 
     // Append command args used by all attack modes
-    cmdOptions = append(cmdOptions, "--remove", "-o", "cracked.txt", "-a",
+    cmdOptions = append(cmdOptions, "--remove", "-o", crackedPath, "-a",
                         HashcatArgsStruct.CrackingMode, "-m", HashcatArgsStruct.HashType,
                         "-w", HashcatArgsStruct.Workload, HashFilePath)
 
@@ -223,23 +232,43 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
             cmdArgs = append(cmdOptions, filePath)
         }
 
-        // Register the hashcat command with populated arg list
-        cmd = exec.Command("hashcat", cmdArgs...)
-        // Execute and save the command stdout and stderr output
-        output, err := cmd.CombinedOutput()
-        if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error executing command:  %w", err)
-            return
+        // Execute the hashcat command with populated arg list
+        output, err := exec.Command("hashcat", cmdArgs...).CombinedOutput()
+        // If the error was an exit type error
+        if exitErr, ok := err.(*exec.ExitError); ok {
+            code := exitErr.ExitCode()
+
+            // If the code is not exhausted
+            if code != 1 {
+                kloudlogs.LogMessage(logMan, "error", "Error executing command:  %s", output)
+                return
+            }
         }
 
-        // If there is data in cracked user hash file prior to processing,
-        // append it to the final loot file
-        err = disk.AppendFile("cracked.txt", Loot)
+        exists := true
+
+        // Get the info of cracked hashes file
+        fileInfo, err := os.Stat(crackedPath)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error appending data to file:  %w", err,
-                                 zap.String("source file", "cracked.txt"),
-                                 zap.String("destination file", Loot))
-            return
+            // If it is not missing file error
+            if !os.IsNotExist(err) {
+                kloudlogs.LogMessage(logMan, "error", "Error getting cracked hashes info:  %v", err)
+            }
+
+            exists = false
+        }
+
+        // If cracked hashes file exists and has data
+        if exists && fileInfo.Size() > 0 {
+            // If there is data in cracked user hash file prior to processing,
+            // append it to the final loot file
+            err = disk.AppendFile(crackedPath, Loot)
+            if err != nil {
+                kloudlogs.LogMessage(logMan, "error", "Error appending data to file:  %v", err,
+                                    zap.String("source file", "cracked.txt"),
+                                    zap.String("destination file", Loot))
+                return
+            }
         }
 
         // Increment wait group
@@ -256,7 +285,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     defer BufferMutex.Unlock()
 
     // Transfer the cracked user hash file to server
-    err := netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal",
                              "Error occured sending the cracked hashes to server:  %w", err)
