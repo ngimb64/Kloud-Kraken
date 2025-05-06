@@ -653,9 +653,14 @@ func TestTransferFile(t *testing.T) {
     // Ensure the input and output files are the same size
     assert.Equal(int64(20 * globals.MB), outFileInfo.Size())
 
-    err = os.Remove(outFilePath)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    deleteFiles := []string{inFilePath, outFilePath}
+
+    // Iterate through list of test files and delete them
+    for _, file := range deleteFiles {
+        err = os.Remove(file)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+    }
 }
 
 
@@ -817,8 +822,12 @@ func TestFileTransfer(t *testing.T) {
     // Ensure the input and output files are the same size
     assert.Equal(int64(20 * globals.MB), outFileInfo.Size())
 
-    // Delete the output file after testing
-    err = os.Remove(receivedPath)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    deleteFiles := []string{inFilePath, receivedPath}
+
+    // Iterate through list of test files and delete them
+    for _, file := range deleteFiles {
+        err = os.Remove(file)
+        // Ensure the error is nil meaning successful operation
+        assert.Equal(nil, err)
+    }
 }

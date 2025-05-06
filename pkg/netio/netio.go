@@ -379,12 +379,6 @@ func TransferFile(connection net.Conn, filePath string, fileSize int64) error {
         return err
     }
 
-    // Delete the transfered file
-    err = os.Remove(filePath)
-    if err != nil {
-        return err
-    }
-
     return nil
 }
 
