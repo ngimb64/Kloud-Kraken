@@ -51,7 +51,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
                                                appConfig.ClientConfig.MaxFileSizeInt64)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error selecting the next available file to transfer:  %w", err)
+                             "Error selecting the next available file to transfer:  %v", err)
         return
     }
 
@@ -61,7 +61,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         _, err = netio.WriteHandler(connection, globals.END_TRANSFER_MARKER,
                                     len(globals.END_TRANSFER_MARKER))
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %w", err)
+            kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %v", err)
         }
 
         return
@@ -72,14 +72,14 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
                                                  globals.START_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error formatting transfer reply in server handleTransfer()")
+                             "Error formatting transfer reply:  %v", err)
         return
     }
 
     // Send the transfer reply with file name and size
     _, err = netio.WriteHandler(connection, buffer, sendLength)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %v", err)
         return
     }
 
@@ -87,7 +87,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     ipAddr, _, err := netio.GetIpPort(connection)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error occcurred spliting host address to get IP/port:  %w", err)
+                             "Error occcurred spliting host address to get IP/port:  %v", err)
         return
     }
 
@@ -95,7 +95,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     // Receive bytes of port of client port to connect to for file transfer
     err = binary.Read(connection, binary.LittleEndian, &port)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error receiving client listener port:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error receiving client listener port:  %v", err)
         return
     }
 
@@ -105,7 +105,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     // Make a connection to the remote brain server
     transferConn, err := net.Dial("tcp", remoteAddr)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %w", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %v", err)
         return
     }
 
@@ -122,7 +122,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         err = netio.TransferFile(transferConn, filePath, fileSize)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
-                                 "Error occured transfering file to client:  %w", err)
+                                 "Error occured transfering file to client:  %v", err)
         }
     } ()
 }
@@ -151,8 +151,9 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     err := netio.UploadFile(connection, buffer, appConfig.LocalConfig.HashFilePath,
                             globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error occured sending the hash file to client:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error occured sending the hash file to client:  %v", err)
+        return
     }
 
     // If a ruleset path was specified
@@ -161,8 +162,9 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.RulesetPath,
                                globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "fatal",
-                                 "Error occured sending the ruleset to server:  %w", err)
+            kloudlogs.LogMessage(logMan, "error",
+                                 "Error occured sending the ruleset to server:  %v", err)
+            return
         }
     }
 
@@ -171,7 +173,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         bytesRead, err := netio.ReadHandler(connection, &buffer)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
-                                 "Error occurred reading data from socket:  %w", err)
+                                 "Error occurred reading data from socket:  %v", err)
             return
         }
 
@@ -194,14 +196,14 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
                                globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error receiving cracked user hashes:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error receiving cracked user hashes:  %v", err)
     }
 
     // Receive log file from client
     _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
                                globals.LOG_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error receiving log file:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error receiving log file:  %v", err)
     }
 
     // Decrement the active connection count
@@ -227,7 +229,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Establish listener on specified port
     listener, err := net.Listen("tcp", listenerPort)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error starting server:  %w", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error starting server:  %v", err)
     }
 
     // Close listener on local exit
@@ -247,7 +249,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
         // Wait for an incoming connection
         connection, err := listener.Accept()
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %w", err)
+            kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %v", err)
             continue
         }
 

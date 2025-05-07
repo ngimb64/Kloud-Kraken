@@ -57,31 +57,29 @@ var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 var RulesetFilePath string     // Stores ruleset file when received
 
 
-// Parse the hashcat output and log via kloudlogs, delete the processed file, and subtract
-// the delete file size from the transfer manager.
+// Ensure the final cracked hashes file exists and has a message informing
+// the user no hashes were cracked.
 //
-// @Parameters
-// - filePath:  The path to the file to remove after the results are transfered back
-// - output:  The raw output of the data processing to formatted and transferred
-// - fileSize:  The size of the to be stored on disk from read socket data
-// - transferManager:  Manages calculating the amount of data being transferred locally
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-// - waitGroup:  Acts as a barrier for the Goroutines running
+// @ Returns
+// - Error if it occurs, otherwise nil on success
 //
-func logAndRemove(filePath string, output []byte, fileSize int64, transferManager *data.TransferManager,
-                  logMan *kloudlogs.LoggerManager, waitGroup *sync.WaitGroup) {
-    // Decrement wait group on local exit
-    waitGroup.Done()
+func createFailureResult() error {
+    // Open the final cracked hashes file or create if it does not exist
+    hashesHandle, err := os.OpenFile(Loot, os.O_RDWR|os.O_CREATE, 0644)
+    if err != nil {
+        return err
+    }
 
-    // Parse the hashcat output
-    logArgs := hashcat.ParseHashcatOutput(output, []byte("=>"))
-    // Log the hashcat output with kloudlogs
-    kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
+    // Close the opened cracked hashes file on local exit
+    defer hashesHandle.Close()
 
-    // Delete the processed file
-    os.Remove(filePath)
-    // Remove the file size from transfer manager after deletion
-    transferManager.RemoveTransferSize(fileSize)
+    // Write a message letting user know that no hashes were cracked
+    _, err = hashesHandle.Write([]byte("No available cracked hashses after processing"))
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
 
@@ -100,7 +98,8 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
     _, err := netio.WriteHandler(connection, globals.PROCESSING_COMPLETE,
                                  len(globals.PROCESSING_COMPLETE))
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending processing complete message:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error sending processing complete message:  %v", err)
         return
     }
 }
@@ -133,6 +132,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     cwd, err := os.Getwd()
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error getting current dir:  %v", err)
+        return
     }
 
     // Format the path for temp cracked hashes file
@@ -161,7 +161,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
         // Attempt to get the next available wordlist
         fileName, fileSize, err := disk.CheckDirFiles(WordlistPath)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w",
+            kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %v",
                                  err, zap.String("wordlist directory", WordlistPath))
             return
         }
@@ -177,12 +177,13 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
             } else {
                 kloudlogs.LogMessage(logMan, "error",
                                      "Received unexpected data from channel %v", isComplete)
+                return
             }
 
             // Try again to get the next available wordlist to ensure no data is missed
             fileName, fileSize, err = disk.CheckDirFiles(WordlistPath)
             if err != nil {
-                kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %w",
+                kloudlogs.LogMessage(logMan, "error", "Error retrieving wordlist from wordlist dir:  %v",
                                      err, zap.String("wordlist directory", WordlistPath))
                 return
             }
@@ -240,41 +241,41 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
 
             // If the code is not exhausted
             if code != 1 {
-                kloudlogs.LogMessage(logMan, "error", "Error executing command:  %s", output)
+                kloudlogs.LogMessage(logMan, "error", "Error executing command:  %v", output)
                 return
             }
         }
 
-        exists := true
-
-        // Get the info of cracked hashes file
-        fileInfo, err := os.Stat(crackedPath)
+        // Check to see if cracked hashes file exits after hashcat after processing
+        exists, isDir, hasData, err := disk.PathExists(crackedPath)
         if err != nil {
-            // If it is not missing file error
-            if !os.IsNotExist(err) {
-                kloudlogs.LogMessage(logMan, "error", "Error getting cracked hashes info:  %v", err)
-            }
-
-            exists = false
+            kloudlogs.LogMessage(logMan, "error",
+                                 "Error checking cracked hashes file existence:  %v")
+            return
         }
 
         // If cracked hashes file exists and has data
-        if exists && fileInfo.Size() > 0 {
+        if exists && !isDir && hasData {
             // If there is data in cracked user hash file prior to processing,
             // append it to the final loot file
             err = disk.AppendFile(crackedPath, Loot)
             if err != nil {
                 kloudlogs.LogMessage(logMan, "error", "Error appending data to file:  %v", err,
-                                    zap.String("source file", "cracked.txt"),
-                                    zap.String("destination file", Loot))
+                                     zap.String("source file", "cracked.txt"),
+                                     zap.String("destination file", Loot))
                 return
             }
         }
 
-        // Increment wait group
-        waitGroup.Add(1)
-        // In a separate goroutine, which will log the output and delete processed data
-        go logAndRemove(filePath, output, fileSize, transferManager, logMan, waitGroup)
+        // Parse the hashcat output
+        logArgs := hashcat.ParseHashcatOutput(output, []byte("=>"))
+        // Log the hashcat output with kloudlogs
+        kloudlogs.LogMessage(logMan, "info", "Hashcat processing results", logArgs...)
+
+        // Delete the processed file
+        os.Remove(filePath)
+        // Remove the file size from transfer manager after deletion
+        transferManager.RemoveTransferSize(fileSize)
     }
 
     // Set the message buffer size
@@ -284,18 +285,38 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     BufferMutex.Lock()
     defer BufferMutex.Unlock()
 
+    // Check to see if final cracked hashes file exits before sending back to server
+    exists, _, hasData, err := disk.PathExists(crackedPath)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error checking final cracked hashes file existence:  %v")
+        return
+    }
+
+    // If final cracked hashes does not exist or is empty
+    if !exists || !hasData {
+        // Ensure final cracked hashes files exists with a message
+        // that says cracking attempts were unsuccessful
+        err = createFailureResult()
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "error",
+                                 "Error creating unsuccessful attempt message for clint:  %v", err)
+            return
+        }
+    }
+
     // Transfer the cracked user hash file to server
     err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error occured sending the cracked hashes to server:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                            "Error occured sending the cracked hashes to server:  %v", err)
     }
 
     // Transfer the log file to server
     err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal",
-                             "Error occured sending the log file to server:  %w", err)
+        kloudlogs.LogMessage(logMan, "error",
+                             "Error occured sending the log file to server:  %v", err)
     }
 }
 
@@ -325,14 +346,14 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
                                  len(globals.TRANSFER_REQUEST_MARKER))
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error sending the transfer request to brain server:  %w", err)
+                             "Error sending the transfer request to brain server:  %v", err)
         return
     }
 
     // Wait to receive the start transfer message from the server
     bytesRead, err := netio.ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error start transfer message from server:  %v", err)
         return
     }
 
@@ -353,7 +374,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX, bytesRead)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error extracting file name and size from start transfer message:  %w", err)
+                             "Error extracting file name and size from start transfer message:  %v", err)
         return
     }
 
@@ -369,14 +390,14 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     _, err = netio.WriteHandler(connection, intBuffer, len(intBuffer))
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error occurred sending converted int32 port to server:  %w", err)
+                             "Error occurred sending converted int32 port to server:  %v", err)
         return
     }
 
     // Wait for an incoming connection
     transferConn, err := listener.Accept()
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %v", err)
         return
     }
 
@@ -396,7 +417,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         // Receive the file from remote server
         _, err = netio.HandleTransferRecv(transferConn, WordlistPath, string(fileName), fileSize)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error during file transfer:  %w", err)
+            kloudlogs.LogMessage(logMan, "error", "Error during file transfer:  %v", err)
         }
 
         MaxTransfers.Add(-1)
@@ -436,7 +457,8 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transfer
     HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
                                           globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error receiving hash file:  %w", err)
+        kloudlogs.LogMessage(logMan, "error", "Error receiving hash file:  %v", err)
+        return
     }
 
     // If a rule set was specified
@@ -445,7 +467,8 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transfer
         RulesetFilePath, err = netio.ReceiveFile(connection, buffer, RulesetPath,
                                                  globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "fatal", "Error receiving ruleset file:  %w", err)
+            kloudlogs.LogMessage(logMan, "error", "Error receiving ruleset file:  %v", err)
+            return
         }
     }
 
@@ -457,7 +480,8 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transfer
         remainingSpace, total, err := disk.DiskCheck()
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
-                                 "Error checking disk space on client:  %w", err)
+                                 "Error checking disk space on client:  %v", err)
+            return
         }
 
         kloudlogs.LogMessage(logMan, "info", "Client disk statistics queried",
@@ -541,7 +565,7 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
     // Make a connection to the remote brain server
     connection, err := net.Dial("tcp", serverAddress)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %w", err)
+        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %v", err)
         return
     }
 
