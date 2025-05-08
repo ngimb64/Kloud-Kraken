@@ -5,13 +5,5 @@ test/*.coverprofile
 # Go module dependency files
 go.sum
 
-# OS-specific files
-bin/.DS_Store
-bin/Thumbs.db
-
-# Logs and temporary files
-bin/*.log
-bin/*.tmp
-
-# Cache files
-bin/*.swp
+# Local logs
+cmd/kloud-kraken/KloudKraken.log

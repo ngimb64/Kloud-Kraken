@@ -197,6 +197,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
                                globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error receiving cracked user hashes:  %v", err)
+        return
     }
 
     // Receive log file from client
@@ -204,6 +205,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
                                globals.LOG_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error receiving log file:  %v", err)
+        return
     }
 
     // Decrement the active connection count
