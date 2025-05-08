@@ -250,7 +250,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
         exists, isDir, hasData, err := disk.PathExists(crackedPath)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
-                                 "Error checking cracked hashes file existence:  %v")
+                                 "Error checking cracked hashes file existence:  %v", err)
             return
         }
 
@@ -286,10 +286,10 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     defer BufferMutex.Unlock()
 
     // Check to see if final cracked hashes file exits before sending back to server
-    exists, _, hasData, err := disk.PathExists(crackedPath)
+    exists, _, hasData, err := disk.PathExists(Loot)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error checking final cracked hashes file existence:  %v")
+                             "Error checking final cracked hashes file existence:  %v", err)
         return
     }
 
@@ -305,11 +305,12 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
         }
     }
 
-    // Transfer the cracked user hash file to server
+    // Transfer the final cracked user hash file to server
     err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                             "Error occured sending the cracked hashes to server:  %v", err)
+        return
     }
 
     // Transfer the log file to server
@@ -317,6 +318,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
                              "Error occured sending the log file to server:  %v", err)
+        return
     }
 }
 
@@ -632,7 +634,7 @@ func main() {
     flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
-    flag.StringVar(&LogPath, "logPath", "KloudKraken.log", "Path to the log file")
+    flag.StringVar(&LogPath, "logPath", "/tmp/KloudKraken.log", "Path to the log file")
 
     // Parse the command line flags
     flag.Parse()

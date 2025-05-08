@@ -35,7 +35,8 @@
                 "-applyOptimization=false",
                 "-workload=3",
                 "-maxTransfers=2",
-                "-logMode=local"
+                "-logMode=local",
+                "-logPath=/tmp/KloudKraken.log"
             ],
             "stopOnEntry": false
         }

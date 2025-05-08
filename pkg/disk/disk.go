@@ -259,6 +259,11 @@ func PathExists(filePath string) (bool, bool, bool, error) {
     // Get item info on passed in path
     itemInfo, err := os.Stat(filePath)
     if err != nil {
+        // If the file does not exist
+        if os.IsNotExist(err) {
+            return false, false, false, nil
+        }
+
         // If unexpected error getting item info
         return false, false, false, fmt.Errorf("error checking file existence - %w", err)
     }
