@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,34 +23,36 @@ import (
 // and attempts to append it to a newly generated cert pool.
 //
 // @Parameters
-// - caCertFn:  The name of certifcate file to be loaded
+// - caCertPemBlocks:  The byte PEM block to be used instead of file
+// - caCertFiles:  Variadic length slice of PEM files to be loaded into caCertPemBlocks
 //
 // @Returns
 // - The x509 certificate pool with loaded cert added to it
 // - Error if it occurs, otherwise nil on success
 //
-func CaCertPool(caCertFile string, caCertPemBlock []byte) (*x509.CertPool, error) {
-    var caCert []byte
-    var err error
-
-    // If the certificate authority certificate file was passed in
-    if caCertFile != "" {
+func CaCertPool(caCertPemBlocks [][]byte, caCertPemFiles ...string) (*x509.CertPool, error) {
+    // If there are PEM cert file passed in, iterate through them
+    for _, pemFile := range caCertPemFiles {
         // Read the PEM encoded TLS certificate file
-        caCert, err = os.ReadFile(caCertFile)
+        pemBlock, err := os.ReadFile(pemFile)
         if err != nil {
             return nil, err
         }
-    // Other wise the raw PEM block bytes are passed in
-    } else {
-        caCert = caCertPemBlock
+
+        // Append the read PEM block to byte slice of PEM blocks
+        caCertPemBlocks = append(caCertPemBlocks, pemBlock)
     }
 
     // Create an x509 certificate pool
     certPool := x509.NewCertPool()
 
-    // Attempt to add the loaded certificate to the cert pool
-    if ok := certPool.AppendCertsFromPEM(caCert); !ok {
-        return nil, errors.New("failed to add certificate to pool")
+    // Iterate through the slice of PEM blocks
+    for _, pemBlock := range caCertPemBlocks {
+        // Attempt to add the loaded certificate to the cert pool
+        ok := certPool.AppendCertsFromPEM(pemBlock)
+        if !ok {
+            return nil, errors.New("failed to add certificate to pool")
+        }
     }
 
     return certPool, nil
@@ -188,15 +191,11 @@ func (server *TlsServer) Ready() {
 
 // TlsServer struct method to setup TLS supported TCP listener to handle incoming connections.
 //
-// @Parameters
-// - certPemBlock:  The TLS certificate PEM byte block
-// - keyPemBlock:  The TLS key PEM byte block
-//
 // @Returns
 // - The established TLS TCP listener
 // - Error if it occurs, otherwise nil on success
 //
-func (server *TlsServer) SetupTlsListener(certPemBlock []byte, keyPemBlock []byte) (net.Listener, error) {
+func (server *TlsServer) SetupTlsListener() (net.Listener, error) {
     // If no address was specified when NewTlsServer was called
     if server.addr == "" {
         server.addr = "localhost:443"
@@ -218,31 +217,58 @@ func (server *TlsServer) SetupTlsListener(certPemBlock []byte, keyPemBlock []byt
         }()
     }
 
-    // If the TLS config is missing, use basic default config
-    if server.tlsConfig == nil {
-        server.tlsConfig = &tls.Config{
-            CurvePreferences:         []tls.CurveID{tls.CurveP256},
-            MinVersion:               tls.VersionTLS12,
-            PreferServerCipherSuites: true,
-        }
-    }
-
-    // If the certificate & key pair is missing from TLS config
-    if len(server.tlsConfig.Certificates) == 0 && server.tlsConfig.GetCertificate == nil {
-        // Load the certificate & key PEM files
-        cert, err := tls.X509KeyPair(certPemBlock, keyPemBlock)
-        if err != nil {
-            return nil, fmt.Errorf("error loading key pair - %v", err)
-        }
-
-        // Add the loaded cert to certificates slice
-        server.tlsConfig.Certificates = []tls.Certificate{cert}
-    }
-
     // Create new listener with TLS layer on top of raw TCP listner
     tlsListener := tls.NewListener(listener, server.tlsConfig)
     if server.ready != nil {
         close(server.ready)
+    }
+
+    return tlsListener, nil
+}
+
+
+// Creates TLS x509 certificate and a cert pool which are used to setup the TLS
+// configuration instance. After a TLS listener is established and returned.
+//
+// @Parameters
+// - tlsCertPem:  The TLS certificate PEM byte block
+// - tlsKeyPem:  The TLS key PEM byte block
+// - listenPort:  Port that TLS listener will attempt to be established on
+// - ctx:  The context instance for managing original raw listener
+// - certsToAdd:  Variadic length slice of certificate PEM file to load and add to pool
+//
+// @Returns
+// - The established TLS listener
+//
+func SetupTlsListenerHandler(tlsCertPem []byte, tlsKeyPem []byte, caCertPemBlocks [][]byte,
+                            listenPort int, ctx context.Context,
+                            certsToAdd ...string) (net.Listener, error) {
+    // Generate certificate base on certificate & key PEM blocks
+    cert, err := tls.X509KeyPair(tlsCertPem, tlsKeyPem)
+    if err != nil {
+        return nil, err
+    }
+
+    // Create server x509 certificate pool
+    certPool, err := CaCertPool(caCertPemBlocks, certsToAdd...)
+    if err != nil {
+        return nil, err
+    }
+
+    // Create a TLS configuarion instance
+    tlsConfig := &tls.Config{
+        Certificates:       []tls.Certificate{cert},
+        GetConfigForClient: GetTlsConfig(cert, certPool),
+    }
+
+    // Format listener address with port
+    listenerAddr := ":" + strconv.Itoa(listenPort)
+    // Create a TLS server instance
+    tlsServer := NewTlsServer(ctx, listenerAddr, tlsConfig)
+    // Setup TLS listener from server instance
+    tlsListener, err := tlsServer.SetupTlsListener()
+    if err != nil {
+        return nil, err
     }
 
     return tlsListener, nil
@@ -381,6 +407,49 @@ func TlsCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
     }
 
     return certBytes, keyBytes, nil
+}
+
+
+// Generates the TLS certificate & key, saving the result in the appConifg struct.
+//
+// @Parameters
+// - orgName:  The organization name to assign to the generated certificate
+// - testMode:  boolean toggle for whether PEM file should be generated or not
+// - hostnames:  variadic length variable of ip address and hostnames to add to hosts CSV string
+//
+// @Returns
+// - Generated certificate PEM byte block
+// - Generated key PEM byte block
+// - Error if it occurs, otherwise nil on success
+//
+func TlsCertAndKeyGenHandler(orgName string, testMode bool,
+                             hostnames ...string) ([]byte, []byte, error) {
+    // Add the localhost to CA hosts list
+    hosts := "localhost"
+
+    // Iterate through any passed in host names and add them to hosts CSV string
+    for _, host := range hostnames {
+        hosts += ("," + host)
+    }
+
+    // Get available usable public/private IP's assigned to network interfaces
+    ipAddrs, err := GetUsableIps()
+    if err != nil {
+        return nil, nil, err
+    }
+
+    // Iterate through the list IP's and add them to CSV string
+    for _, ipAddr := range ipAddrs {
+        hosts += ("," + ipAddr)
+    }
+
+    // Generate the TLS certificate/key and save them in app config
+    certPem, keyPem, err := TlsCertAndKeyGen(orgName, hosts, testMode)
+    if err != nil {
+        return nil, nil, err
+    }
+
+    return certPem, keyPem, nil
 }
 
 

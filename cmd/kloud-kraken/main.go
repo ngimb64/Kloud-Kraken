@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -227,50 +225,6 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 }
 
 
-// Creates TLS x509 certificate and a cert pool which are used to setup the TLS
-// configuration instance. After a TLS listener is established and returned.
-//
-// @Parameters
-// - appConfig:  The configuration struct with loaded yaml program data
-// - logMan:  The kloudlogs logger manager for local logging
-// - ctx:  The context instance for managing original raw listener
-//
-// @Returns
-// - The established TLS listener
-//
-func setupTlsListener(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
-                      ctx context.Context) net.Listener {
-    // Generate certificate base on certificate & key PEM blocks
-    cert, err := tls.X509KeyPair(appConfig.LocalConfig.TlsCertPem,
-                                 appConfig.LocalConfig.TlsKeyPem)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error generating TLS x509 certificate:  %v", err)
-    }
-
-    // Create empty server x509 certificate pool
-    serverPool := x509.NewCertPool()
-
-    // Create a TLS configuarion instance
-    tlsConfig := &tls.Config{
-        Certificates:       []tls.Certificate{cert},
-        GetConfigForClient: tlsutils.GetTlsConfig(cert, serverPool),
-    }
-
-    // Format listener address with port from parsed YAML data
-    listenerAddr := ":" + strconv.Itoa(appConfig.LocalConfig.ListenerPort)
-    // Create a TLS server instance
-    tlsServer := tlsutils.NewTlsServer(ctx, listenerAddr, tlsConfig)
-    // Setup TLS listener from server instance
-    tlsListener, err := tlsServer.SetupTlsListener(appConfig.LocalConfig.TlsCertPem,
-                                                   appConfig.LocalConfig.TlsKeyPem)
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error finalizing TLS listener setup:  %v", err)
-    }
-
-    return tlsListener
-}
-
-
 // Set up listener and enter loop where the amount of active connections is checked
 // until the specified number of instances is equal to the active connections the
 // listener will wait until a connection is accepted. Increment the active connections
@@ -288,7 +242,14 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     defer cancel()
 
     // Set up the TLS listener to accept incoming connections
-    tlsListener := setupTlsListener(appConfig, logMan, ctx)
+    tlsListener, err := tlsutils.SetupTlsListenerHandler(appConfig.LocalConfig.TlsCertPem,
+                                                         appConfig.LocalConfig.TlsKeyPem,
+                                                         [][]byte{},
+                                                         appConfig.LocalConfig.ListenerPort,
+                                                         ctx)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "fatal", "Error setting up TLS listener:  %v", err)
+    }
 
     kloudlogs.LogMessage(logMan, "info", "Server started, waiting for connections ..")
 
@@ -356,38 +317,6 @@ func awsConfigSetup(appConfig conf.AppConfig) aws.Config {
     }
 
     return awsConfig
-}
-
-
-// Generates the TLS certificate & key, saving the result in the appConifg struct.
-//
-// @Parameters
-// - appConfig:  The program configuration instance where TLS cert & key are stored
-// - testMode:  boolean toggle for whether PEM file should be generated or not
-//
-func tlsCertAndKeyGen(appConfig *conf.AppConfig, testMode bool) {
-    // Add the localhost to CA hosts list
-    hosts := "localhost"
-
-    // Get available usable public/private IP's assigned to network interfaces
-    ipAddrs, err := tlsutils.GetUsableIps()
-    if err != nil {
-        log.Fatalf("Error getting usable IP's from network interfaces:  %v", err)
-    }
-
-    // Iterate through the list IP's and add them to CSV string
-    for _, ipAddr := range ipAddrs {
-        hosts += ("," + ipAddr)
-    }
-
-    // Generate the TLS certificate/key and save them in app config
-    certPem, keyPem, err := tlsutils.TlsCertAndKeyGen("Kloud Kraken", hosts, testMode)
-    if err != nil {
-        log.Fatalf("Error creating TLS cert & key pair:  %v", err)
-    }
-
-    // Assign the resulting PEM certificate and key to their locations in appConfig struct
-    appConfig.LocalConfig.TlsCertPem, appConfig.LocalConfig.TlsKeyPem = certPem, keyPem
 }
 
 
@@ -474,9 +403,12 @@ func main() {
        // TODO:  get the public IP address via IPify API with backup alternatives
        //        if that fails, and pass result into below TLS function
 
-
-        // Generate the TLS certificate & key and save in appConfig
-        tlsCertAndKeyGen(appConfig, false)
+        // Assign the resulting PEM certificate and key to their locations in appConfig struct
+        appConfig.LocalConfig.TlsCertPem,
+        appConfig.LocalConfig.TlsKeyPem, err = tlsutils.TlsCertAndKeyGenHandler("Kloud Kraken", false)
+        if err != nil {
+            log.Fatalf("Error creating TLS certificate and key:  %v", err)
+        }
 
         // Set up the AWS credentials based on environment variables
         awsConfig = awsConfigSetup(*appConfig)
@@ -491,7 +423,11 @@ func main() {
     // If the program is being run in testing mode
     } else {
         // Generate the TLS certificate & key and save in appConfig
-        tlsCertAndKeyGen(appConfig, true)
+        appConfig.LocalConfig.TlsCertPem,
+        appConfig.LocalConfig.TlsKeyPem, err = tlsutils.TlsCertAndKeyGenHandler("Kloud Kraken", true)
+        if err != nil {
+            log.Fatalf("Error creating TLS certificate and key:  %v", err)
+        }
 
         log.Println("Testing mode:  TLS cert & key generated, transfer cert to client before execution")
     }
