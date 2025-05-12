@@ -117,7 +117,7 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transferChannel chan bool,
+func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, transferChannel chan struct{},
                        waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
                        logMan *kloudlogs.LoggerManager) {
     completed := false
@@ -168,17 +168,9 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan bool, transfe
 
         select {
         // Poll channel for complete signal
-        case isComplete := <-transferChannel:
-            // If the receiving handler routine is complete
-            if isComplete {
-                // Set outer boolean toggle
-                completed = isComplete
-            // If unexpected data received from channel (only should be true)
-            } else {
-                kloudlogs.LogMessage(logMan, "error",
-                                     "Received unexpected data from channel %v", isComplete)
-                return
-            }
+        case <-transferChannel:
+            // Set outer boolean toggle
+            completed = true
 
             // Try again to get the next available wordlist to ensure no data is missed
             fileName, fileSize, err = disk.CheckDirFiles(WordlistPath)
@@ -396,6 +388,10 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
+
+    // TODO:  add TLS logic once initial connection is finished
+
+
     // Wait for an incoming connection
     transferConn, err := listener.Accept()
     if err != nil {
@@ -444,7 +440,7 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transferChannel chan bool,
+func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{}, transferChannel chan struct{},
                       waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
@@ -475,7 +471,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transfer
     }
 
     // Send signal to other routine that hash and ruleset file has been received
-    hashcatOptChannel <- true
+    hashcatOptChannel <- struct{}{}
 
     for {
         // Get the remaining available and total disk space
@@ -504,7 +500,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan bool, transfer
                 // Sleep to ensure other routine has time to poll for wordlists
                 time.Sleep(5 * time.Second)
                 // Send finished inidicator to other goroutine processData()
-                transferChannel <- true
+                transferChannel <- struct{}{}
                 break
             }
 
@@ -531,8 +527,8 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
     transferManager := data.NewTransferManager()
 
     // Create channels for the goroutines to communicate
-    hashcatOptChannel := make(chan bool)
-    transferChannel := make(chan bool)
+    hashcatOptChannel := make(chan struct{})
+    transferChannel := make(chan struct{})
     // Establish a wait group
     var waitGroup sync.WaitGroup
     // Add two goroutines to the wait group
@@ -561,6 +557,9 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 //
 func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
                    maxFileSizeInt64 int64) {
+
+    // TODO:  set up TLS stuff
+
     // Define the address of the server to connect to
     serverAddress := ipAddr + ":" + strconv.Itoa(port)
 
@@ -576,6 +575,10 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
 
     kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
                          zap.String("ip address", ipAddr), zap.Int("port", port))
+
+
+    // TODO:  upload the client TLS cert to the server to be added to its pool in new TLS channel
+
 
     // Set up goroutines for receiving and processing data
     handleConnection(connection, logMan, maxFileSizeInt64)
@@ -611,6 +614,7 @@ func main() {
     var awsAccessKey string
     var awsSecretKey string
     var maxTransfers int
+    var isTesting bool
 
     // Define command line flags with default values and descriptions
     flag.StringVar(&ipAddr, "ipAddr", "localhost", "IP address of brain server to connect to")
@@ -635,6 +639,7 @@ func main() {
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.StringVar(&LogPath, "logPath", "/tmp/KloudKraken.log", "Path to the log file")
+    flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
 
     // Parse the command line flags
     flag.Parse()
@@ -646,8 +651,13 @@ func main() {
     var awsConfig aws.Config
     var err error
 
-    // If AWS access and secret key are present
-    if awsAccessKey != "" && awsSecretKey != "" {
+    // If the program is being run in full mode (not testing)
+    if !isTesting {
+        // If AWS access and secret key are present
+        if awsAccessKey == "" || awsSecretKey == "" {
+            log.Fatalf("AWS access key or secret key missing and not in testing mode")
+        }
+
         // Set the AWS credentials provider
         awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
 
@@ -661,9 +671,14 @@ func main() {
         if err != nil {
             log.Fatalf("Error loading client AWS config:  %v", err)
         }
-    // Otherwise if the logging is not set to local
-    } else if logMode != "local" {
-        log.Fatal("Missing AWS API credentials but log mode is not set to local")
+
+
+        // TODO:  retrieve the server TLS cert from AWS param store
+
+
+    // If the program is being run in testing mode
+    } else {
+        // TODO:  load the server TLS cert
     }
 
     // Initialize the LoggerManager based on the flags

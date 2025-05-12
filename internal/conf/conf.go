@@ -24,9 +24,12 @@ type LocalConfig struct {
     HashFilePath        string  `yaml:"hash_file_path"`
     RulesetPath         string  `yaml:"ruleset_path"`
     MaxMergingSize      string  `yaml:"max_merging_size"`
-    MaxMergingSizeInt64 int64   `yaml:"-"`               // Parsed later
+    MaxMergingSizeInt64 int64   `yaml:"-"`                 // Parsed later
     MaxSizeRange        float64 `yaml:"max_size_range"`
     LogPath             string  `yaml:"log_path"`
+    LocalTesting        bool    `yaml:"local_testing"`
+    TlsCertPem          []byte  `yaml:"-"`                 // Parsed later
+    TlsKeyPem           []byte  `yaml:"-"`                 // Parsed later
 }
 
 // ClientConfig contains the yaml configuration for the client settings

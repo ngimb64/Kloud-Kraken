@@ -63,6 +63,7 @@ local_config:
   max_merging_size: "50MB"
   max_size_range: 25.0
   log_path: "KloudKraken.log"
+  local_testing: true
 
 client_config:
   region: "us-west-1"
@@ -99,6 +100,7 @@ client_config:
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
     assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
+    assert.True(config.LocalConfig.LocalTesting)
 
     // Validate client config fields to original data
     assert.Equal("us-west-1", config.ClientConfig.Region)
