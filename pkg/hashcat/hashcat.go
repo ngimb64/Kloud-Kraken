@@ -34,6 +34,20 @@ func AppendCharsets(cmdOptions *[]string, charsets []string) {
 }
 
 
+// Data structure for managing hashcat program arguments
+type HashcatArgs struct {
+    CrackingMode      string
+    HashType          string
+    ApplyOptimization bool
+    Workload          string
+    CharSet1          string
+    CharSet2          string
+    CharSet3          string
+    CharSet4          string
+    HashMask          string
+}
+
+
 // Parses the final section of hashcat output where result statistics reside,
 // splits the parsed section by newlines into slice, iterates through split slice
 // and trims the data before and after the colon delimiter into key-value variables

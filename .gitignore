@@ -8,4 +8,3 @@ go.sum
 # Local logs
 cmd/kloud-kraken/KloudKraken.log
 cmd/kloud-kraken/kloud-kraken-cert.pem
-cmd/kloud-kraken/kloud-kraken-key.pem

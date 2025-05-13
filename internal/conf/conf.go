@@ -28,8 +28,6 @@ type LocalConfig struct {
     MaxSizeRange        float64 `yaml:"max_size_range"`
     LogPath             string  `yaml:"log_path"`
     LocalTesting        bool    `yaml:"local_testing"`
-    TlsCertPem          []byte  `yaml:"-"`                 // Parsed later
-    TlsKeyPem           []byte  `yaml:"-"`                 // Parsed later
 }
 
 // ClientConfig contains the yaml configuration for the client settings

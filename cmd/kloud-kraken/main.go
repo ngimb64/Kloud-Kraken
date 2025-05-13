@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -14,11 +14,10 @@ import (
 	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
@@ -29,8 +28,9 @@ import (
 )
 
 // Package level variables
-var CurrentConnections atomic.Int32		// Tracks current active connections
-var ReceivedDir = "/tmp/received"       // Path where cracked hashes & client logs are stored
+var CurrentConnections atomic.Int32	   // Tracks current active connections
+var ReceivedDir = "/tmp/received"      // Path where cracked hashes & client logs are stored
+var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
 
 
 // Select next available file for transfer, if there are no more available send the end transfer
@@ -103,12 +103,10 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     // Format remote address with IP and port
     remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
 
-
-    // TODO:  add TLS logic once initial connection is finished
-
-
     // Make a connection to the remote brain server
-    transferConn, err := net.Dial("tcp", remoteAddr)
+    transferConn, err := tls.Dial("tcp", remoteAddr,
+                                  tlsutils.NewClientTLSConfig(TlsMan.TlsCertificate,
+                                                              TlsMan.CaCertPool))
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %v", err)
         return
@@ -149,19 +147,27 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     defer connection.Close()
     defer waitGroup.Done()
 
-    // Set message buffer size
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+    // Set buffer to receive client PEM certificate
+    buffer := make([]byte, 2 * globals.KB)
 
+    // Receive the client PEM certificate bytes
+    bytesRead, err := netio.ReadHandler(connection, &buffer)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error reading")
+    }
 
-    // TODO:  receive the client certificate and add it to the servers cert pool
+    // Add the read client PEM cert to the cert pool
+    TlsMan.AddCACert(buffer[:bytesRead])
 
+    // Reset buffer to messaging size
+    buffer = make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Upload the hash file to connection client
-    err := netio.UploadFile(connection, buffer, appConfig.LocalConfig.HashFilePath,
-                            globals.HASHES_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.HashFilePath,
+                           globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error",
-                             "Error occured sending the hash file to client:  %v", err)
+                             "Error sending the hash file to client:  %v", err)
         return
     }
 
@@ -172,7 +178,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
                                globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
-                                 "Error occured sending the ruleset to server:  %v", err)
+                                 "Error sending the ruleset to server:  %v", err)
             return
         }
     }
@@ -182,7 +188,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         bytesRead, err := netio.ReadHandler(connection, &buffer)
         if err != nil {
             kloudlogs.LogMessage(logMan, "error",
-                                 "Error occurred reading data from socket:  %v", err)
+                                 "Error reading data from socket:  %v", err)
             return
         }
 
@@ -237,16 +243,10 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
-    // Set up context handler for TLS listener
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
 
     // Set up the TLS listener to accept incoming connections
-    tlsListener, err := tlsutils.SetupTlsListenerHandler(appConfig.LocalConfig.TlsCertPem,
-                                                         appConfig.LocalConfig.TlsKeyPem,
-                                                         [][]byte{},
-                                                         appConfig.LocalConfig.ListenerPort,
-                                                         ctx)
+    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
+                                                         "", appConfig.LocalConfig.ListenerPort, nil)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error setting up TLS listener:  %v", err)
     }
@@ -282,41 +282,6 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     waitGroup.Wait()
 
     kloudlogs.LogMessage(logMan, "info", "All connections handled .. server shutting down")
-}
-
-
-// Set up the AWS config with credentials and region stored in passed in app config.
-//
-// @Paramters
-// - appConfig:  The configuration struct for application
-//
-// @Returns:
-// - The initialized AWS credentials config
-//
-func awsConfigSetup(appConfig conf.AppConfig) aws.Config {
-    // Get the AWS access and secret key environment variables
-    awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
-    awsSecretKey := os.Getenv("AWS_SECRET_KEY")
-    // If AWS access and secret key are present
-    if awsAccessKey == "" || awsSecretKey == "" {
-        log.Fatal("Missing either the access or the secret key for AWS")
-    }
-
-    // Set the AWS credentials provider
-    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
-
-    // Load default config and override with custom credentials and region
-    awsConfig, err := config.LoadDefaultConfig(
-        context.TODO(),
-        config.WithRegion(appConfig.LocalConfig.Region),
-        config.WithCredentialsProvider(awsCreds),
-    )
-
-    if err != nil {
-        log.Fatalf("Error loading server AWS config:  %v", err)
-    }
-
-    return awsConfig
 }
 
 
@@ -403,33 +368,45 @@ func main() {
        // TODO:  get the public IP address via IPify API with backup alternatives
        //        if that fails, and pass result into below TLS function
 
-        // Assign the resulting PEM certificate and key to their locations in appConfig struct
-        appConfig.LocalConfig.TlsCertPem,
-        appConfig.LocalConfig.TlsKeyPem, err = tlsutils.TlsCertAndKeyGenHandler("Kloud Kraken", false)
+        // Generate the servers TLS PEM certificate and key and save in TLS manager
+        TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
         if err != nil {
-            log.Fatalf("Error creating TLS certificate and key:  %v", err)
+            log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
         // Set up the AWS credentials based on environment variables
-        awsConfig = awsConfigSetup(*appConfig)
+        awsConfig, err = awsutils.AwsConfigSetup(*&appConfig.LocalConfig.Region)
+        if err != nil {
+            log.Fatalf("Error initializing AWS config:  %v", err)
+        }
 
-
-        // TODO:  ensure server certificate uploaded via parameter store so client can retrieve it
+        // Push the servers certificate PEM into SSM parameter store
+        err = awsutils.PutBytesParameter(awsConfig, "/kloud-kraken/tls/cert",
+                                         string(TlsMan.CertPemBlock))
+        if err != nil {
+            log.Fatalf("Error putting TLS PEM certificate in SSM Parameter Store:  %v", err)
+        }
 
         // TODO:  add function calls for setting up AWS and spawning EC2
         //        with user data executing service with params passed in
 
-
     // If the program is being run in testing mode
     } else {
-        // Generate the TLS certificate & key and save in appConfig
-        appConfig.LocalConfig.TlsCertPem,
-        appConfig.LocalConfig.TlsKeyPem, err = tlsutils.TlsCertAndKeyGenHandler("Kloud Kraken", true)
+        // Generate the servers TLS PEM certificate & key and save in TLS manager
+        TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", true)
         if err != nil {
-            log.Fatalf("Error creating TLS certificate and key:  %v", err)
+            log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        log.Println("Testing mode:  TLS cert & key generated, transfer cert to client before execution")
+        log.Println("Testing mode:  TLS PEM cert & key generated, transfer cert to client before execution")
+    }
+
+    // Generate a TLS x509 certificate and cert pool
+    TlsMan.TlsCertificate, TlsMan.CaCertPool, err = tlsutils.CertGenAndPool(TlsMan.CertPemBlock,
+                                                                            TlsMan.KeyPemBlock,
+                                                                            TlsMan.CaCertPemBlocks)
+    if err != nil {
+        log.Fatalf("Error generating TLS certificate:  %v", err)
     }
 
     // Initialize the LoggerManager based on the flags

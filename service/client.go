@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"flag"
 	"log"
@@ -20,41 +21,30 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/hashcat"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
+	"github.com/ngimb64/Kloud-Kraken/pkg/tlsutils"
 	"go.uber.org/zap"
 )
-
-
-type HashcatArgs struct {
-    CrackingMode      string
-    HashType          string
-    ApplyOptimization bool
-    Workload          string
-    CharSet1          string
-    CharSet2          string
-    CharSet3          string
-    CharSet4          string
-    HashMask          string
-}
-
 
 // Package level variables
 const HashesPath = "/tmp/hashes"       // Path where hash files are stored
 const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
 const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
-var BufferMutex = &sync.Mutex{}           // Mutex for message buffer synchronization
-var HashcatArgsStruct = new(HashcatArgs)  // Initialze struct where hashcat options stored
-var HashFilePath string        // Stores hash file path when received
-var HasRuleset bool            // Toggle for specifying whether ruleset is in use
-var LogPath string             // Stores log file to be returned to client
-var Loot = filepath.Join(HashesPath, "loot.txt")  // Path to cracked hashes stored permanently
+var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
+var HashFilePath string  // Stores hash file path when received
+var HasRuleset bool      // Toggle for specifying whether ruleset is in use
+var LogPath string       // Stores log file to be returned to client
 var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 var RulesetFilePath string     // Stores ruleset file when received
+var Loot = filepath.Join(HashesPath, "loot.txt")  // Path to cracked hashes stored permanently
+var HashcatArgsStruct = new(hashcat.HashcatArgs)  // Initialze struct where hashcat options stored
+var TlsMan = new(tlsutils.TlsManager)             // Struct for managing TLS certs, keys, etc.
 
 
 // Ensure the final cracked hashes file exists and has a message informing
@@ -388,12 +378,15 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
-
-    // TODO:  add TLS logic once initial connection is finished
-
+    // Setup up TLS listener from existing raw TCP listener
+    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
+                                                         "", port, listener)
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error setting TLS listener on client:  %v", err)
+    }
 
     // Wait for an incoming connection
-    transferConn, err := listener.Accept()
+    transferConn, err := tlsListener.Accept()
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %v", err)
         return
@@ -445,10 +438,16 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{}, tran
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
-
-    var err error
     transferComplete := false
-    // Set the message buffer size
+
+    // Upload the client TLS PEM cert to the server to be added to its cert pool
+    _, err := netio.WriteHandler(connection, TlsMan.CertPemBlock, len(TlsMan.CertPemBlock))
+    if err != nil {
+        kloudlogs.LogMessage(logMan, "error", "Error sending client PEM certificate:  %v", err)
+        return
+    }
+
+    // Make buffer to messaging size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Receive the hash file from the server
@@ -557,14 +556,29 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 //
 func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
                    maxFileSizeInt64 int64) {
+    var err error
 
-    // TODO:  set up TLS stuff
+    // Generate the servers TLS PEM certificate and key and save in TLS manager
+    TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
+    if err != nil {
+        log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
+    }
+
+    // Generate a TLS x509 certificate and cert pool
+    TlsMan.TlsCertificate, TlsMan.CaCertPool, err = tlsutils.CertGenAndPool(TlsMan.CertPemBlock,
+                                                                            TlsMan.KeyPemBlock,
+                                                                            TlsMan.CaCertPemBlocks)
+    if err != nil {
+        log.Fatalf("Error generating TLS certificate:  %v", err)
+    }
 
     // Define the address of the server to connect to
     serverAddress := ipAddr + ":" + strconv.Itoa(port)
 
     // Make a connection to the remote brain server
-    connection, err := net.Dial("tcp", serverAddress)
+    connection, err := tls.Dial("tcp", serverAddress,
+                                tlsutils.NewClientTLSConfig(TlsMan.TlsCertificate,
+                                                            TlsMan.CaCertPool))
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %v", err)
         return
@@ -575,10 +589,6 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
 
     kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
                          zap.String("ip address", ipAddr), zap.Int("port", port))
-
-
-    // TODO:  upload the client TLS cert to the server to be added to its pool in new TLS channel
-
 
     // Set up goroutines for receiving and processing data
     handleConnection(connection, logMan, maxFileSizeInt64)
@@ -615,6 +625,7 @@ func main() {
     var awsSecretKey string
     var maxTransfers int
     var isTesting bool
+    var testPemCert string
 
     // Define command line flags with default values and descriptions
     flag.StringVar(&ipAddr, "ipAddr", "localhost", "IP address of brain server to connect to")
@@ -640,6 +651,7 @@ func main() {
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.StringVar(&LogPath, "logPath", "/tmp/KloudKraken.log", "Path to the log file")
     flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
+    flag.StringVar(&testPemCert, "testPemCert", "", "Path to TLS PEM certificate file for local testing")
 
     // Parse the command line flags
     flag.Parse()
@@ -650,6 +662,7 @@ func main() {
 
     var awsConfig aws.Config
     var err error
+    var serverCertPemBlock []byte
 
     // If the program is being run in full mode (not testing)
     if !isTesting {
@@ -672,14 +685,26 @@ func main() {
             log.Fatalf("Error loading client AWS config:  %v", err)
         }
 
+        // Retrieve the server TLS cert from AWS param store
+        certPemString, err := awsutils.GetBytesParameter(awsConfig, "/kloud-kraken/tls/cert")
+        if err != nil {
+            log.Fatalf("Error getting server TLS cert via SSM Parameter Store:  %v", err)
+        }
 
-        // TODO:  retrieve the server TLS cert from AWS param store
-
+        // Convert retrieved TLS cert PEM block to bytes
+        serverCertPemBlock = []byte(certPemString)
 
     // If the program is being run in testing mode
     } else {
-        // TODO:  load the server TLS cert
+        // Load the servers TLS certifcate PEM block
+        serverCertPemBlock, err = os.ReadFile(testPemCert)
+        if err != nil {
+            log.Fatalf("Error reading TLS certificate PEM file:  %v", err)
+        }
     }
+
+    // Append the client TLS cert PEM block to management list
+    TlsMan.CaCertPemBlocks = append(TlsMan.CaCertPemBlocks, serverCertPemBlock)
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig, false)
