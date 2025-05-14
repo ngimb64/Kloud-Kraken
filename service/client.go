@@ -567,7 +567,7 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
     // Define the address of the server to connect to
     serverAddress := ipAddr + ":" + strconv.Itoa(port)
 
-    // Make a connection to the remote brain server
+    // Make a connection to the remote server
     connection, err := tls.Dial("tcp", serverAddress,
                                 tlsutils.NewClientTLSConfig(TlsMan.TlsCertificate,
                                                             TlsMan.CaCertPool, ipAddr))

@@ -154,7 +154,8 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     // Receive the client PEM certificate bytes
     bytesRead, err := netio.ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error reading")
+        kloudlogs.LogMessage(logMan, "error", "Error reading client PEM cert:  %v", err)
+        return
     }
 
     // Add the read client PEM cert to the cert pool
