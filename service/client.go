@@ -564,20 +564,6 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
                    maxFileSizeInt64 int64) {
     var err error
 
-    // Generate the servers TLS PEM certificate and key and save in TLS manager
-    TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
-    if err != nil {
-        log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
-    }
-
-    // Generate a TLS x509 certificate and cert pool
-    TlsMan.TlsCertificate, TlsMan.CaCertPool, err = tlsutils.CertGenAndPool(TlsMan.CertPemBlock,
-                                                                            TlsMan.KeyPemBlock,
-                                                                            TlsMan.CaCertPemBlocks)
-    if err != nil {
-        log.Fatalf("Error generating TLS certificate:  %v", err)
-    }
-
     // Define the address of the server to connect to
     serverAddress := ipAddr + ":" + strconv.Itoa(port)
 
@@ -707,6 +693,20 @@ func main() {
         if err != nil {
             log.Fatalf("Error reading TLS certificate PEM file:  %v", err)
         }
+    }
+
+    // Generate the servers TLS PEM certificate and key and save in TLS manager
+    TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
+    if err != nil {
+        log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
+    }
+
+    // Generate a TLS x509 certificate and cert pool
+    TlsMan.TlsCertificate, TlsMan.CaCertPool, err = tlsutils.CertGenAndPool(TlsMan.CertPemBlock,
+                                                                            TlsMan.KeyPemBlock,
+                                                                            TlsMan.CaCertPemBlocks)
+    if err != nil {
+        log.Fatalf("Error generating TLS certificate:  %v", err)
     }
 
     // Append the client TLS cert PEM block to management list

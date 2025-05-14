@@ -206,18 +206,18 @@ func NewServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) *tls.Co
 // Creates new TLS server instance to accepting incomming connections
 //
 // @Parameters
-// - ctx:  The context handler for mananging listeneer connection
 // - address:  The listener address
+// - ctx:  The context handler for mananging listeneer connection
 // - tlsConfig:  The TLS configuration instance
 //
 // @Returns
 // - The created TLS server instance
 //
-func NewTlsServer(ctx context.Context, address string,
+func NewTlsServer(address string, ctx context.Context,
                   tlsConfig *tls.Config) *TlsServer {
     return &TlsServer{
-        Ctx:       ctx,
         Addr:      address,
+        Ctx:       ctx,
         TlsConfig: tlsConfig,
     }
 }
@@ -379,10 +379,49 @@ func PemCertAndKeyGenHandler(orgName string, testMode bool,
 }
 
 
+// Creates TLS x509 certificate and a cert pool which are used to setup the TLS
+// configuration instance. After a TLS listener is established and returned.
+//
+// @Parameters
+// - cert:  The TLS certificate to use
+// - certPool:  The PEM cert pool to use
+// - ctx:  The context handler for inner raw TCP socket
+// - listenIp:  The IP address of the network interface of TLS listener
+// - listenPort:  Port that TLS listener will attempt to be established on
+// - listener:  The raw TCP listener to use, passing in nil will result in
+//              one being created
+//
+// @Returns
+// - The established TLS listener
+// - Error if it occurs, otherwise nil on success
+//
+func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
+                             ctx context.Context, listenIp string, listenPort int,
+                             listener net.Listener) (net.Listener, error) {
+    // Create a TLS configuarion instance
+    tlsConfig := &tls.Config{
+        Certificates:       []tls.Certificate{cert},
+        GetConfigForClient: GetServerTlsConfig(cert, certPool),
+    }
+
+    // Format listener address with port
+    listenerAddr := listenIp + ":" + strconv.Itoa(listenPort)
+    // Create a TLS server instance
+    tlsServer := NewTlsServer(listenerAddr, ctx, tlsConfig)
+    // Setup TLS listener from server instance
+    tlsListener, err := tlsServer.SetupTlsListener(listener)
+    if err != nil {
+        return nil, err
+    }
+
+    return tlsListener, nil
+}
+
+
 // Struct for managing TLS connections
 type TlsServer struct {
-    Ctx   	  context.Context
     Addr      string
+    Ctx   	  context.Context
     TlsConfig *tls.Config
 }
 
@@ -421,45 +460,6 @@ func (server *TlsServer) SetupTlsListener(listener net.Listener) (net.Listener, 
 
     // Create new listener with TLS layer on top of raw TCP listner
     tlsListener := tls.NewListener(listener, server.TlsConfig)
-
-    return tlsListener, nil
-}
-
-
-// Creates TLS x509 certificate and a cert pool which are used to setup the TLS
-// configuration instance. After a TLS listener is established and returned.
-//
-// @Parameters
-// - cert:  The TLS certificate to use
-// - certPool:  The PEM cert pool to use
-// - ctx:  The context handler for inner raw TCP socket
-// - listenIp:  The IP address of the network interface of TLS listener
-// - listenPort:  Port that TLS listener will attempt to be established on
-// - listener:  The raw TCP listener to use, passing in nil will result in
-//              one being created
-//
-// @Returns
-// - The established TLS listener
-// - Error if it occurs, otherwise nil on success
-//
-func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
-                             ctx context.Context, listenIp string, listenPort int,
-                             listener net.Listener) (net.Listener, error) {
-    // Create a TLS configuarion instance
-    tlsConfig := &tls.Config{
-        Certificates:       []tls.Certificate{cert},
-        GetConfigForClient: GetServerTlsConfig(cert, certPool),
-    }
-
-    // Format listener address with port
-    listenerAddr := listenIp + ":" + strconv.Itoa(listenPort)
-    // Create a TLS server instance
-    tlsServer := NewTlsServer(ctx, listenerAddr, tlsConfig)
-    // Setup TLS listener from server instance
-    tlsListener, err := tlsServer.SetupTlsListener(listener)
-    if err != nil {
-        return nil, err
-    }
 
     return tlsListener, nil
 }
