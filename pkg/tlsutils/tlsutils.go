@@ -216,10 +216,10 @@ func NewServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) *tls.Co
 func NewTlsServer(ctx context.Context, address string,
                   tlsConfig *tls.Config) *TlsServer {
     return &TlsServer{
-        ctx:       ctx,
-        ready:     make(chan struct{}),
-        addr:      address,
-        tlsConfig: tlsConfig,
+        Ctx:       ctx,
+        Ready:     make(chan struct{}),
+        Addr:      address,
+        TlsConfig: tlsConfig,
     }
 }
 
@@ -382,18 +382,9 @@ func PemCertAndKeyGenHandler(orgName string, testMode bool,
 
 // Struct for managing TLS connections
 type TlsServer struct {
-    ctx   	  context.Context
-    ready 	  chan struct{}
-    addr      string
-    tlsConfig *tls.Config
-}
-
-// TlsServer struct method to block ready channel
-// until TLS listener setup is complete
-func (server *TlsServer) Ready() {
-    if server.ready != nil {
-        <-server.ready
-    }
+    Ctx   	  context.Context
+    Addr      string
+    TlsConfig *tls.Config
 }
 
 // TlsServer struct method to setup TLS supported TCP listener to handle incoming connections.
@@ -408,32 +399,29 @@ func (server *TlsServer) SetupTlsListener(listener net.Listener) (net.Listener, 
     // If no active listener was passed in
     if listener == nil {
         // If no address was specified when NewTlsServer was called
-        if server.addr == "" {
-            server.addr = "localhost:443"
+        if server.Addr == "" {
+            server.Addr = "localhost:443"
         }
 
         // Establish raw TCP listener
-        listener, err = net.Listen("tcp", server.addr)
+        listener, err = net.Listen("tcp", server.Addr)
         if err != nil {
-            return nil, fmt.Errorf("binding to tcp %s: %w", server.addr, err)
+            return nil, fmt.Errorf("binding to tcp %s: %w", server.Addr, err)
         }
     }
 
     // If the servers context is set
-    if server.ctx != nil {
+    if server.Ctx != nil {
         // Launch routine to catch it when signaled
         go func() {
-            <-server.ctx.Done()
+            <-server.Ctx.Done()
             // Close the TLS listener
             _ = listener.Close()
         }()
     }
 
     // Create new listener with TLS layer on top of raw TCP listner
-    tlsListener := tls.NewListener(listener, server.tlsConfig)
-    if server.ready != nil {
-        close(server.ready)
-    }
+    tlsListener := tls.NewListener(listener, server.TlsConfig)
 
     return tlsListener, nil
 }
@@ -445,27 +433,24 @@ func (server *TlsServer) SetupTlsListener(listener net.Listener) (net.Listener, 
 // @Parameters
 // - cert:  The TLS certificate to use
 // - certPool:  The PEM cert pool to use
+// - ctx:  The context handler for inner raw TCP socket
 // - listenIp:  The IP address of the network interface of TLS listener
 // - listenPort:  Port that TLS listener will attempt to be established on
 // - listener:  The raw TCP listener to use, passing in nil will result in
 //              one being created
 //
 // @Returns
-// - The TLS configuration instance
 // - The established TLS listener
 // - Error if it occurs, otherwise nil on success
 //
-func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool, listenIp string,
-                             listenPort int, listener net.Listener) (net.Listener, error) {
+func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
+                             ctx context.Context, listenIp string, listenPort int,
+                             listener net.Listener) (net.Listener, error) {
     // Create a TLS configuarion instance
     tlsConfig := &tls.Config{
         Certificates:       []tls.Certificate{cert},
         GetConfigForClient: GetServerTlsConfig(cert, certPool),
     }
-
-    // Set up context handler for TLS listener
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
 
     // Format listener address with port
     listenerAddr := listenIp + ":" + strconv.Itoa(listenPort)

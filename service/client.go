@@ -381,9 +381,12 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
+    // Set up context handler for TLS listener
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
     // Setup up TLS listener from existing raw TCP listener
     tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
-                                                         "", port, listener)
+                                                         ctx, "", port, listener)
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error setting TLS listener on client:  %v", err)
     }

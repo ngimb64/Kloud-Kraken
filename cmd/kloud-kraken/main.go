@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
@@ -244,8 +245,11 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
 
+    // Set up context handler for TLS listener
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
     // Set up the TLS listener to accept incoming connections
-    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
+    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool, ctx,
                                                          "", appConfig.LocalConfig.ListenerPort, nil)
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error setting up TLS listener:  %v", err)
