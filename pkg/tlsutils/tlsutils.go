@@ -244,7 +244,7 @@ func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
     }
 
     // Get the time for certifcate generation
-    notBefore := time.Now()
+    notBefore := time.Now().Add(-15 * time.Minute)
     // Set up the TLS certificate settings
 	template := x509.Certificate{
 		SerialNumber: serial,
