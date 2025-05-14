@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -36,7 +33,9 @@
                 "-workload=3",
                 "-maxTransfers=2",
                 "-logMode=local",
-                "-logPath=/tmp/KloudKraken.log"
+                "-logPath=/tmp/KloudKraken.log",
+                "-isTesting=true",
+                "-testPemCert=/tmp/tls-cert.pem"
             ],
             "stopOnEntry": false
         }
