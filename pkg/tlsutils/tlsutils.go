@@ -152,9 +152,9 @@ func GetUsableIps() ([]string, error) {
             // add it to usable IPs slice if it is
             switch {
             case ip.IsPrivate():
-                usableIps = append(usableIps, addr.String())
+                usableIps = append(usableIps, ip.String())
             case ip.IsGlobalUnicast():
-                usableIps = append(usableIps, addr.String())
+                usableIps = append(usableIps, ip.String())
             }
         }
     }

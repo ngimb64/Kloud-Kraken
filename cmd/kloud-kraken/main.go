@@ -264,7 +264,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
         connection, err := tlsListener.Accept()
         if err != nil {
             kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %v", err)
-            continue
+            return
         }
 
         // Increment the active connection count
@@ -375,7 +375,7 @@ func main() {
         }
 
         // Set up the AWS credentials based on environment variables
-        awsConfig, err = awsutils.AwsConfigSetup(*&appConfig.LocalConfig.Region)
+        awsConfig, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region)
         if err != nil {
             log.Fatalf("Error initializing AWS config:  %v", err)
         }
