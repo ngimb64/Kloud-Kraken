@@ -341,15 +341,18 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
+    // Slice off any unused bytes in buffer
+    readBuffer := buffer[:bytesRead]
+
     // If the server has completed transferring all data
-    if bytes.Contains(buffer[:bytesRead], globals.END_TRANSFER_MARKER) {
+    if bytes.Contains(readBuffer, globals.END_TRANSFER_MARKER) {
         *transferComplete = true
         return
     }
 
     // If the read data does not start with special delimiter or end with closed bracket
-    if !bytes.HasPrefix(buffer, globals.START_TRANSFER_PREFIX) ||
-    !bytes.HasSuffix(buffer[:bytesRead], globals.TRANSFER_SUFFIX) {
+    if !bytes.HasPrefix(readBuffer, globals.START_TRANSFER_PREFIX) ||
+    !bytes.HasSuffix(readBuffer, globals.TRANSFER_SUFFIX) {
         kloudlogs.LogMessage(logMan, "error", "Unusual format in receieved start transfer message")
         return
     }
@@ -704,7 +707,7 @@ func main() {
     }
 
     // Append the client TLS cert PEM block to management list
-    TlsMan.CaCertPemBlocks = append(TlsMan.CaCertPemBlocks, serverCertPemBlock)
+    TlsMan.AddCACert(serverCertPemBlock)
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig, false)

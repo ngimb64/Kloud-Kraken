@@ -59,6 +59,20 @@ func CaCertPool(caCertPemBlocks [][]byte, caCertPemFiles ...string) (*x509.CertP
 }
 
 
+// Generate the TLS certificate from cert & key PEM byte blocks, then adds the
+// certificate to the cert pool.
+//
+// @Parameters
+// - tlsCertPem:  The cert PEM bytes used for certificate generation
+// - tlsKeyPem:  The key PEM bytes used for certificate generation
+// - caCertPemBlocks:  The slice of byte slices used to store CA PEM blocks
+// - certsToAdd:  variadic length variable of PEM cert files to load and add
+//
+// @Returns
+// - The generated TLS certificate
+// - The generated TLS cert pool
+// - Error if it occurs, otherwise nil on success
+//
 func CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte, caCertPemBlocks [][]byte,
                     certsToAdd ...string) (tls.Certificate, *x509.CertPool, error) {
     // Generate certificate base on certificate & key PEM blocks
@@ -149,6 +163,15 @@ func GetUsableIps() ([]string, error) {
 }
 
 
+// Function for generating a new client TLS configuration.
+//
+// @Parameters
+// - cert:  The TLS certificate to be used in config generation
+// - certPool:  The clients PEM certificate pool
+//
+// @Returns
+// - The TLS configuration instance
+//
 func NewClientTLSConfig(clientCert tls.Certificate, clientPool *x509.CertPool) *tls.Config {
     return &tls.Config{
         Certificates:       []tls.Certificate{clientCert},
@@ -159,20 +182,20 @@ func NewClientTLSConfig(clientCert tls.Certificate, clientPool *x509.CertPool) *
 }
 
 
-// Function for generating a new TLS configuration.
+// Function for generating a new server listener TLS configuration.
 //
 // @Parameters
 // - cert:  The TLS certificate to be used in config generation
-// - certPool:  The TLS certificate pool
+// - serverPool:  The servers PEM certificate pool
 //
 // @Returns
 // - The TLS configuration instance
 //
-func NewServerTlsConfig(cert tls.Certificate, certPool *x509.CertPool) *tls.Config {
+func NewServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) *tls.Config {
     return &tls.Config{
         Certificates: 			  []tls.Certificate{cert},
         ClientAuth:   			  tls.RequireAndVerifyClientCert,
-        ClientCAs:    			  certPool,
+        ClientCAs:    			  serverPool,
         CurvePreferences: 		  []tls.CurveID{tls.CurveP256},
         MinVersion:         	  tls.VersionTLS13,
         PreferServerCipherSuites: true,
@@ -420,9 +443,12 @@ func (server *TlsServer) SetupTlsListener(listener net.Listener) (net.Listener, 
 // configuration instance. After a TLS listener is established and returned.
 //
 // @Parameters
-// - caCertPemBlocks:  Slice of TLS certificate PEM byte blocks
+// - cert:  The TLS certificate to use
+// - certPool:  The PEM cert pool to use
 // - listenIp:  The IP address of the network interface of TLS listener
 // - listenPort:  Port that TLS listener will attempt to be established on
+// - listener:  The raw TCP listener to use, passing in nil will result in
+//              one being created
 //
 // @Returns
 // - The TLS configuration instance

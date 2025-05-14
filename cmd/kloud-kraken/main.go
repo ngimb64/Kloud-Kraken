@@ -365,8 +365,8 @@ func main() {
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
 
-       // TODO:  get the public IP address via IPify API with backup alternatives
-       //        if that fails, and pass result into below TLS function
+        // TODO:  get the public IP address via IPify API with backup alternatives
+        //        if that fails, and pass result into below TLS function
 
         // Generate the servers TLS PEM certificate and key and save in TLS manager
         TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
