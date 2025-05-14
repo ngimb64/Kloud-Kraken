@@ -383,7 +383,6 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 
     // Set up context handler for TLS listener
     ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
     // Setup up TLS listener from existing raw TCP listener
     tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
                                                          ctx, "", port, listener)
@@ -398,15 +397,15 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
         return
     }
 
-    // Increment wait group and max transfers counter
     waitGroup.Add(1)
     MaxTransfers.Add(1)
     // Add the file size of the file to be transfered to transfer manager
     transferManager.AddTransferSize(fileSize)
 
     go func() {
-        // Close listener and transfer connection on local exit
-        defer listener.Close()
+        // Close TLS listener and transfer connection on local exit
+        defer cancel()
+        defer tlsListener.Close()
         defer transferConn.Close()
         // Decrement the waitgroup on local exit
         defer waitGroup.Done()

@@ -7,9 +7,9 @@
 
 - Test and modify Makefile to ensure binaries are transfered to EC2 instance
 
-- Implement unit tests for tlsutils, awsutils, & kloudlogs
-
 - Rerun system testing in AWS environment
+
+- Implement unit tests for tlsutils, awsutils, & kloudlogs
 
 - Try improving tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os

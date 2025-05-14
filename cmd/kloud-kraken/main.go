@@ -255,6 +255,9 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
         kloudlogs.LogMessage(logMan, "fatal", "Error setting up TLS listener:  %v", err)
     }
 
+    // Close the TLS listener on local exit
+    defer tlsListener.Close()
+
     kloudlogs.LogMessage(logMan, "info", "Server started, waiting for connections ..")
 
     for {
