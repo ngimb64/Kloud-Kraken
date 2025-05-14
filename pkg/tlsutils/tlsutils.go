@@ -103,7 +103,7 @@ func CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte, caCertPemBlocks [][]byt
 func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(*tls.ClientHelloInfo) (*tls.Config, error) {
     return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
         // Generate new TLS configuration instance
-        cfg := NewServerTlsConfig(cert, serverPool)
+        cfg := NewServerTlsConfig(cert)
         // Inject the VerifyPeerCertificate callback with access to hello
         cfg.VerifyPeerCertificate = VerifyClientCert(serverPool, hello)
         return cfg, nil
@@ -166,17 +166,15 @@ func GetUsableIps() ([]string, error) {
 // Function for generating a new client TLS configuration.
 //
 // @Parameters
-// - clientCert:  The TLS certificate to be used in config generation
-// - clientPool:  The clients PEM certificate pool
+// - clientPool:  The clients PEM certificate pool with servers cert
 // - serverAddr:  The server IP address to connect to
 //
 // @Returns
 // - The TLS configuration instance
 //
-func NewClientTLSConfig(clientCert tls.Certificate, clientPool *x509.CertPool,
+func NewClientTLSConfig(clientPool *x509.CertPool,
                         serverAddr string) *tls.Config {
     return &tls.Config{
-        Certificates:       []tls.Certificate{clientCert},
         CurvePreferences:   []tls.CurveID{tls.CurveP256},
         MinVersion:         tls.VersionTLS13,
         RootCAs:            clientPool,
@@ -189,16 +187,14 @@ func NewClientTLSConfig(clientCert tls.Certificate, clientPool *x509.CertPool,
 //
 // @Parameters
 // - cert:  The TLS certificate to be used in config generation
-// - serverPool:  The servers PEM certificate pool
 //
 // @Returns
 // - The TLS configuration instance
 //
-func NewServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) *tls.Config {
+func NewServerTlsConfig(cert tls.Certificate) *tls.Config {
     return &tls.Config{
         Certificates: 			  []tls.Certificate{cert},
-        ClientAuth:   			  tls.RequireAndVerifyClientCert,
-        ClientCAs:    			  serverPool,
+        ClientAuth:   			  tls.NoClientCert,
         CurvePreferences: 		  []tls.CurveID{tls.CurveP256},
         MinVersion:         	  tls.VersionTLS13,
         PreferServerCipherSuites: true,
@@ -250,23 +246,17 @@ func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
     // Get the time for certifcate generation
     notBefore := time.Now()
     // Set up the TLS certificate settings
-    template := x509.Certificate{
-        SerialNumber: serial,
-        Subject: pkix.Name{
-            Organization: []string{name},
-        },
-        NotBefore: notBefore,
-        NotAfter:  notBefore.Add(1 * 365 * 24 * time.Hour),
-        KeyUsage: x509.KeyUsageKeyEncipherment |
-            x509.KeyUsageDigitalSignature |
-            x509.KeyUsageCertSign,
-        ExtKeyUsage: []x509.ExtKeyUsage{
-            x509.ExtKeyUsageServerAuth,
-            x509.ExtKeyUsageClientAuth,
-        },
-        BasicConstraintsValid: true,
-        IsCA:                  true,
-    }
+	template := x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{name},
+		},
+		NotBefore:   notBefore,
+		NotAfter:    notBefore.Add(1 * 365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
 
     // Split the comma-separated host list and iterate through it
     for _, h := range strings.Split(hosts, ",") {

@@ -569,8 +569,7 @@ func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
 
     // Make a connection to the remote server
     connection, err := tls.Dial("tcp", serverAddress,
-                                tlsutils.NewClientTLSConfig(TlsMan.TlsCertificate,
-                                                            TlsMan.CaCertPool, ipAddr))
+                                tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %v", err)
         return

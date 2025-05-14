@@ -106,8 +106,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
 
     // Make a connection to the remote brain server
     transferConn, err := tls.Dial("tcp", remoteAddr,
-                                  tlsutils.NewClientTLSConfig(TlsMan.TlsCertificate,
-                                                              TlsMan.CaCertPool, ipAddr))
+                                  tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
         kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %v", err)
         return
