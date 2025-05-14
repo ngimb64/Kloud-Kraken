@@ -217,7 +217,6 @@ func NewTlsServer(ctx context.Context, address string,
                   tlsConfig *tls.Config) *TlsServer {
     return &TlsServer{
         Ctx:       ctx,
-        Ready:     make(chan struct{}),
         Addr:      address,
         TlsConfig: tlsConfig,
     }
