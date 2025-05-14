@@ -166,18 +166,21 @@ func GetUsableIps() ([]string, error) {
 // Function for generating a new client TLS configuration.
 //
 // @Parameters
-// - cert:  The TLS certificate to be used in config generation
-// - certPool:  The clients PEM certificate pool
+// - clientCert:  The TLS certificate to be used in config generation
+// - clientPool:  The clients PEM certificate pool
+// - serverAddr:  The server IP address to connect to
 //
 // @Returns
 // - The TLS configuration instance
 //
-func NewClientTLSConfig(clientCert tls.Certificate, clientPool *x509.CertPool) *tls.Config {
+func NewClientTLSConfig(clientCert tls.Certificate, clientPool *x509.CertPool,
+                        serverAddr string) *tls.Config {
     return &tls.Config{
         Certificates:       []tls.Certificate{clientCert},
         CurvePreferences:   []tls.CurveID{tls.CurveP256},
         MinVersion:         tls.VersionTLS13,
         RootCAs:            clientPool,
+        ServerName:         serverAddr,
     }
 }
 
