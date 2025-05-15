@@ -394,6 +394,8 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     transferConn, err := tlsListener.Accept()
     if err != nil {
         kloudlogs.LogMessage(logMan, "error", "Error accepting server connection:  %v", err)
+        // Ensure TLS listener and raw TCP socket are closed
+        tlsListener.Close()
         cancel()
         return
     }
