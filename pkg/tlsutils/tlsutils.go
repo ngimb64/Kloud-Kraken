@@ -246,17 +246,17 @@ func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
     // Get the time for certifcate generation
     notBefore := time.Now().Add(-15 * time.Minute)
     // Set up the TLS certificate settings
-	template := x509.Certificate{
-		SerialNumber: serial,
-		Subject: pkix.Name{
-			Organization: []string{name},
-		},
-		NotBefore:   notBefore,
-		NotAfter:    notBefore.Add(1 * 365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
+    template := x509.Certificate{
+        SerialNumber: serial,
+        Subject: pkix.Name{
+            Organization: []string{name},
+        },
+        NotBefore:   notBefore,
+        NotAfter:    notBefore.Add(1 * 365 * 24 * time.Hour),
+        KeyUsage:    x509.KeyUsageDigitalSignature,
+        ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+        BasicConstraintsValid: true,
+    }
 
     // Split the comma-separated host list and iterate through it
     for _, h := range strings.Split(hosts, ",") {

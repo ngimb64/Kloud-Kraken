@@ -29,8 +29,8 @@ func AwsConfigSetup(region string) (aws.Config, error) {
     // If AWS access and secret key are present
     if awsAccessKey == "" || awsSecretKey == "" {
         return aws.Config{}, fmt.Errorf("missing either the access (%s) or " +
-										"secret key (%s) for AWS",
-				   						awsAccessKey, awsSecretKey)
+                                        "secret key (%s) for AWS",
+                                           awsAccessKey, awsSecretKey)
     }
 
     // Set the AWS credentials provider
@@ -44,7 +44,7 @@ func AwsConfigSetup(region string) (aws.Config, error) {
     )
 
     if err != nil {
-    	return awsConfig, err
+        return awsConfig, err
     }
 
     return awsConfig, nil
@@ -62,14 +62,14 @@ func AwsConfigSetup(region string) (aws.Config, error) {
 // - Error if it occurs, otherwise nil on success
 //
 func GetBytesParameter(awsConfig aws.Config, name string) (string, error) {
-	// Ensure AWS API calls do not hang for longer than 30 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    // Ensure AWS API calls do not hang for longer than 30 seconds
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
-	// Establish an SSM parameter store client
-	ssmClient := ssm.NewFromConfig(awsConfig)
+    // Establish an SSM parameter store client
+    ssmClient := ssm.NewFromConfig(awsConfig)
 
-	// Get parameter from AWS SSM Parameter Store
+    // Get parameter from AWS SSM Parameter Store
     out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
         Name:           aws.String(name),
         WithDecryption: aws.Bool(true),
@@ -94,14 +94,14 @@ func GetBytesParameter(awsConfig aws.Config, name string) (string, error) {
 // - Error if it occurs, otherwise nil on success
 //
 func PutBytesParameter(awsConfig aws.Config, name string, data string) error {
-	// Ensure AWS API calls do not hang for longer than 30 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    // Ensure AWS API calls do not hang for longer than 30 seconds
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
-	// Establish an SSM parameter store client
-	ssmClient := ssm.NewFromConfig(awsConfig)
+    // Establish an SSM parameter store client
+    ssmClient := ssm.NewFromConfig(awsConfig)
 
-	// Put parameter into AWS SSM Parameter Store
+    // Put parameter into AWS SSM Parameter Store
     _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
         Name:      aws.String(name),
         Value:     aws.String(data),
