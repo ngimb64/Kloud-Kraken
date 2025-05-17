@@ -262,7 +262,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 
     for {
         // If current number of connection is greater than or equal to number of instances
-        if CurrentConnections.Load() >= appConfig.LocalConfig.NumberInstances {
+        if CurrentConnections.Load() >= int32(appConfig.LocalConfig.NumberInstances) {
             kloudlogs.LogMessage(logMan, "info", "All remote clients are connected")
             break
         }
@@ -289,6 +289,19 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     waitGroup.Wait()
 
     kloudlogs.LogMessage(logMan, "info", "All connections handled .. server shutting down")
+}
+
+
+// TODO:  document when finished
+//
+func ec2UserDataGen() string {
+    data := "#!/bin/bash"
+
+
+    // TODO:  write user data script
+
+
+    return data
 }
 
 
@@ -371,12 +384,15 @@ func main() {
 
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
-
-        // TODO:  get the public IP address via IPify API with backup alternatives
-        //        if that fails, and pass result into below TLS function
+        // Query IP lookup APIs for public IP addresses
+        publicIps, err := tlsutils.GetPublicIps()
+        if err != nil {
+            log.Fatalf("Error getting public IP addresses:  %v", err)
+        }
 
         // Generate the servers TLS PEM certificate and key and save in TLS manager
-        TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
+        TlsMan.CertPemBlock,
+        TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
         if err != nil {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
@@ -388,24 +404,35 @@ func main() {
         }
 
         // Push the servers certificate PEM into SSM parameter store
-        err = awsutils.PutBytesParameter(awsConfig, "/kloud-kraken/tls/cert",
-                                         string(TlsMan.CertPemBlock))
+        param, err := awsutils.PutBytesParameter(awsConfig, "/kloud-kraken/tls/cert",
+                                                 string(TlsMan.CertPemBlock))
         if err != nil {
             log.Fatalf("Error putting TLS PEM certificate in SSM Parameter Store:  %v", err)
         }
 
-        // TODO:  add function calls for setting up AWS and spawning EC2
-        //        with user data executing service with params passed in
+        // Generate user data script to set up client program in EC2
+        userData := ec2UserDataGen()
+
+
+        // TODO:  Add AMI name in line below when created
+
+
+        // Setup EC2 creation instance with populated args
+       ec2builder := awsutils.NewCreateEc2Args("<ADD_AMI>", awsConfig, appConfig.LocalConfig.NumberInstances,
+                                               3, "Kloud-Kraken", publicIps, param, userData)
+        // Create number of EC2 instances based on passed in YAML data in constructor function
+        ec2builder.CreateEc2Instances()
 
     // If the program is being run in testing mode
     } else {
         // Generate the servers TLS PEM certificate & key and save in TLS manager
-        TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", true)
+        TlsMan.CertPemBlock,
+        TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", true)
         if err != nil {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        log.Println("Testing mode:  TLS PEM cert & key generated, transfer cert to client before execution")
+        log.Println("Testing mode:  PEM cert & key generated, transfer cert to client before execution")
     }
 
     // Generate a TLS x509 certificate and cert pool

@@ -11,12 +11,23 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+)
+
+// HTTP shared client (reuses connections) with global timeout
+var client = &http.Client{Timeout: 5 * time.Second}
+// Pre-compile IPv4/IPv6 regex once
+var reIpAddr = regexp.MustCompile(
+    `\b(?:\d{1,3}\.){3}\d{1,3}\b|` +  // IPv4
+    `\b(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{1,4}\b`, // IPv6 (simple form)
 )
 
 // Reads the passed in PEM encoded certificate file into memory
@@ -111,6 +122,58 @@ func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(*t
 }
 
 
+// GetPublicIP tries each endpoint in turn until one returns a valid IPv4/6 string.
+//
+// @Returns
+// - A slice of string IP address retrieved from APIs
+// - Error if it occurs, otherwise nil on success
+//
+func GetPublicIps() ([]string, error) {
+    var ipAddrs []string
+    var matches []string
+    // list of public‐IP endpoints to try, in order
+    endpoints := []string{"https://api.ipify.org", "https://ifconfig.me/ip",
+                          "https://checkip.amazonaws.com", "https://icanhazip.com"}
+
+    // Iterate through list of IP API enpoints
+    for _, url := range endpoints {
+        // create a fresh 5s context for each request
+        ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+        defer cancel()
+
+        // Initialize HTTP GET request
+        req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+        if err != nil {
+            continue
+        }
+
+        // Send HTTP GET request
+        response, err := client.Do(req)
+        if err != nil {
+            continue
+        }
+
+        // Read the response data of the request
+        data, err := io.ReadAll(io.LimitReader(response.Body, 512))
+        response.Body.Close()
+        if err != nil {
+            continue
+        }
+
+        // Convert data to string and remove any outer whitespace
+        textData := strings.TrimSpace(string(data))
+        // Regex search for all IP address
+        matches = reIpAddr.FindAllString(textData, -1)
+        // If there were matches, add them to result slice
+        if len(matches) > 0 {
+            ipAddrs = append(ipAddrs, matches...)
+        }
+    }
+
+    return ipAddrs, errors.New("could not retrieve public IP from any APIs")
+}
+
+
 // Get the assigned valid public and private IP address assigned
 // to network interfaces.
 //
@@ -148,12 +211,9 @@ func GetUsableIps() ([]string, error) {
                 continue
             }
 
-            // Check to see if IP address is a usable public or private address,
-            // add it to usable IPs slice if it is
-            switch {
-            case ip.IsPrivate():
-                usableIps = append(usableIps, ip.String())
-            case ip.IsGlobalUnicast():
+            // If the IP address is public or private
+            if ip.IsGlobalUnicast() || ip.IsPrivate() {
+                // Add it to the usable IPs slice
                 usableIps = append(usableIps, ip.String())
             }
         }
@@ -175,10 +235,10 @@ func GetUsableIps() ([]string, error) {
 func NewClientTLSConfig(clientPool *x509.CertPool,
                         serverAddr string) *tls.Config {
     return &tls.Config{
-        CurvePreferences:   []tls.CurveID{tls.CurveP256},
-        MinVersion:         tls.VersionTLS13,
-        RootCAs:            clientPool,
-        ServerName:         serverAddr,
+        CurvePreferences: []tls.CurveID{tls.CurveP256},
+        MinVersion:       tls.VersionTLS13,
+        RootCAs:          clientPool,
+        ServerName:       serverAddr,
     }
 }
 
@@ -391,7 +451,7 @@ func PemCertAndKeyGenHandler(orgName string, testMode bool,
 func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
                              ctx context.Context, listenIp string, listenPort int,
                              listener net.Listener) (net.Listener, error) {
-    // Create a TLS configuarion instance
+    // Create a TLS configuration instance
     tlsConfig := &tls.Config{
         Certificates:       []tls.Certificate{cert},
         GetConfigForClient: GetServerTlsConfig(cert, certPool),
@@ -420,6 +480,9 @@ type TlsServer struct {
 
 // TlsServer struct method to setup TLS supported TCP listener to handle incoming connections.
 //
+// @Parameters
+// - listener:  Established raw TCP socket listener, if nil one is created
+//
 // @Returns
 // - The established TLS TCP listener
 // - Error if it occurs, otherwise nil on success
@@ -429,11 +492,6 @@ func (server *TlsServer) SetupTlsListener(listener net.Listener) (net.Listener, 
 
     // If no active listener was passed in
     if listener == nil {
-        // If no address was specified when NewTlsServer was called
-        if server.Addr == "" {
-            server.Addr = "localhost:443"
-        }
-
         // Establish raw TCP listener
         listener, err = net.Listen("tcp", server.Addr)
         if err != nil {

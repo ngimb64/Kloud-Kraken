@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -562,29 +564,36 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func connectRemote(ipAddr string, port int, logMan *kloudlogs.LoggerManager,
-                   maxFileSizeInt64 int64) {
-    var err error
+func connectRemote(ipAddrs string, port int, logMan *kloudlogs.LoggerManager,
+                   maxFileSizeInt64 int64) error {
+    // Split the comma separated string into slice of addresses
+    addresses := strings.Split(ipAddrs, ",")
 
-    // Define the address of the server to connect to
-    serverAddress := ipAddr + ":" + strconv.Itoa(port)
+    // Iterate through list of addresses to attempt to connect to
+    for _, addr := range addresses {
+        // Define the address of the server to connect to
+        serverAddress := addr + ":" + strconv.Itoa(port)
 
-    // Make a connection to the remote server
-    connection, err := tls.Dial("tcp", serverAddress,
-                                tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
-    if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote server:  %v", err)
-        return
+        // Make a connection to the remote server
+        connection, err := tls.Dial("tcp", serverAddress,
+                                    tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, addr))
+        if err != nil {
+            kloudlogs.LogMessage(logMan, "error", "Error connecting to remote server:  %v", err)
+            continue
+        }
+
+        // Close connection on local exit
+        defer connection.Close()
+
+        kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
+                             zap.String("ip address", addr), zap.Int("port", port))
+
+        // Set up goroutines for receiving and processing data
+        handleConnection(connection, logMan, maxFileSizeInt64)
+        return nil
     }
 
-    // Close connection on local exit
-    defer connection.Close()
-
-    kloudlogs.LogMessage(logMan, "info", "Connected to remote server",
-                         zap.String("ip address", ipAddr), zap.Int("port", port))
-
-    // Set up goroutines for receiving and processing data
-    handleConnection(connection, logMan, maxFileSizeInt64)
+    return fmt.Errorf("Unable to connect to any of the address, check log for more info")
 }
 
 
@@ -609,23 +618,25 @@ func makeClientDirs() {
 // secret, set up logging manager, and set up connection with server.
 //
 func main() {
-    var ipAddr string
+    var ipAddrs string
     var port int
     var maxFileSizeInt64 int64
     var logMode string
     var awsRegion string
     var awsAccessKey string
     var awsSecretKey string
+    var certSsmParam string
     var maxTransfers int
     var isTesting bool
     var testPemCert string
 
     // Define command line flags with default values and descriptions
-    flag.StringVar(&ipAddr, "ipAddr", "localhost", "IP address of brain server to connect to")
+    flag.StringVar(&ipAddrs, "ipAddrs", "localhost", "IP addresses of server to connect to in CSV format")
     flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
     flag.StringVar(&awsAccessKey, "awsAccessKey", "", "The access key for AWS programmatic access")
     flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
+    flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
                   "The max size for file to be transmitted at once")
     flag.StringVar(&HashcatArgsStruct.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
@@ -659,9 +670,14 @@ func main() {
 
     // If the program is being run in full mode (not testing)
     if !isTesting {
-        // If AWS access and secret key are present
+        // If AWS access and secret key are not present
         if awsAccessKey == "" || awsSecretKey == "" {
             log.Fatalf("AWS access key or secret key missing and not in testing mode")
+        }
+
+        // If parameter for SSM param store is not present
+        if certSsmParam == "" {
+            log.Fatalf("Missing parameter to retrieve TLS from SSM param store")
         }
 
         // Set the AWS credentials provider
@@ -679,7 +695,7 @@ func main() {
         }
 
         // Retrieve the server TLS cert from AWS param store
-        certPemString, err := awsutils.GetBytesParameter(awsConfig, "/kloud-kraken/tls/cert")
+        certPemString, err := awsutils.GetBytesParameter(awsConfig, certSsmParam)
         if err != nil {
             log.Fatalf("Error getting server TLS cert via SSM Parameter Store:  %v", err)
         }
@@ -697,7 +713,8 @@ func main() {
     }
 
     // Generate the servers TLS PEM certificate and key and save in TLS manager
-    TlsMan.CertPemBlock, TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
+    TlsMan.CertPemBlock,
+    TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
     if err != nil {
         log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
     }
@@ -720,5 +737,5 @@ func main() {
     }
 
     // Connect to remote server to begin receiving data for processing
-    connectRemote(ipAddr, port, logMan, maxFileSizeInt64)
+    connectRemote(ipAddrs, port, logMan, maxFileSizeInt64)
 }

@@ -373,7 +373,7 @@ func ValidateMaxTransfers(maxTransfers int32) bool {
 // @Returns
 // - true/false boolean depending on whether the number instances
 //   is greater than 0 or not
-func ValidateNumberInstances(numberInstances int32) bool {
+func ValidateNumberInstances(numberInstances int) bool {
     return numberInstances > 0
 }
 
