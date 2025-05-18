@@ -13,12 +13,14 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
@@ -294,14 +296,22 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 
 // TODO:  document when finished
 //
-func ec2UserDataGen() string {
-    data := "#!/bin/bash"
+func ec2UserDataGen(publicIps []string, ssmParam string) (string, error) {
+    ipAddrsCsv, err := data.SliceToCsv(publicIps)
+    if err != nil {
+        return "", err
+    }
+
+    data := fmt.Sprintf(`#!/bin/bash
+echo test
+echo foo
+`)
 
 
     // TODO:  write user data script
 
 
-    return data
+    return data, nil
 }
 
 
@@ -404,24 +414,32 @@ func main() {
         }
 
         // Push the servers certificate PEM into SSM parameter store
-        param, err := awsutils.PutBytesParameter(awsConfig, "/kloud-kraken/tls/cert",
-                                                 string(TlsMan.CertPemBlock))
+        param, err := awsutils.PutSsmParameter(awsConfig, "/kloud-kraken/tls/cert",
+                                               string(TlsMan.CertPemBlock), 1*time.Minute, nil)
         if err != nil {
             log.Fatalf("Error putting TLS PEM certificate in SSM Parameter Store:  %v", err)
         }
 
         // Generate user data script to set up client program in EC2
-        userData := ec2UserDataGen()
+        userData, err := ec2UserDataGen(publicIps, param)
+        if err != nil {
+            log.Fatalf("Error generating user data for EC2:  %v", err)
+        }
 
 
         // TODO:  Add AMI name in line below when created
 
 
         // Setup EC2 creation instance with populated args
-       ec2builder := awsutils.NewCreateEc2Args("<ADD_AMI>", awsConfig, appConfig.LocalConfig.NumberInstances,
-                                               3, "Kloud-Kraken", publicIps, param, userData)
+        ec2builder := awsutils.NewEc2Args("<ADD_AMI>", awsConfig,
+                                          appConfig.LocalConfig.NumberInstances,
+                                          3, "Kloud-Kraken", userData)
         // Create number of EC2 instances based on passed in YAML data in constructor function
-        ec2builder.CreateEc2Instances()
+        ec2Instances, err := ec2builder.CreateEc2Instances(20*time.Minute, nil)
+        if err != nil {
+
+        }
+
 
     // If the program is being run in testing mode
     } else {

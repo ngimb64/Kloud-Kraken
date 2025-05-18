@@ -2,14 +2,15 @@ package data
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
-	"golang.org/x/exp/rand"
 )
 
 // Packagre level variables
@@ -24,7 +25,7 @@ const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 //
 func GenerateRandomBytes(buffer []byte, maxBytes int) {
     // Seed the random number generator to ensure unique results
-    rand.Seed(uint64(time.Now().UnixNano()))
+    rand.New(rand.NewSource(time.Now().UnixNano()))
 
     for i := range buffer {
         buffer[i] = byte(rand.Intn(maxBytes))
@@ -100,14 +101,43 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
 //
 func RandStringBytes(numberChars int) string {
     byteSlice := make([]byte, numberChars)
-    // Seed the random number generator with the current Unix timestamp
-    rand.Seed(uint64(time.Now().UnixNano()))
+    // Seed the random number generator to ensure unique results
+    rand.New(rand.NewSource(time.Now().UnixNano()))
 
     for index := range byteSlice {
         byteSlice[index] = LetterBytes[rand.Intn(len(LetterBytes))]
     }
 
     return string(byteSlice)
+}
+
+
+// Converts passed in slice of strings into CSV formatted
+// string value like "foo,bar,string"
+//
+// @Parameters
+// - fields:  The slice of string fields to format into CSV
+//
+// @Returns
+// - The CSV formatted string
+// - Error if it occurs, otherwise nil on success
+//
+func SliceToCsv(fields []string) (string, error) {
+    var buf bytes.Buffer
+
+    // Set up CSV writer and write string slice to it
+    w := csv.NewWriter(&buf)
+    if err := w.Write(fields); err != nil {
+        return "", err
+    }
+
+    // Flush buffer data to ensure it is written
+    w.Flush()
+    if err := w.Error(); err != nil {
+        return "", err
+    }
+
+    return buf.String(), nil
 }
 
 

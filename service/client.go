@@ -689,13 +689,13 @@ func main() {
             config.WithRegion(awsRegion),
             config.WithCredentialsProvider(awsCreds),
         )
-
         if err != nil {
             log.Fatalf("Error loading client AWS config:  %v", err)
         }
 
         // Retrieve the server TLS cert from AWS param store
-        certPemString, err := awsutils.GetBytesParameter(awsConfig, certSsmParam)
+        certPemString, err := awsutils.GetSsmParameter(awsConfig, certSsmParam,
+                                                       1*time.Minute, nil)
         if err != nil {
             log.Fatalf("Error getting server TLS cert via SSM Parameter Store:  %v", err)
         }

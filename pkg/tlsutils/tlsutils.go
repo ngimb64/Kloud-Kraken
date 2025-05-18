@@ -130,7 +130,7 @@ func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(*t
 //
 func GetPublicIps() ([]string, error) {
     var ipAddrs []string
-    var matches []string
+    uniqueAddrs := make(map[string]struct{})
     // list of public‐IP endpoints to try, in order
     endpoints := []string{"https://api.ipify.org", "https://ifconfig.me/ip",
                           "https://checkip.amazonaws.com", "https://icanhazip.com"}
@@ -154,7 +154,7 @@ func GetPublicIps() ([]string, error) {
         }
 
         // Read the response data of the request
-        data, err := io.ReadAll(io.LimitReader(response.Body, 512))
+        data, err := io.ReadAll(response.Body)
         response.Body.Close()
         if err != nil {
             continue
@@ -163,14 +163,27 @@ func GetPublicIps() ([]string, error) {
         // Convert data to string and remove any outer whitespace
         textData := strings.TrimSpace(string(data))
         // Regex search for all IP address
-        matches = reIpAddr.FindAllString(textData, -1)
-        // If there were matches, add them to result slice
-        if len(matches) > 0 {
-            ipAddrs = append(ipAddrs, matches...)
+        matches := reIpAddr.FindAllString(textData, -1)
+
+        // Iterate through matched IP addresses
+        for _, match := range matches {
+            // Check to see if IP has been matched already
+            _, exists := uniqueAddrs[match]
+            // If IP does not exist in map
+            if !exists {
+                // Add it to map and resulting slice
+                uniqueAddrs[match] = struct{}{}
+                ipAddrs = append(ipAddrs, match)
+            }
         }
     }
 
-    return ipAddrs, errors.New("could not retrieve public IP from any APIs")
+    // If no public IPs were discovered
+    if len(ipAddrs) == 0 {
+        return nil, errors.New("could not retrieve public IP from any APIs")
+    }
+
+    return ipAddrs, nil
 }
 
 

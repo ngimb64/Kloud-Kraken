@@ -111,8 +111,21 @@ func TestParseFileSizeType(t *testing.T) {
 
 func TestRandStringBytes(t *testing.T) {
     stringLen := 12
-
+    // Ensure a dozen random bytes are returned as a string
     assert.Equal(t, stringLen, len(data.RandStringBytes(stringLen)))
+}
+
+
+func TestSliceToCsv(t *testing.T) {
+    testSlice := []string{"foo", "bar", "shazam", "shamar"}
+    // Make reusable assert instance
+    assert := assert.New(t)
+    // Convert the test data to CSV string
+    resultCsv, err := data.SliceToCsv(testSlice)
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+    // Ensure the resulting CSV string is of proper format
+    assert.Equal("foo,bar,shazam,shamar", resultCsv)
 }
 
 

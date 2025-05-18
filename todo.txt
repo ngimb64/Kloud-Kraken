@@ -1,5 +1,3 @@
-- Rerun testing locally
-
 - Add AWS code, CloudWatch code to Kloudlogs, double check unit test, and test with AWS
     - Ensure user data include bash script which updates and installs hashcat, then transfers compiled client service binary from server
 
