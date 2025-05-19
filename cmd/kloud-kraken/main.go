@@ -409,7 +409,7 @@ func main() {
         }
 
         // Set up the AWS credentials based on environment variables
-        awsConfig, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region)
+        awsConfig, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region, 1*time.Minute)
         if err != nil {
             log.Fatalf("Error initializing AWS config:  %v", err)
         }
