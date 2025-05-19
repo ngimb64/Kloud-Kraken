@@ -12,6 +12,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestValidateBucketName(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    err := validate.ValidateBucketName("test-bucket")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    err = validate.ValidateBucketName("#3$$3dsslmdv.12mvm_#")
+    // Ensure the error occured
+    assert.NotEqual(nil, err)
+
+    err = validate.ValidateBucketName("10.10.10.10")
+    // Ensure the error occured
+    assert.NotEqual(nil, err)
+}
+
+
 func TestValidateCharsets(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -220,6 +238,20 @@ func TestValidateHashType(t *testing.T) {
     for _, falacy := range falacies {
         assert.False(validate.ValidateHashType(falacy))
     }
+}
+
+
+func TestValidateInstanceType(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    isType := validate.ValidateInstanceType("p3.8xlarge")
+    assert.True(isType)
+
+    // Try test with bad value
+    isType = validate.ValidateInstanceType("blahblah")
+    assert.False(isType)
 }
 
 

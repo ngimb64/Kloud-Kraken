@@ -14,3 +14,8 @@
 - Install Go packages with `go get ./...`
 - Ensure any missing external dependencies are resolved `go mod tidy -e`
 - Run the test cases in root directory of project `go test ./...`
+<br>
+
+- When running the program in full mode with AWS environment there are two options for credential setup
+    - Configure API access credentials locally before running with `aws configure`
+    - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY

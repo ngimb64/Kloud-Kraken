@@ -618,44 +618,44 @@ func makeClientDirs() {
 // secret, set up logging manager, and set up connection with server.
 //
 func main() {
-    var ipAddrs string
-    var port int
-    var maxFileSizeInt64 int64
-    var logMode string
-    var awsRegion string
     var awsAccessKey string
+    var awsRegion string
     var awsSecretKey string
     var certSsmParam string
-    var maxTransfers int
+    var ipAddrs string
     var isTesting bool
+    var logMode string
+    var maxFileSizeInt64 int64
+    var maxTransfers int
+    var port int
     var testPemCert string
 
     // Define command line flags with default values and descriptions
-    flag.StringVar(&ipAddrs, "ipAddrs", "localhost", "IP addresses of server to connect to in CSV format")
-    flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
-    flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
-    flag.StringVar(&awsAccessKey, "awsAccessKey", "", "The access key for AWS programmatic access")
-    flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
-    flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
-    flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
-                  "The max size for file to be transmitted at once")
-    flag.StringVar(&HashcatArgsStruct.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
-    flag.StringVar(&HashcatArgsStruct.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HashcatArgsStruct.ApplyOptimization, "applyOptimization", false,
                  "Apply the -O flag for GPU optimization")
-    flag.StringVar(&HashcatArgsStruct.Workload, "workload", "3", "Workload profile number to apply")
+    flag.StringVar(&awsAccessKey, "awsAccessKey", "", "The access key for AWS programmatic access")
+    flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
+    flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
+    flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
     flag.StringVar(&HashcatArgsStruct.CharSet1, "charSet1", "", "Custom character set 1 for masks")
     flag.StringVar(&HashcatArgsStruct.CharSet2, "charSet2", "", "Custom character set 2 for masks")
     flag.StringVar(&HashcatArgsStruct.CharSet3, "charSet3", "", "Custom character set 3 for masks")
     flag.StringVar(&HashcatArgsStruct.CharSet4, "charSet4", "", "Custom character set 4 for masks")
+    flag.StringVar(&HashcatArgsStruct.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
     flag.StringVar(&HashcatArgsStruct.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
+    flag.StringVar(&HashcatArgsStruct.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
-    flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
+    flag.StringVar(&ipAddrs, "ipAddrs", "localhost", "IP addresses of server to connect to in CSV format")
+    flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.StringVar(&LogPath, "logPath", "/tmp/KloudKraken.log", "Path to the log file")
-    flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
+    flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
+                  "The max size for file to be transmitted at once")
+    flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
+    flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
     flag.StringVar(&testPemCert, "testPemCert", "", "Path to TLS PEM certificate file for local testing")
+    flag.StringVar(&HashcatArgsStruct.Workload, "workload", "3", "Workload profile number to apply")
 
     // Parse the command line flags
     flag.Parse()
@@ -684,11 +684,8 @@ func main() {
         awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
 
         // Load default config and override with custom credentials and region
-        awsConfig, err = config.LoadDefaultConfig(
-            context.TODO(),
-            config.WithRegion(awsRegion),
-            config.WithCredentialsProvider(awsCreds),
-        )
+        awsConfig, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion),
+                                                  config.WithCredentialsProvider(awsCreds))
         if err != nil {
             log.Fatalf("Error loading client AWS config:  %v", err)
         }

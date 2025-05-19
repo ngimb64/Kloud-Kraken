@@ -391,6 +391,7 @@ func main() {
     }
 
     var awsConfig aws.Config
+    var logMan *kloudlogs.LoggerManager
 
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
@@ -431,15 +432,31 @@ func main() {
 
 
         // Setup EC2 creation instance with populated args
-        ec2builder := awsutils.NewEc2Args("<ADD_AMI>", awsConfig,
-                                          appConfig.LocalConfig.NumberInstances,
-                                          3, "Kloud-Kraken", userData)
+        ec2Man := awsutils.NewEc2Manager("<ADD_AMI>", awsConfig,
+                                         appConfig.LocalConfig.NumberInstances,
+                                         appConfig.LocalConfig.InstanceType,
+                                         "Kloud-Kraken", []byte(userData))
         // Create number of EC2 instances based on passed in YAML data in constructor function
-        ec2Instances, err := ec2builder.CreateEc2Instances(20*time.Minute, nil)
+        err = ec2Man.CreateEc2Instances(20*time.Minute, nil)
         if err != nil {
-
+            log.Fatalf("Error creating EC2 instances:  %v", err)
         }
 
+        defer func() {
+            // Terminate the EC2 instances when processing is complete
+            termOutput, err := ec2Man.TerminateEc2Instances(time.Minute*10)
+            if err != nil {
+                log.Fatalf("Error terminating EC2 instances:  %v", err)
+            }
+
+            // Iterate through list of terminated instance ids
+            for _, instance := range termOutput.TerminatingInstances {
+                kloudlogs.LogMessage(logMan, "Instance state for %s: %s → %s\n",
+                                     aws.ToString(instance.InstanceId),
+                                     instance.PreviousState.Name,
+                                     instance.CurrentState.Name)
+            }
+        } ()
 
     // If the program is being run in testing mode
     } else {
@@ -462,7 +479,7 @@ func main() {
     }
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig, false)
+    logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

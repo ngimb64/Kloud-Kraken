@@ -1,27 +1,29 @@
 local_config:
-  region: "us-east-1"
-  listener_port: 6969
-  number_instances: 1
-  load_dir: "/home/thebugfather/Documents/project_testing/project_data"
+  bucket_name: ""
   hash_file_path: "/home/thebugfather/Documents/project_testing/test-hashes"
-  ruleset_path: ""
+  instance_type: "t2-micro"
+  listener_port: 6969
+  load_dir: "/home/thebugfather/Documents/project_testing/project_data"
+  local_testing: true
+  log_path: "KloudKraken.log"
   max_merging_size: "500MB"
   max_size_range: 15.0
-  log_path: "KloudKraken.log"
-  local_testing: true
+  number_instances: 1
+  region: "us-east-1"
+  ruleset_path: ""
 
 client_config:
-  region: "us-east-1"
-  max_file_size: "16GB"
-  cracking_mode: "0"
-  hash_type: "1700"
   apply_optimization: false
-  workload: "3"
   char_set1: ""
   char_set2: ""
   char_set3: ""
   char_set4: ""
+  cracking_mode: "0"
   hash_mask: ""
-  max_transfers: 3
+  hash_type: "1700"
   log_mode: "local"
   log_path: "/tmp/KloudKraken.log"
+  max_file_size: "16GB"
+  max_transfers: 3
+  region: "us-east-1"
+  workload: "3"

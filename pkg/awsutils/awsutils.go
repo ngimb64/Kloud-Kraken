@@ -22,6 +22,31 @@ import (
 	"github.com/aws/smithy-go"
 )
 
+// TODO:  add doc
+func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
+                                 aws.Config, bool) {
+    // Load the local credential chain (env, ~/.aws, etc.)
+    cfg, err := config.LoadDefaultConfig(context.TODO(),
+        config.WithRegion(region),
+    )
+    if err != nil {
+        return cfg, false
+    }
+
+    // Retrieve credentials with a deadline
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Retreive the credentials from the credentials provider
+    _, err = cfg.Credentials.Retrieve(ctx)
+    if err != nil {
+        return cfg, false
+    }
+
+    return cfg, true
+}
+
+
 // Set up the AWS config with credentials and region stored in passed in app config.
 //
 // @Paramters
@@ -32,6 +57,12 @@ import (
 // - Error if it occurs, otherwise nil on success
 //
 func AwsConfigSetup(region string) (aws.Config, error) {
+    // Attempt to load credentials from default credential chain
+    awsConfig, exists := AttemptLoadDefaultCredChain(region, 30*time.Second)
+    if exists {
+        return awsConfig, nil
+    }
+
     // Get the AWS access and secret key environment variables
     awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
     awsSecretKey := os.Getenv("AWS_SECRET_KEY")
@@ -46,11 +77,8 @@ func AwsConfigSetup(region string) (aws.Config, error) {
     awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
 
     // Load default config and override with custom credentials and region
-    awsConfig, err := config.LoadDefaultConfig(
-        context.TODO(),
-        config.WithRegion(region),
-        config.WithCredentialsProvider(awsCreds),
-    )
+    awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region),
+                                               config.WithCredentialsProvider(awsCreds))
     if err != nil {
         return awsConfig, err
     }
@@ -60,13 +88,28 @@ func AwsConfigSetup(region string) (aws.Config, error) {
 
 
 // Struct for managing EC2 instance creation
-type Ec2Args struct {
-    AMI       string
-    Config    aws.Config
-    Count     int
-    Delay     time.Duration
-    Name      string
-    UserData  string
+type Ec2Manger struct {
+    AMI          string
+    Client       *ec2.Client
+    Config       aws.Config
+    Count        int
+    InstanceType string
+    Name         string
+    RunResult    *ec2.RunInstancesOutput
+    UserData     []byte
+}
+
+// TODO:  add doc
+func NewEc2Manager(ami string, config aws.Config, count int, instanceType string,
+                   name string, userData []byte) *Ec2Manger {
+    return &Ec2Manger{
+        AMI:          ami,
+        Config:       config,
+        Count:        count,
+        InstanceType: instanceType,
+        Name:         name,
+        UserData:     userData,
+    }
 }
 
 // Launches EC2 instances based on passed in count, pausing between each based on
@@ -74,47 +117,149 @@ type Ec2Args struct {
 //
 // TODO: finish doc
 //
-func (Ec2Args *Ec2Args) CreateEc2Instances(callTime time.Duration,
-                                           ec2Client *ec2.Client) ([]ec2types.Instance, error) {
+func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration,
+                                            ec2Client *ec2.Client) (error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // If no EC2 client exists, make one
     if ec2Client == nil {
-        ec2Client = ec2.NewFromConfig(Ec2Args.Config)
+        ec2Client = ec2.NewFromConfig(Ec2Man.Config)
     }
 
+    // Save reference to client for other methods
+    Ec2Man.Client = ec2Client
     // Base64 encode the user data script
-    encodedUserData := base64.StdEncoding.EncodeToString([]byte(Ec2Args.UserData))
+    encodedUserData := base64.StdEncoding.EncodeToString(Ec2Man.UserData)
 
     // Prepare the RunInstances input
     input := &ec2.RunInstancesInput{
-        ImageId:      aws.String(Ec2Args.AMI),
-        InstanceType: ec2types.InstanceTypeT2Micro,
-        MinCount:     aws.Int32(int32(Ec2Args.Count)),
-        MaxCount:     aws.Int32(int32(Ec2Args.Count)),
+        ImageId:      aws.String(Ec2Man.AMI),
+        InstanceType: ec2types.InstanceType(Ec2Man.InstanceType),
+        MinCount:     aws.Int32(int32(Ec2Man.Count)),
+        MaxCount:     aws.Int32(int32(Ec2Man.Count)),
         UserData:     aws.String(encodedUserData),
         // Tag instances on creation
         TagSpecifications: []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInstance,
                 Tags: []ec2types.Tag{
-                    {Key: aws.String("Service"), Value: aws.String(Ec2Args.Name)},
+                    {Key: aws.String("Service"), Value: aws.String(Ec2Man.Name)},
                 },
             },
         },
     }
 
     // Execute call to run the EC2 instance
-    output, err := ec2Client.RunInstances(ctx, input)
+    runOutput, err := ec2Client.RunInstances(ctx, input)
     if err != nil {
-        return nil, fmt.Errorf("RunInstances failed: %w", err)
+        return fmt.Errorf("RunInstances failed: %w", err)
     }
 
-    return output.Instances, nil
+    // Assign run API call to EC2 manager struct
+    Ec2Man.RunResult = runOutput
+    return nil
 }
 
+// TODO:  add doc
+func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
+                                               *ec2.TerminateInstancesOutput, error) {
+    var ids []string
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Iterate through instances from result output
+    for _, instance := range Ec2Man.RunResult.Instances {
+        // If the instance ID is present add to ids slice
+        if instance.InstanceId != nil {
+            ids = append(ids, *instance.InstanceId)
+        }
+    }
+
+    // build termination input with parsed id's
+    terminateInput := &ec2.TerminateInstancesInput{
+        InstanceIds: ids,
+    }
+
+    // call the API
+    termOutput, err := Ec2Man.Client.TerminateInstances(ctx, terminateInput)
+    if err != nil {
+        return nil, fmt.Errorf("failed to terminate instances: %w", err)
+    }
+
+    return termOutput, nil
+}
+
+
+type S3Manager struct {
+    BucketName string
+}
+
+func NewS3Manager(bucketName string) *S3Manager {
+    return &S3Manager{
+        BucketName: bucketName,
+    }
+}
+
+// TODO: add doc
+func BucketExists(cfg aws.Config, bucketName string, timeout time.Duration) (bool, error) {
+    client := s3.NewFromConfig(cfg)
+    ctx, cancel := context.WithTimeout(context.Background(), timeout)
+    defer cancel()
+
+    _, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
+        Bucket: aws.String(bucketName),
+    })
+    if err == nil {
+        // 200 OK → bucket exists and is accessible
+        return true, nil
+    }
+
+    // Unwrap the SDK error to see if it's a “not found” case
+    var apiErr smithy.APIError
+    if errors.As(err, &apiErr) {
+        code := apiErr.ErrorCode()
+        switch code {
+        case "NotFound", "NoSuchBucket":
+            // bucket genuinely does not exist
+            return false, nil
+        }
+    }
+
+    // any other error (403 Forbidden, network, etc)
+    return false, fmt.Errorf("checking bucket %q existence: %w", bucketName, err)
+}
+
+// TODO: add doc
+func CreateBucketIfNotExists(cfg aws.Config, bucketName string, timeout time.Duration) error {
+    client := s3.NewFromConfig(cfg)
+    ctx, cancel := context.WithTimeout(context.Background(), timeout)
+    defer cancel()
+
+    _, err := client.CreateBucket(ctx, &s3.CreateBucketInput{
+        Bucket: aws.String(bucketName),
+    })
+    if err == nil {
+        // created successfully
+        return nil
+    }
+
+    // If it's an API error, inspect the ErrorCode
+    var apiErr smithy.APIError
+    if errors.As(err, &apiErr) {
+        switch apiErr.ErrorCode() {
+        case "BucketAlreadyExists", "BucketAlreadyOwnedByYou":
+            // name is taken (by you or someone else) → treat as success
+            return nil
+        }
+    }
+
+    // any other error is real
+    return fmt.Errorf("creating bucket %q: %w", bucketName, err)
+}
 
 // TODO: add doc
 func GetS3Object(cfg aws.Config, bucket, key string, callTime time.Duration,
@@ -149,6 +294,60 @@ func GetS3Object(cfg aws.Config, bucket, key string, callTime time.Duration,
     return raw, nil
 }
 
+// TODO:  add doc
+func PutS3Object(cfg aws.Config, bucket string, keyName string, data []byte,
+                 callTime time.Duration, s3Client *s3.Client) (string, error) {
+    // If no S3 client exists, make one
+    if s3Client == nil {
+        s3Client = s3.NewFromConfig(cfg)
+    }
+
+    // Keep attemping key with number added until unused is found
+    for i := 1; ; i++ {
+        // Add number to end of parameter name
+        candidate := keyName + "-" + strconv.Itoa(i)
+        // Ensure AWS API calls do not hang for longer specified timeout
+        ctx, cancel := context.WithTimeout(context.Background(), callTime)
+
+        // Put the object in S3 storage based on key
+        _, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
+            Bucket:      aws.String(bucket),
+            Key:         aws.String(candidate),
+            Body:        bytes.NewReader(data),
+            IfNoneMatch: aws.String("*"),
+        })
+        // Cancel context per API call
+        cancel()
+
+        // If the candiate was successful
+        if err == nil {
+            return candidate, nil
+        }
+
+        // If the object already exists on S3 bucket
+        if apiErr, ok := err.(smithy.APIError); ok {
+            errCode := apiErr.ErrorCode()
+            // If the error code signals the bucket already exists
+            if errCode == "BucketAlreadyExists" || errCode == "BucketAlreadyOwnedByYou" {
+                continue
+            }
+        }
+
+        // Otherwise an undesired error occured
+        return "", fmt.Errorf("put %q: %w", candidate, err)
+    }
+}
+
+
+type SsmManager struct {
+    Parameter string
+}
+
+func NewSsmManager(parameter string) *SsmManager {
+    return &SsmManager{
+        Parameter: parameter,
+    }
+}
 
 // Retrieve value from AWS SSM Parameter Store.
 //
@@ -184,68 +383,6 @@ func GetSsmParameter(awsConfig aws.Config, name string, callTime time.Duration,
 
     return aws.ToString(out.Parameter.Value), nil
 }
-
-
-// TODO:  add doc
-func NewEc2Args(ami string, config aws.Config, count int,
-                delay time.Duration, name string,
-                userData string) *Ec2Args {
-    return &Ec2Args{
-        AMI:       ami,
-        Config:    config,
-        Count:     count,
-        Delay:     delay,
-        Name:      name,
-        UserData:  userData,
-    }
-}
-
-
-// TODO:  add doc
-func PutUniqueObjectBytes(cfg aws.Config, bucket, keyName string, data []byte,
-                          callTime time.Duration, s3Client *s3.Client) (string, error) {
-    // If no S3 client exists, make one
-    if s3Client == nil {
-        s3Client = s3.NewFromConfig(cfg)
-    }
-
-    // Keep attemping key with number added until unused is found
-    for i := 1; ; i++ {
-        // Add number to end of parameter name
-        candidate := keyName + "-" + strconv.Itoa(i)
-        // Ensure AWS API calls do not hang for longer specified timeout
-        ctx, cancel := context.WithTimeout(context.Background(), callTime)
-
-        // Put the object in S3 storage based on key
-        _, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
-            Bucket:      aws.String(bucket),
-            Key:         aws.String(candidate),
-            Body:        bytes.NewReader(data),
-            IfNoneMatch: aws.String("*"),
-        })
-        // Cancel context per API call
-        cancel()
-        var apiErr *smithy.APIError
-
-
-        // TODO:  research if this works or there is a better way to handle S3 errors
-
-
-        // If the candiate was successful
-        if err == nil {
-            return candidate, nil
-        // If the object already exists on S3 bucket
-        } else if errors.As(err, apiErr) {
-            if apiErr.ErrorCode() == "PreconditionFailed" {
-                continue
-            }
-        }
-
-        // Otherwise an undesired error occured
-        return "", fmt.Errorf("put %q: %w", candidate, err)
-    }
-}
-
 
 // Put value into AWS SSM Parameter Store.
 //
@@ -299,25 +436,3 @@ func PutSsmParameter(awsConfig aws.Config, paramName string,
         return candidate, nil
     }
 }
-
-
-// func TerminateEc2Instances() {
-//     var ids []string
-
-//     for _, inst := range output.Instances {
-//         if inst.InstanceId != nil {
-//             ids = append(ids, *inst.InstanceId)
-//         }
-//     }
-
-//     // build termination input
-//     terminateInput := &ec2.TerminateInstancesInput{
-//         InstanceIds: ids,
-//     }
-
-//     // call the API
-//     terminateOutput, err := ec2Client.TerminateInstances(ctx, terminateInput)
-//     if err != nil {
-//         return fmt.Errorf("failed to terminate instances: %w", err)
-//     }
-// }

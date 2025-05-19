@@ -54,33 +54,35 @@ func TestLoadConfig(t *testing.T) {
     yamlPath := "testdata.yml"
     testData := fmt.Sprintf(`
 local_config:
-  region: "us-east-1"
-  listener_port: 6969
-  number_instances: 3
-  load_dir: "%s"
+  bucket_name: "test-bucket"
   hash_file_path: "%s"
-  ruleset_path: "%s"
+  instance_type: "t2-micro"
+  listener_port: 6969
+  load_dir: "%s"
+  local_testing: true
+  log_path: "KloudKraken.log"
   max_merging_size: "50MB"
   max_size_range: 25.0
-  log_path: "KloudKraken.log"
-  local_testing: true
+  number_instances: 3
+  region: "us-east-1"
+  ruleset_path: "%s"
 
 client_config:
-  region: "us-west-1"
-  max_file_size: "100MB"
-  cracking_mode: "3"
-  hash_type: "1000"
   apply_optimization: true
-  workload: "4"
   char_set1: "charset1"
   char_set2: "charset2"
   char_set3: "charset3"
   char_set4: "charset4"
+  cracking_mode: "3"
   hash_mask: "?u?l?l?l?l?l?l?l?d"
-  max_transfers: 2
+  hash_type: "1000"
   log_mode: "local"
   log_path: "KloudKraken.log"
-`, testDir, testFiles[0], testFiles[1])
+  max_file_size: "100MB"
+  max_transfers: 2
+  region: "us-west-1"
+  workload: "4"
+`, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
     err = os.WriteFile(yamlPath, []byte(testData), 0644)
     // Ensure the error is nil meaning successful operation
@@ -90,34 +92,36 @@ client_config:
     config := conf.LoadConfig(yamlPath)
 
     // Validate local config fields to original data
-    assert.Equal("us-east-1", config.LocalConfig.Region)
-    assert.Equal(6969, config.LocalConfig.ListenerPort)
-    assert.Equal(int32(3), config.LocalConfig.NumberInstances)
-    assert.Equal(testDir, config.LocalConfig.LoadDir)
+    assert.Equal("test-bucket", config.LocalConfig.BucketName)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
-    assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
+    assert.Equal("t2-micro", config.LocalConfig.InstanceType)
+    assert.Equal(6969, config.LocalConfig.ListenerPort)
+    assert.Equal(testDir, config.LocalConfig.LoadDir)
+    assert.True(config.LocalConfig.LocalTesting)
+    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
-    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
-    assert.True(config.LocalConfig.LocalTesting)
+    assert.Equal(3, config.LocalConfig.NumberInstances)
+    assert.Equal("us-east-1", config.LocalConfig.Region)
+    assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
 
     // Validate client config fields to original data
-    assert.Equal("us-west-1", config.ClientConfig.Region)
-    assert.Equal("100MB", config.ClientConfig.MaxFileSize)
-    assert.Equal(int64(100 * globals.MB), config.ClientConfig.MaxFileSizeInt64)
-    assert.Equal("3", config.ClientConfig.CrackingMode)
-    assert.Equal("1000", config.ClientConfig.HashType)
     assert.True(config.ClientConfig.ApplyOptimization)
-    assert.Equal("4", config.ClientConfig.Workload)
     assert.Equal("charset1", config.ClientConfig.CharSet1)
     assert.Equal("charset2", config.ClientConfig.CharSet2)
     assert.Equal("charset3", config.ClientConfig.CharSet3)
     assert.Equal("charset4", config.ClientConfig.CharSet4)
+    assert.Equal("3", config.ClientConfig.CrackingMode)
     assert.Equal("?u?l?l?l?l?l?l?l?d", config.ClientConfig.HashMask)
-    assert.Equal(int32(2), config.ClientConfig.MaxTransfers)
+    assert.Equal("1000", config.ClientConfig.HashType)
     assert.Equal("local", config.ClientConfig.LogMode)
     assert.Equal("KloudKraken.log", config.ClientConfig.LogPath)
+    assert.Equal("100MB", config.ClientConfig.MaxFileSize)
+    assert.Equal(int64(100 * globals.MB), config.ClientConfig.MaxFileSizeInt64)
+    assert.Equal(int32(2), config.ClientConfig.MaxTransfers)
+    assert.Equal("us-west-1", config.ClientConfig.Region)
+    assert.Equal("4", config.ClientConfig.Workload)
 
     // Append the yaml data file to test file for deletion
     testFiles = append(testFiles, yamlPath)

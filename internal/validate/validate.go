@@ -1,7 +1,9 @@
 package validate
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -13,6 +15,44 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 )
+
+// Ensures the S3 bucket name is of proper format.
+//
+// @Parameters
+// -name:  The name of the S3 bucket to be validated
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateBucketName(name string) error {
+    if name == "" {
+        return nil
+    }
+
+    length := len(name)
+    // Ensure the bucket is of proper length
+    if length < 3 || length > 63 {
+        return fmt.Errorf("bucket name must be 3 to 63 characters; got %d", length)
+    }
+
+    // Allows lowercase letters, numbers, dots & hyphens and must start and
+    // end with letter or number
+    validName := regexp.MustCompile(`^[a-z0-9][a-z0-9\.-]{1,61}[a-z0-9]$`)
+    if !validName.MatchString(name) {
+        return errors.New(
+            "bucket name must start and end with a lowercase letter or number, " +
+            "and contain only lowercase letters, numbers, dots (.) or hyphens (-)",
+        )
+    }
+
+    // Ensure there are no IP addresses in the name
+    if ip := net.ParseIP(name); ip != nil {
+        return errors.New("bucket name must not be formatted as an IP address")
+    }
+
+    return nil
+}
+
 
 // Ensures that if there is a char set that is present and the proper cracking
 // mode that supports a hash mask with custom charsets is present.
@@ -233,6 +273,31 @@ func ValidateHashType(hashType string) bool {
 
     // Check to see if arg hash type is in the allowed hash types
     return data.StringSliceHasItem(hashTypes, hashType)
+}
+
+
+func ValidateInstanceType(instanceType string) bool {
+    var supportedInstances = []string{
+        // === GPU-heavy Nitro instances ===
+        "p3.2xlarge", "p3.8xlarge", "p3.16xlarge", "p3dn.24xlarge",
+        "p4d.24xlarge", "p4de.24xlarge", "g4dn.xlarge", "g4dn.2xlarge",
+        "g4dn.4xlarge", "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
+        "g5.2xlarge", "g5.4xlarge", "g5.8xlarge", "g5.12xlarge",
+        "g5.16xlarge", "g5.24xlarge", "g5.48xlarge", "g5g.xlarge",
+        "g5g.4xlarge", "g5g.8xlarge", "g5g.16xlarge", "g6g.xlarge",
+        "g6g.4xlarge", "g6g.8xlarge", "g6g.16xlarge",
+
+        // === Cost-effective GPU instances ===
+        "g4ad.xlarge", "g4ad.2xlarge", "g4ad.4xlarge", "g5g.xlarge",
+        "g5g.2xlarge", "g5g.4xlarge", "g4dn.xlarge",
+
+        // === Cost-effective CPU instances ===
+        "t4g.2xlarge", "t4g.4xlarge", "c7g.large", "c7g.xlarge",
+        "c7g.2xlarge", "c7g.4xlarge", "c6i.2xlarge", "c6i.4xlarge",
+        "c6a.4xlarge", "c6a.8xlarge",
+    }
+
+    return data.StringSliceHasItem(supportedInstances, instanceType)
 }
 
 

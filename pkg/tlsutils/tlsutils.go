@@ -23,11 +23,11 @@ import (
 )
 
 // HTTP shared client (reuses connections) with global timeout
-var client = &http.Client{Timeout: 5 * time.Second}
+var client = &http.Client{Timeout: 5*time.Second}
 // Pre-compile IPv4/IPv6 regex once
 var reIpAddr = regexp.MustCompile(
     `\b(?:\d{1,3}\.){3}\d{1,3}\b|` +  // IPv4
-    `\b(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{1,4}\b`, // IPv6 (simple form)
+    `\b(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{1,4}\b`,  // IPv6 (simple form)
 )
 
 // Reads the passed in PEM encoded certificate file into memory
@@ -41,7 +41,8 @@ var reIpAddr = regexp.MustCompile(
 // - The x509 certificate pool with loaded cert added to it
 // - Error if it occurs, otherwise nil on success
 //
-func CaCertPool(caCertPemBlocks [][]byte, caCertPemFiles ...string) (*x509.CertPool, error) {
+func CaCertPool(caCertPemBlocks [][]byte, caCertPemFiles ...string) (
+                *x509.CertPool, error) {
     // If there are PEM cert file passed in, iterate through them
     for _, pemFile := range caCertPemFiles {
         // Read the PEM encoded TLS certificate file
@@ -111,7 +112,8 @@ func CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte, caCertPemBlocks [][]byt
 // @Returns
 // - function that returns the TLS config and errors if any occur
 //
-func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(*tls.ClientHelloInfo) (*tls.Config, error) {
+func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(
+                        *tls.ClientHelloInfo) (*tls.Config, error) {
     return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
         // Generate new TLS configuration instance
         cfg := NewServerTlsConfig(cert)
@@ -562,8 +564,8 @@ func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
 // @Returns
 // - function that returns errors if any occur
 //
-func VerifyClientCert(serverPool *x509.CertPool, hello *tls.ClientHelloInfo) func(rawCerts [][]byte,
-    verifiedChains [][]*x509.Certificate) error {
+func VerifyClientCert(serverPool *x509.CertPool, hello *tls.ClientHelloInfo) func(
+                      rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
     return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
         // Verify x509 certificate options
         opts := x509.VerifyOptions{
