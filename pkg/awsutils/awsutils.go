@@ -24,11 +24,11 @@ import (
 
 // TODO: add doc
 func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
-                                 aws.Config, bool) {
+                                 aws.Config, string, string, bool) {
     // Load the local credential chain (env, ~/.aws, etc.)
     config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
     if err != nil {
-        return config, false
+        return config, "", "", false
     }
 
     // Retrieve credentials with a deadline
@@ -36,12 +36,12 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
     defer cancel()
 
     // Retreive the credentials from the credentials provider
-    _, err = config.Credentials.Retrieve(ctx)
+    creds, err := config.Credentials.Retrieve(ctx)
     if err != nil {
-        return config, false
+        return config, "", "", false
     }
 
-    return config, true
+    return config, creds.AccessKeyID, creds.SecretAccessKey, true
 }
 
 
@@ -52,36 +52,38 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 //
 // @Returns:
 // - The initialized AWS credentials config
+// - The AWS access key id
+// - The AWS secret access key
 // - Error if it occurs, otherwise nil on success
 //
-func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, error) {
+func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, string, string, error) {
     // Attempt to load credentials from default credential chain
-    awsConfig, exists := AttemptLoadDefaultCredChain(region, callTime)
+    awsConfig, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(region, callTime)
     if exists {
-        return awsConfig, nil
+        return awsConfig, accessKey, secretKey, nil
     }
 
-    // Get the AWS access and secret key environment variables
-    awsAccessKey := os.Getenv("AWS_ACCESS_KEY")
-    awsSecretKey := os.Getenv("AWS_SECRET_KEY")
+    // Get AWS access and secret key environment variables
+    accessKey = os.Getenv("AWS_ACCESS_KEY")
+    secretKey = os.Getenv("AWS_SECRET_KEY")
     // If AWS access and secret key are present
-    if awsAccessKey == "" || awsSecretKey == "" {
-        return aws.Config{}, fmt.Errorf("missing either the access (%s) or " +
-                                        "secret key (%s) for AWS",
-                                        awsAccessKey, awsSecretKey)
+    if accessKey == "" || secretKey == "" {
+        return aws.Config{}, "", "", fmt.Errorf("missing either the access (%s) or " +
+                                                "secret key (%s) for AWS",
+                                                accessKey, secretKey)
     }
 
     // Set the AWS credentials provider
-    awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
+    awsCreds := credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")
 
     // Load default config and override with custom credentials and region
     awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region),
                                                config.WithCredentialsProvider(awsCreds))
     if err != nil {
-        return awsConfig, err
+        return awsConfig, "", "", err
     }
 
-    return awsConfig, nil
+    return awsConfig, accessKey, secretKey, nil
 }
 
 
@@ -189,29 +191,28 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
 
 
 type S3Manager struct {
-    BucketName string
     Client     *s3.Client
 }
 
-func NewS3Manager(config aws.Config, bucketName string) *S3Manager {
+func NewS3Manager(config aws.Config) *S3Manager {
     // Set up a new S3 client
     s3Client := s3.NewFromConfig(config)
 
     return &S3Manager{
-        BucketName: bucketName,
         Client:     s3Client,
     }
 }
 
 // TODO: add doc
-func (S3Man *S3Manager) BucketExists(callTime time.Duration) (bool, error) {
+func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) (
+                                     bool, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // Check if the bucket exists and get information
     _, err := S3Man.Client.HeadBucket(ctx, &s3.HeadBucketInput{
-        Bucket: aws.String(S3Man.BucketName),
+        Bucket: aws.String(bucketName),
     })
     // If there was no error, bucket exists and is accessible
     if err == nil {
@@ -235,14 +236,14 @@ func (S3Man *S3Manager) BucketExists(callTime time.Duration) (bool, error) {
 }
 
 // TODO: add doc
-func (S3Man *S3Manager) CreateBucket(callTime time.Duration) error {
+func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) error {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // Create the bucket based on the bucket name in S3 manager
     _, err := S3Man.Client.CreateBucket(ctx, &s3.CreateBucketInput{
-        Bucket: aws.String(S3Man.BucketName),
+        Bucket: aws.String(bucketName),
     })
     // If the bucket was successfully created
     if err == nil {
@@ -266,7 +267,8 @@ func (S3Man *S3Manager) CreateBucket(callTime time.Duration) error {
 }
 
 // TODO: add doc
-func (S3Man *S3Manager) GetS3Object(key string, callTime time.Duration) (
+func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
+                                    callTime time.Duration) (
                                     []byte, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -274,7 +276,7 @@ func (S3Man *S3Manager) GetS3Object(key string, callTime time.Duration) (
 
     // Retrieve the object from S3 storage
     resp, err := S3Man.Client.GetObject(ctx, &s3.GetObjectInput{
-        Bucket: aws.String(S3Man.BucketName),
+        Bucket: aws.String(bucketName),
         Key:    aws.String(key),
     })
     if err != nil {
@@ -294,20 +296,20 @@ func (S3Man *S3Manager) GetS3Object(key string, callTime time.Duration) (
 }
 
 // TODO:  add doc
-func (S3Man *S3Manager) PutS3Object(keyName string, data []byte,
+func (S3Man *S3Manager) PutS3Object(bucketName string, keyName string, data []byte,
                                     callTime time.Duration) (string, error) {
     var apiErr smithy.APIError
 
     // Keep attemping key with number added until unused is found
     for i := 1; ; i++ {
-        // Add number to end of parameter name
+        // Add number to end of key name
         candidate := keyName + "-" + strconv.Itoa(i)
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
         // Put the object in S3 storage based on key
         _, err := S3Man.Client.PutObject(ctx, &s3.PutObjectInput{
-            Bucket:      aws.String(S3Man.BucketName),
+            Bucket:      aws.String(bucketName),
             Key:         aws.String(candidate),
             Body:        bytes.NewReader(data),
             IfNoneMatch: aws.String("*"),
@@ -333,16 +335,14 @@ func (S3Man *S3Manager) PutS3Object(keyName string, data []byte,
 
 type SsmManager struct {
     Client    *ssm.Client
-    Parameter string
 }
 
-func NewSsmManager(config aws.Config, parameter string) *SsmManager {
+func NewSsmManager(config aws.Config) *SsmManager {
     // Set up a new SSM client
     ssmClient := ssm.NewFromConfig(config)
 
     return &SsmManager{
         Client:    ssmClient,
-        Parameter: parameter,
     }
 }
 
@@ -356,22 +356,22 @@ func NewSsmManager(config aws.Config, parameter string) *SsmManager {
 // - The retrieved parameter from param store
 // - Error if it occurs, otherwise nil on success
 //
-func (SsmMan *SsmManager) GetSsmParameter(name string, callTime time.Duration) (
+func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Duration) (
                                           string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // Get parameter from AWS SSM Parameter Store
-    out, err := SsmMan.Client.GetParameter(ctx, &ssm.GetParameterInput{
-        Name:           aws.String(name),
+    output, err := SsmMan.Client.GetParameter(ctx, &ssm.GetParameterInput{
+        Name:           aws.String(parameter),
         WithDecryption: aws.Bool(true),
     })
     if err != nil {
         return "", err
     }
 
-    return aws.ToString(out.Parameter.Value), nil
+    return aws.ToString(output.Parameter.Value), nil
 }
 
 // Put value into AWS SSM Parameter Store.
@@ -385,7 +385,7 @@ func (SsmMan *SsmManager) GetSsmParameter(name string, callTime time.Duration) (
 // - The path where the parameter is stored in param store
 // - Error if it occurs, otherwise nil on success
 //
-func (SsmMan *SsmManager) PutSsmParameter(paramName string, data string,
+func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
                                           callTime time.Duration) (
                                           string, error) {
     var existsErr *types.ParameterAlreadyExists
@@ -393,7 +393,7 @@ func (SsmMan *SsmManager) PutSsmParameter(paramName string, data string,
     // Keep attemping parameters with number added until unused is found
     for i := 1;; i++ {
         // Add number to end of parameter name
-        candidate := paramName + "-" + strconv.Itoa(i)
+        candidate := parameter + "-" + strconv.Itoa(i)
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 

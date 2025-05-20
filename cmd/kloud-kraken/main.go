@@ -296,20 +296,58 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 
 // TODO:  document when finished
 //
-func ec2UserDataGen(publicIps []string, ssmParam string) (string, error) {
-    ipAddrsCsv, err := data.SliceToCsv(publicIps)
+func ec2UserDataGen(appConf *conf.AppConfig, accessKey string, secretKey string,
+                    keyName string, ipAddrs []string, ssmParam string) (
+                    string, error) {
+    var hasRuleset bool
+    // Convert the slice of IP addresses to CSV string
+    ipAddrsCsv, err := data.SliceToCsv(ipAddrs)
     if err != nil {
         return "", err
     }
 
+    // If a ruleset path was specified
+    if appConf.LocalConfig.RulesetPath != "" {
+        hasRuleset = true
+    } else {
+        hasRuleset = false
+    }
+
     data := fmt.Sprintf(`#!/bin/bash
-echo test
-echo foo
-`)
+export AWS_ACCESS_KEY_ID=%s
+export AWS_SECRET_ACCESS_KEY=%s
 
-
-    // TODO:  write user data script
-
+CWD=$(pwd)
+aws s3 cp s3://%s/%s $CWD/client --region %s --no-progress
+chmod +x $CWD/client
+$CWD/client -applyOptimization=true \
+            -awsAccessKey=%s \
+            -awsRegion=%s \
+            -awsSecretKey=%s \
+            -certSsmParam=%s \
+            -charSet1=%s \
+            -charSet2=%s \
+            -charSet3=%s \
+            -charSet4=%s \
+            -crackingMode=%s \
+            -hashMask=%s \
+            -hashType=%s \
+            -hasRuleset=%t \
+            -ipAddrs=%s \
+            -isTesting=%t \
+            -logMode=%s \
+            -logPath=%s \
+            -maxFileSizeInt64=%d \
+            -maxTransfers=%d \
+            -port=%d \
+            -workload=%s
+`, accessKey, secretKey, appConf.LocalConfig.BucketName, keyName, appConf.ClientConfig.Region,
+   accessKey, appConf.ClientConfig.Region, secretKey, ssmParam, appConf.ClientConfig.CharSet1,
+   appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
+   appConf.ClientConfig.CrackingMode, appConf.ClientConfig.HashMask, appConf.ClientConfig.HashType,
+   hasRuleset, ipAddrsCsv, false, appConf.ClientConfig.LogMode, appConf.ClientConfig.LogPath,
+   appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
+   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
     return data, nil
 }
@@ -408,21 +446,54 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        // Set up the AWS credentials based on environment variables
-        awsConfig, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region, 1*time.Minute)
+        // Set up the AWS credentials based on local chain or environment variables
+        awsConfig, accessKey, secretKey, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
+                                                                        1*time.Minute)
         if err != nil {
             log.Fatalf("Error initializing AWS config:  %v", err)
         }
 
+        // Establish client to SSM
+        ssmMan := awsutils.NewSsmManager(awsConfig)
         // Push the servers certificate PEM into SSM parameter store
-        param, err := awsutils.PutSsmParameter(awsConfig, "/kloud-kraken/tls/cert",
-                                               string(TlsMan.CertPemBlock), 1*time.Minute, nil)
+        param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert", string(TlsMan.CertPemBlock),
+                                             1*time.Minute)
         if err != nil {
             log.Fatalf("Error putting TLS PEM certificate in SSM Parameter Store:  %v", err)
         }
 
+        // Establish client to S3
+        s3Man := awsutils.NewS3Manager(awsConfig)
+        // Check to see if S3 bucket exists
+        exists, err := s3Man.BucketExists(appConfig.LocalConfig.BucketName, 1*time.Minute)
+        if err != nil {
+            log.Fatalf("Error checking S3 bucket existence:  %v", err)
+        }
+
+        // If S3 bucket does not exist create one
+        if !exists {
+            err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1*time.Minute)
+            if err != nil {
+                log.Fatalf("Error creating S3 bucket:  %v", err)
+            }
+        }
+
+        // Read the client binary into memory
+        binData, err := os.ReadFile("./client")
+        if err != nil {
+            log.Fatalf("Error reading client binary from disk:  %v", err)
+        }
+
+        // Upload the client binary to S3 Bucket
+        keyName, err := s3Man.PutS3Object(appConfig.LocalConfig.BucketName, "client",
+                                          binData, 1*time.Minute)
+        if err != nil {
+            log.Fatalf("Error putting object in S3 bucket:  %v", err)
+        }
+
         // Generate user data script to set up client program in EC2
-        userData, err := ec2UserDataGen(publicIps, param)
+        userData, err := ec2UserDataGen(appConfig, accessKey, secretKey,
+                                        keyName, publicIps, param)
         if err != nil {
             log.Fatalf("Error generating user data for EC2:  %v", err)
         }
@@ -436,8 +507,8 @@ func main() {
                                          appConfig.LocalConfig.NumberInstances,
                                          appConfig.LocalConfig.InstanceType,
                                          "Kloud-Kraken", []byte(userData))
-        // Create number of EC2 instances based on passed in YAML data in constructor function
-        err = ec2Man.CreateEc2Instances(20*time.Minute, nil)
+        // Create number of EC2 instances based on passed in data
+        err = ec2Man.CreateEc2Instances(20*time.Minute)
         if err != nil {
             log.Fatalf("Error creating EC2 instances:  %v", err)
         }

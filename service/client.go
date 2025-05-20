@@ -690,9 +690,10 @@ func main() {
             log.Fatalf("Error loading client AWS config:  %v", err)
         }
 
-        // Retrieve the server TLS cert from AWS param store
-        certPemString, err := awsutils.GetSsmParameter(awsConfig, certSsmParam,
-                                                       1*time.Minute, nil)
+        // Establish client to SSM
+        ssmMan := awsutils.NewSsmManager(awsConfig)
+        // Retrieve the server TLS cert from SSM param store
+        certPemString, err := ssmMan.GetSsmParameter(certSsmParam, 1*time.Minute)
         if err != nil {
             log.Fatalf("Error getting server TLS cert via SSM Parameter Store:  %v", err)
         }

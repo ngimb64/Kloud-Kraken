@@ -8,3 +8,6 @@ go.sum
 # Local logs
 cmd/kloud-kraken/KloudKraken.log
 cmd/kloud-kraken/tls-cert.pem
+
+# Build folder
+bin
