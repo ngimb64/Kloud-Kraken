@@ -2,13 +2,17 @@ package kloudlogs
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -25,11 +29,10 @@ type Logger interface {
     Fatal(msg string, fields ...zap.Field)
 }
 
-
 // LoggerManager manages multiple loggers (local, CloudWatch)
 type LoggerManager struct {
-    localLogger  Logger
-    cloudLogger Logger
+    LocalLogger Logger
+    CloudLogger Logger
 }
 
 // NewLoggerManager initializes local and CloudWatch loggers based on the flag.
@@ -38,6 +41,8 @@ type LoggerManager struct {
 // - logDestination:  Where the logs will be stored (local, cloudwatch, both)
 // - localLogFile:  Path where the logs will be stored locally on file
 // - awsConfig:  The initialized AWS configuration instance
+// - group:  The CloudWatch logging group
+// - stream:  The CloudWatch logging stream
 // - logToMemory:  Boolean toggler whether to log to memory or not
 //
 // @Returns
@@ -45,7 +50,8 @@ type LoggerManager struct {
 // - Error if it occurs, otherwise nil on success
 //
 func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
-                      logToMemory bool) (*LoggerManager, error) {
+                      group string, stream string, logToMemory bool) (
+                      *LoggerManager, error) {
     var localLogger Logger
     var cloudLogger Logger
     var err error
@@ -60,12 +66,15 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 
     // Initialize CloudWatch logger if needed
     if logDestination == "cloudwatch" || logDestination == "both" {
-        cloudLogger = NewCloudWatchLogger(awsConfig)
+        cloudLogger, err = NewCloudWatchLogger(awsConfig, group, stream)
+        if err != nil {
+            return nil, err
+        }
     }
 
     return &LoggerManager{
-        localLogger:  localLogger,
-        cloudLogger: cloudLogger,
+        LocalLogger:  localLogger,
+        CloudLogger: cloudLogger,
     }, nil
 }
 
@@ -76,88 +85,88 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 // - The string JSON log from the zap logging instance
 //
 func (logMan *LoggerManager) GetLog() string {
-    return logMan.localLogger.GetMemoryLog()
+    return logMan.LocalLogger.GetMemoryLog()
 }
 
 // Logs info message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogDebug(msg string, fields ...zap.Field) {
-    if logMan.localLogger != nil {
-        logMan.localLogger.Debug(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.Debug(msg, fields...)
     }
 
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.Debug(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.Debug(msg, fields...)
     }
 }
 
 // Logs info message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogInfo(msg string, fields ...zap.Field) {
-    if logMan.localLogger != nil {
-        logMan.localLogger.Info(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.Info(msg, fields...)
     }
 
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.Info(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.Info(msg, fields...)
     }
 }
 
 // Logs warning message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogWarn(msg string, fields ...zap.Field) {
-    if logMan.localLogger != nil {
-        logMan.localLogger.Warn(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.Warn(msg, fields...)
     }
 
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.Warn(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.Warn(msg, fields...)
     }
 }
 
 // Logs error message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogError(msg string, fields ...zap.Field) {
-    if logMan.localLogger != nil {
-        logMan.localLogger.Error(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.Error(msg, fields...)
     }
 
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.Error(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.Error(msg, fields...)
     }
 }
 
 // Logs developer panic message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogDPanic(msg string, fields ...zap.Field) {
-    if logMan.localLogger != nil {
-        logMan.localLogger.DPanic(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.DPanic(msg, fields...)
     }
 
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.DPanic(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.DPanic(msg, fields...)
     }
 }
 
 // Logs panic message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogPanic(msg string, fields ...zap.Field) {
-    if logMan.localLogger != nil {
-        logMan.localLogger.Panic(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.Panic(msg, fields...)
     }
 
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.Panic(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.Panic(msg, fields...)
     }
 }
 
 // Logs fatal message using both local and CloudWatch loggers
 func (logMan *LoggerManager) LogFatal(msg string, fields ...zap.Field) {
-    if logMan.cloudLogger != nil {
-        logMan.cloudLogger.Fatal(msg, fields...)
+    if logMan.CloudLogger != nil {
+        logMan.CloudLogger.Fatal(msg, fields...)
 
         // If only CloudWatch logging is active
-        if logMan.localLogger == nil {
+        if logMan.LocalLogger == nil {
             os.Exit(1)
         }
     }
 
-    if logMan.localLogger != nil {
-        logMan.localLogger.Fatal(msg, fields...)
+    if logMan.LocalLogger != nil {
+        logMan.LocalLogger.Fatal(msg, fields...)
     }
 }
 
@@ -165,8 +174,8 @@ func (logMan *LoggerManager) LogFatal(msg string, fields ...zap.Field) {
 // ZapLogger implements Logger interface using file
 // and optional memory logging
 type ZapLogger struct {
-    logger       *zap.Logger
-    memoryBuffer *bytes.Buffer
+    Logger       *zap.Logger
+    MemoryBuffer *bytes.Buffer
 }
 
 // NewZapLogger creates a zap logger instance with either file or memory logging.
@@ -200,8 +209,8 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
 
         // Return the logger along with the memory buffer
         return &ZapLogger{
-            logger:       logger,
-            memoryBuffer: memoryBuffer,
+            Logger:       logger,
+            MemoryBuffer: memoryBuffer,
         }, nil
     // Othwise logging to file
     } else {
@@ -217,8 +226,8 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
         }
 
         return &ZapLogger{
-            logger:       logger,
-            memoryBuffer: nil,
+            Logger:       logger,
+            MemoryBuffer: nil,
         }, nil
     }
 }
@@ -230,112 +239,201 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
 // - The string JSON log from the zap logging instance
 //
 func (zapLog *ZapLogger) GetMemoryLog() string {
-    if zapLog.memoryBuffer != nil {
-        return zapLog.memoryBuffer.String()
+    if zapLog.MemoryBuffer != nil {
+        return zapLog.MemoryBuffer.String()
     }
     return ""
 }
 
 // Logs a debug message to zap logger
 func (zapLog *ZapLogger) Debug(msg string, fields ...zap.Field) {
-    zapLog.logger.Debug(msg, fields...)
+    zapLog.Logger.Debug(msg, fields...)
 }
 
 // Logs a info message to zap logger
 func (zapLog *ZapLogger) Info(msg string, fields ...zap.Field) {
-    zapLog.logger.Info(msg, fields...)
+    zapLog.Logger.Info(msg, fields...)
 }
 
 // Logs a warning message to zap logger
 func (zapLog *ZapLogger) Warn(msg string, fields ...zap.Field) {
-    zapLog.logger.Warn(msg, fields...)
+    zapLog.Logger.Warn(msg, fields...)
 }
 
 // Logs a error message to zap logger
 func (zapLog *ZapLogger) Error(msg string, fields ...zap.Field) {
-    zapLog.logger.Error(msg, fields...)
+    zapLog.Logger.Error(msg, fields...)
 }
 
 // Logs a developer panic message to zap logger
 func (zapLog *ZapLogger) DPanic(msg string, fields ...zap.Field) {
-    zapLog.logger.DPanic(msg, fields...)
+    zapLog.Logger.DPanic(msg, fields...)
 }
 
 // Logs a panic message to zap logger
 func (zapLog *ZapLogger) Panic(msg string, fields ...zap.Field) {
-    zapLog.logger.Panic(msg, fields...)
+    zapLog.Logger.Panic(msg, fields...)
 }
 
 // Logs a fatal message to zap logger
 func (zapLog *ZapLogger) Fatal(msg string, fields ...zap.Field) {
-    zapLog.logger.Fatal(msg, fields...)
+    zapLog.Logger.Fatal(msg, fields...)
 }
 
 
 // CloudWatchLogger implements Logger interface for CloudWatch
 type CloudWatchLogger struct {
-    client *cloudwatchlogs.Client
+    Client       *cloudwatchlogs.Client
+    CwMutex      sync.Mutex
+    LogGroup     string
+    LogStream    string
+    NextSequence *string
 }
 
 // Creates and returns CloudWatch logger instance.
 //
 // @Parameters
 // -awsConfig:  The AWS configuration config struct
+// -group:  The CloudWatch logging group
+// -stream:  The CloudWatch logging stream
 //
 // @Returns
 // - The initializes CloudWatch logger config instance
+// - Error if it occurs, otherwise nil on success
 //
-func NewCloudWatchLogger(awsConfig aws.Config) Logger {
+func NewCloudWatchLogger(awsConfig aws.Config, group string, stream string) (
+                         Logger, error) {
+    // Establish CloudWatch client and set to run in background
     client := cloudwatchlogs.NewFromConfig(awsConfig)
-    // Create and return CloudWatch logger
-    return &CloudWatchLogger{client: client}
+    ctx := context.Background()
+
+    // Create log group & stream
+    client.CreateLogGroup(ctx, &cloudwatchlogs.CreateLogGroupInput{
+        LogGroupName: aws.String(group),
+    })
+    client.CreateLogStream(ctx, &cloudwatchlogs.CreateLogStreamInput{
+        LogGroupName:  aws.String(group),
+        LogStreamName: aws.String(stream),
+    })
+
+    // Describe to grab initial token (nil if fresh)
+    res, err := client.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
+        LogGroupName:        aws.String(group),
+        LogStreamNamePrefix: aws.String(stream),
+    })
+    if err != nil {
+        return nil, fmt.Errorf("calling DescribeLogStreams: %w", err)
+    }
+
+    var token *string
+    // If there are log streams retrieved
+    if len(res.LogStreams) > 0 {
+        // Set the upload sequence token
+        token = res.LogStreams[0].UploadSequenceToken
+    }
+
+    return &CloudWatchLogger{
+        Client:       client,
+        LogGroup:     group,
+        LogStream:    stream,
+        NextSequence: token,
+    }, nil
+}
+
+// Method that packages message & fields, sends to CW, and updates token.
+//
+// @Parameters
+// -level:  The level that the log event will be set to
+// -msg:  The message of log event
+// -fields:  Any additional zap field to be added to log entry
+//
+func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...zap.Field) {
+    // Build log entry
+    entry := map[string]interface{}{
+        "timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+        "level":     level,
+        "message":   msg,
+    }
+
+    // Iterate through the the slice of fields
+    for _, field := range fields {
+        // Add fields in log entry map
+        entry[field.Key] = field.Interface
+    }
+
+    // Format the data into JSON for transporting to CloudWatch
+    payload, err := json.Marshal(entry)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "marshal log entry: %v\n", err)
+        return
+    }
+
+    // Set up input log event message
+    event := types.InputLogEvent{
+        Message:   aws.String(string(payload)),
+        Timestamp: aws.Int64(time.Now().UnixNano() / int64(time.Millisecond)),
+    }
+
+    // Set mutex for logging operation
+    cloudWatchLog.CwMutex.Lock()
+    defer cloudWatchLog.CwMutex.Unlock()
+
+    inputEvent := &cloudwatchlogs.PutLogEventsInput{
+        LogGroupName:  aws.String(cloudWatchLog.LogGroup),
+        LogStreamName: aws.String(cloudWatchLog.LogStream),
+        LogEvents:     []types.InputLogEvent{event},
+        SequenceToken: cloudWatchLog.NextSequence,
+    }
+
+    // Upload log entry via the log stream
+    resp, err := cloudWatchLog.Client.PutLogEvents(context.Background(), inputEvent)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "PutLogEvents: %v\n", err)
+        return
+    }
+
+    // Set the next sequence token fron the response
+    cloudWatchLog.NextSequence = resp.NextSequenceToken
 }
 
 // Current dummy handler to follow interface contract (zap only)
-func (cwLogger *CloudWatchLogger) GetMemoryLog() string {
+func (cloudWatchLog *CloudWatchLogger) GetMemoryLog() string {
     return ""
 }
 
 // Logs a debug message to CloudWatch
-func (cwLogger *CloudWatchLogger) Debug(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch DEBUG:", msg)
+func (cloudWatchLog *CloudWatchLogger) Debug(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("DEBUG", msg, fields...)
 }
 
 // Logs a info message to CloudWatch
-func (cwLogger *CloudWatchLogger) Info(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch INFO:", msg)
+func (cloudWatchLog *CloudWatchLogger) Info(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("INFO", msg, fields...)
 }
 
 // Logs a warn message to CloudWatch
-func (cwLogger *CloudWatchLogger) Warn(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch WARN:", msg)
+func (cloudWatchLog *CloudWatchLogger) Warn(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("WARN", msg, fields...)
 }
 
 // Logs a error message to CloudWatch
-func (cwLogger *CloudWatchLogger) Error(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
+func (cloudWatchLog *CloudWatchLogger) Error(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("ERROR", msg, fields...)
 }
 
 // Logs a developer panic message to CloudWatch
-func (cwLogger *CloudWatchLogger) DPanic(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
+func (cloudWatchLog *CloudWatchLogger) DPanic(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("DPANIC", msg, fields...)
 }
 
 // Logs a panic message to CloudWatch
-func (cwLogger *CloudWatchLogger) Panic(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
+func (cloudWatchLog *CloudWatchLogger) Panic(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("PANIC", msg, fields...)
 }
 
 // Logs a fatal message to CloudWatch
-func (cwLogger *CloudWatchLogger) Fatal(msg string, fields ...zap.Field) {
-    // TODO:  implement CloudWatch code
-    fmt.Println("CloudWatch ERROR:", msg)
+func (cloudWatchLog *CloudWatchLogger) Fatal(msg string, fields ...zap.Field) {
+    cloudWatchLog.log("FATAL", msg, fields...)
 }
 
 
@@ -348,8 +446,8 @@ func (cwLogger *CloudWatchLogger) Fatal(msg string, fields ...zap.Field) {
 // - The map with unmarshaled JSON data
 // - Error if it occurs, otherwise nil on success
 //
-func LogToMap(jsonStr string) (map[string]interface{}, error) {
-    var logMap map[string]interface{}
+func LogToMap(jsonStr string) (map[string]any, error) {
+    var logMap map[string]any
 
     // Store the json string data as key-values in log map
     err := json.Unmarshal([]byte(jsonStr), &logMap)

@@ -119,9 +119,9 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     waitGroup.Add(1)
 
     go func() {
-        // Close transfer connection and decrement waitgroup counter on local exit
-        defer transferConn.Close()
+        // Decrement waitgroup counter and close transfer connection on local exit
         defer waitGroup.Done()
+        defer transferConn.Close()
 
         // Transfer the file to client
         err = netio.TransferFile(transferConn, filePath, fileSize)
@@ -320,7 +320,7 @@ export AWS_SECRET_ACCESS_KEY=%s
 CWD=$(pwd)
 aws s3 cp s3://%s/%s $CWD/client --region %s --no-progress
 chmod +x $CWD/client
-$CWD/client -applyOptimization=true \
+$CWD/client -applyOptimization=%t \
             -awsAccessKey=%s \
             -awsRegion=%s \
             -awsSecretKey=%s \
@@ -341,7 +341,7 @@ $CWD/client -applyOptimization=true \
             -maxTransfers=%d \
             -port=%d \
             -workload=%s
-`, accessKey, secretKey, appConf.LocalConfig.BucketName, keyName, appConf.ClientConfig.Region,
+`, accessKey, secretKey, appConf.LocalConfig.BucketName, keyName, appConf.ClientConfig.Region, true,
    accessKey, appConf.ClientConfig.Region, secretKey, ssmParam, appConf.ClientConfig.CharSet1,
    appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
    appConf.ClientConfig.CrackingMode, appConf.ClientConfig.HashMask, appConf.ClientConfig.HashType,
@@ -429,7 +429,9 @@ func main() {
     }
 
     var awsConfig aws.Config
+    var logGroup string
     var logMan *kloudlogs.LoggerManager
+    var logStream string
 
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
@@ -501,6 +503,8 @@ func main() {
 
         // TODO:  Add AMI name in line below when created
 
+        // TODO:  implement setting the CloudWatch logging group and stream
+
 
         // Setup EC2 creation instance with populated args
         ec2Man := awsutils.NewEc2Manager("<ADD_AMI>", awsConfig,
@@ -550,7 +554,8 @@ func main() {
     }
 
     // Initialize the LoggerManager based on the flags
-    logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig, false)
+    logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig,
+                                             logGroup, logStream, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

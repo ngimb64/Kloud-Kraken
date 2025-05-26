@@ -23,7 +23,7 @@ import (
 )
 
 // HTTP shared client (reuses connections) with global timeout
-var client = &http.Client{Timeout: 5*time.Second}
+var client = &http.Client{Timeout: 5*time.Minute}
 // Pre-compile IPv4/IPv6 regex once
 var reIpAddr = regexp.MustCompile(
     `\b(?:\d{1,3}\.){3}\d{1,3}\b|` +  // IPv4

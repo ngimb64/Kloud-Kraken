@@ -113,7 +113,7 @@ Stopped: Wed Feb 12 23:01:47 2025$
     assert.Equal(nil, err)
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, true)
+    logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, "", "", true)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 

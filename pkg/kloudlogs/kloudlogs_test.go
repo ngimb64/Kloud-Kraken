@@ -52,7 +52,7 @@ func TestLogMessage(t *testing.T) {
 
     logFile := "testlog.log"
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", logFile, awsConfig, false)
+    logMan, err := kloudlogs.NewLoggerManager("local", logFile, awsConfig, "", "", false)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 

@@ -408,12 +408,12 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     transferManager.AddTransferSize(fileSize)
 
     go func() {
+        // Decrement the waitgroup on local exit
+        defer waitGroup.Done()
         // Close TLS listener and transfer connection on local exit
         defer cancel()
         defer tlsListener.Close()
         defer transferConn.Close()
-        // Decrement the waitgroup on local exit
-        defer waitGroup.Done()
 
         // Receive the file from remote server
         _, err = netio.HandleTransferRecv(transferConn, WordlistPath, string(fileName), fileSize)
@@ -666,6 +666,8 @@ func main() {
 
     var awsConfig aws.Config
     var err error
+    var logGroup string
+    var logStream string
     var serverCertPemBlock []byte
 
     // If the program is being run in full mode (not testing)
@@ -689,6 +691,10 @@ func main() {
         if err != nil {
             log.Fatalf("Error loading client AWS config:  %v", err)
         }
+
+
+        // TODO:  implement setting the CloudWatch logging group and stream
+
 
         // Establish client to SSM
         ssmMan := awsutils.NewSsmManager(awsConfig)
@@ -729,7 +735,8 @@ func main() {
     TlsMan.AddCACert(serverCertPemBlock)
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig, false)
+    logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig,
+                                              logGroup, logStream, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
