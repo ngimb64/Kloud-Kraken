@@ -113,12 +113,12 @@ Stopped: Wed Feb 12 23:01:47 2025$
     assert.Equal(nil, err)
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, "", "", true)
+    logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, "", true)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Log the hashcat output with kloudlogs
-    kloudlogs.LogMessage(logMan, "info", "TestParseHashcatOutput test message", logArgs...)
+    logMan.LogMessage("info", "TestParseHashcatOutput test message", logArgs...)
     // Get the log message from memory and parse it as a map
     logMap, err := kloudlogs.LogToMap(logMan.GetLog())
     // Ensure the error is nil meaning successful operation

@@ -228,8 +228,9 @@ func ValidateHashFile(filePath string) error {
 
 // Ensure the hash mask is present while a supported cracking mode is selcted.
 //
-// crackingMode:  The hashcat cracking mode
-// hashMask:  The hashcat mask to validate
+// @Parameters
+// - crackingMode:  The hashcat cracking mode
+// - hashMask:  The hashcat mask to validate
 //
 // @Returns
 // - true/false value depending on whether the hash mask is present
@@ -276,25 +277,46 @@ func ValidateHashType(hashType string) bool {
 }
 
 
+// Ensures the passed in instance type is in the supported slice.
+//
+// @Parameters
+// -instanceType:  The EC2 instance type to be used
+//
+// @Returns
+// - true/false boolean depending on whether instance type is valid or not
+//
 func ValidateInstanceType(instanceType string) bool {
     var supportedInstances = []string{
-        // === GPU-heavy Nitro instances ===
-        "p3.2xlarge", "p3.8xlarge", "p3.16xlarge", "p3dn.24xlarge",
-        "p4d.24xlarge", "p4de.24xlarge", "g4dn.xlarge", "g4dn.2xlarge",
-        "g4dn.4xlarge", "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
-        "g5.2xlarge", "g5.4xlarge", "g5.8xlarge", "g5.12xlarge",
-        "g5.16xlarge", "g5.24xlarge", "g5.48xlarge", "g5g.xlarge",
-        "g5g.4xlarge", "g5g.8xlarge", "g5g.16xlarge", "g6g.xlarge",
-        "g6g.4xlarge", "g6g.8xlarge", "g6g.16xlarge",
+        // === G4dn instances ===
+        "g4dn.xlarge", "g4dn.2xlarge", "g4dn.4xlarge",
+        "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
 
-        // === Cost-effective GPU instances ===
-        "g4ad.xlarge", "g4ad.2xlarge", "g4ad.4xlarge", "g5g.xlarge",
-        "g5g.2xlarge", "g5g.4xlarge", "g4dn.xlarge",
+        // === G5 instances ===
+        "g5.2xlarge", "g5.4xlarge", "g5.8xlarge",
+        "g5.12xlarge", "g5.16xlarge", "g5.24xlarge",
+        "g5.48xlarge",
 
-        // === Cost-effective CPU instances ===
-        "t4g.2xlarge", "t4g.4xlarge", "c7g.large", "c7g.xlarge",
-        "c7g.2xlarge", "c7g.4xlarge", "c6i.2xlarge", "c6i.4xlarge",
-        "c6a.4xlarge", "c6a.8xlarge",
+        // === G6 instances ===
+        "g6.xlarge", "g6.2xlarge", "g6.4xlarge",
+        "g6.8xlarge", "g6.12xlarge", "g6.16xlarge",
+        "g6.24xlarge", "g6.48xlarge",
+
+        // === Gr6 instances ===
+        "gr6.4xlarge", "gr6.8xlarge",
+
+        // === G6e instances ===
+        "g6e.xlarge", "g6e.2xlarge", "g6e.4xlarge",
+        "g6e.8xlarge", "g6e.12xlarge", "g6e.16xlarge",
+        "g6e.24xlarge", "g6e.48xlarge",
+
+        // === P4d and P4de instances ===
+        "p4d.24xlarge", "p4de.24xlarge",
+
+        // === P5 and P5e instances ===
+        "p5.48xlarge", "p5e.48xlarge",
+
+        // === P6-B200 instances ===
+        "p6-b200.48xlarge",
     }
 
     return data.StringSliceHasItem(supportedInstances, instanceType)

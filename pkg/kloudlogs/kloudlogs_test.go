@@ -52,14 +52,14 @@ func TestLogMessage(t *testing.T) {
 
     logFile := "testlog.log"
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", logFile, awsConfig, "", "", false)
+    logMan, err := kloudlogs.NewLoggerManager("local", logFile, awsConfig, "", false)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     logArgs := []any{zap.String("key1", "value1"), zap.String("key2", "value2"),
                      zap.String("key3", "value3"), zap.String("key4", "value4")}
     // Log the hashcat output with kloudlogs
-    kloudlogs.LogMessage(logMan, "info", "TestLogMessage test message", logArgs...)
+    logMan.LogMessage("info", "TestLogMessage test message", logArgs...)
 
     // Get the file info
     fileInfo, err := os.Stat(logFile)

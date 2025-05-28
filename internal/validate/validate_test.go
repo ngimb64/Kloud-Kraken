@@ -246,7 +246,7 @@ func TestValidateInstanceType(t *testing.T) {
     assert := assert.New(t)
 
     // Try test with proper value
-    isType := validate.ValidateInstanceType("p3.8xlarge")
+    isType := validate.ValidateInstanceType("g4dn.12xlarge")
     assert.True(isType)
 
     // Try test with bad value

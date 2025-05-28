@@ -54,8 +54,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
                                                appConfig.ClientConfig.MaxFileSizeInt64)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error selecting the next available file to transfer:  %v", err)
+        logMan.LogMessage("error", "Error selecting the next available file to transfer:  %v", err)
         return
     }
 
@@ -65,7 +64,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         _, err = netio.WriteHandler(connection, globals.END_TRANSFER_MARKER,
                                     len(globals.END_TRANSFER_MARKER))
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error sending the end transfer message:  %v", err)
+            logMan.LogMessage("error", "Error sending the end transfer message:  %v", err)
         }
 
         return
@@ -75,23 +74,21 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     sendLength, err := netio.FormatTransferReply(filePath, fileSize, &buffer,
                                                  globals.START_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error formatting transfer reply:  %v", err)
+        logMan.LogMessage("error", "Error formatting transfer reply:  %v", err)
         return
     }
 
     // Send the transfer reply with file name and size
     _, err = netio.WriteHandler(connection, buffer, sendLength)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error sending the transfer reply:  %v", err)
+        logMan.LogMessage("error", "Error sending the transfer reply:  %v", err)
         return
     }
 
     // Get the IP address from the ip:port host address
     ipAddr, _, err := netio.GetIpPort(connection)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error occcurred spliting host address to get IP/port:  %v", err)
+        logMan.LogMessage("error", "Error occcurred spliting host address to get IP/port:  %v", err)
         return
     }
 
@@ -99,7 +96,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     // Receive bytes of port of client port to connect to for file transfer
     err = binary.Read(connection, binary.LittleEndian, &port)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error receiving client listener port:  %v", err)
+        logMan.LogMessage("error", "Error receiving client listener port:  %v", err)
         return
     }
 
@@ -110,11 +107,11 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     transferConn, err := tls.Dial("tcp", remoteAddr,
                                   tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error connecting to remote client for transfer:  %v", err)
+        logMan.LogMessage("fatal", "Error connecting to remote client for transfer:  %v", err)
         return
     }
 
-    kloudlogs.LogMessage(logMan, "info", "Connected remote client at %s on port %d", ipAddr, port)
+    logMan.LogMessage("info", "Connected remote client at %s on port %d", ipAddr, port)
     // Increment waitgroup counter
     waitGroup.Add(1)
 
@@ -126,8 +123,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         // Transfer the file to client
         err = netio.TransferFile(transferConn, filePath, fileSize)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error",
-                                 "Error occured transfering file to client:  %v", err)
+            logMan.LogMessage("error", "Error occured transfering file to client:  %v", err)
         }
     } ()
 }
@@ -155,7 +151,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     // Receive the client PEM certificate bytes
     bytesRead, err := netio.ReadHandler(connection, &buffer)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error reading client PEM cert:  %v", err)
+        logMan.LogMessage("error", "Error reading client PEM cert:  %v", err)
         return
     }
 
@@ -169,8 +165,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.HashFilePath,
                            globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error",
-                             "Error sending the hash file to client:  %v", err)
+        logMan.LogMessage("error", "Error sending the hash file to client:  %v", err)
         return
     }
 
@@ -180,8 +175,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.RulesetPath,
                                globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error",
-                                 "Error sending the ruleset to server:  %v", err)
+            logMan.LogMessage("error", "Error sending the ruleset to server:  %v", err)
             return
         }
     }
@@ -190,8 +184,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         // Read data from connected client
         bytesRead, err := netio.ReadHandler(connection, &buffer)
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error",
-                                 "Error reading data from socket:  %v", err)
+            logMan.LogMessage("error", "Error reading data from socket:  %v", err)
             return
         }
 
@@ -214,7 +207,7 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
                                globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error receiving cracked user hashes:  %v", err)
+        logMan.LogMessage("error", "Error receiving cracked user hashes:  %v", err)
         return
     }
 
@@ -222,15 +215,15 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
                                globals.LOG_TRANSFER_PREFIX)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "error", "Error receiving log file:  %v", err)
+        logMan.LogMessage("error", "Error receiving log file:  %v", err)
         return
     }
 
     // Decrement the active connection count
     CurrentConnections.Add(-1)
 
-    kloudlogs.LogMessage(logMan, "info", "Connection processing handled",
-                         zap.Int32("remaining connections", CurrentConnections.Load()))
+    logMan.LogMessage("info", "Connection processing handled",
+                      zap.Int32("remaining connections", CurrentConnections.Load()))
 }
 
 
@@ -254,33 +247,33 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool, ctx,
                                                          "", appConfig.LocalConfig.ListenerPort, nil)
     if err != nil {
-        kloudlogs.LogMessage(logMan, "fatal", "Error setting up TLS listener:  %v", err)
+        logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
     }
 
     // Close the TLS listener on local exit
     defer tlsListener.Close()
 
-    kloudlogs.LogMessage(logMan, "info", "Server started, waiting for connections ..")
+    logMan.LogMessage("info", "Server started, waiting for connections ..")
 
     for {
         // If current number of connection is greater than or equal to number of instances
         if CurrentConnections.Load() >= int32(appConfig.LocalConfig.NumberInstances) {
-            kloudlogs.LogMessage(logMan, "info", "All remote clients are connected")
+            logMan.LogMessage("info", "All remote clients are connected")
             break
         }
 
         // Wait for an incoming connection
         connection, err := tlsListener.Accept()
         if err != nil {
-            kloudlogs.LogMessage(logMan, "error", "Error accepting client connection:  %v", err)
+            logMan.LogMessage("error", "Error accepting client connection:  %v", err)
             return
         }
 
         // Increment the active connection count
         CurrentConnections.Add(1)
 
-        kloudlogs.LogMessage(logMan, "info", "Connection accepted to remote client",
-                             zap.Int32("active connections", CurrentConnections.Load()))
+        logMan.LogMessage("info", "Connection accepted to remote client",
+                          zap.Int32("active connections", CurrentConnections.Load()))
 
         // Increment wait group and handle connection in separate Goroutine
         waitGroup.Add(1)
@@ -290,7 +283,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Wait for all active Goroutines to finish before shutting down the server
     waitGroup.Wait()
 
-    kloudlogs.LogMessage(logMan, "info", "All connections handled .. server shutting down")
+    logMan.LogMessage("info", "All connections handled .. server shutting down")
 }
 
 
@@ -316,6 +309,8 @@ func ec2UserDataGen(appConf *conf.AppConfig, accessKey string, secretKey string,
     data := fmt.Sprintf(`#!/bin/bash
 export AWS_ACCESS_KEY_ID=%s
 export AWS_SECRET_ACCESS_KEY=%s
+
+apt update && apt upgrade -y && apt install -y hashcat
 
 CWD=$(pwd)
 aws s3 cp s3://%s/%s $CWD/client --region %s --no-progress
@@ -429,9 +424,7 @@ func main() {
     }
 
     var awsConfig aws.Config
-    var logGroup string
     var logMan *kloudlogs.LoggerManager
-    var logStream string
 
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
@@ -500,14 +493,8 @@ func main() {
             log.Fatalf("Error generating user data for EC2:  %v", err)
         }
 
-
-        // TODO:  Add AMI name in line below when created
-
-        // TODO:  implement setting the CloudWatch logging group and stream
-
-
         // Setup EC2 creation instance with populated args
-        ec2Man := awsutils.NewEc2Manager("<ADD_AMI>", awsConfig,
+        ec2Man := awsutils.NewEc2Manager("ami-0eb94e3d16a6eea5f", awsConfig,
                                          appConfig.LocalConfig.NumberInstances,
                                          appConfig.LocalConfig.InstanceType,
                                          "Kloud-Kraken", []byte(userData))
@@ -526,10 +513,10 @@ func main() {
 
             // Iterate through list of terminated instance ids
             for _, instance := range termOutput.TerminatingInstances {
-                kloudlogs.LogMessage(logMan, "Instance state for %s: %s → %s\n",
-                                     aws.ToString(instance.InstanceId),
-                                     instance.PreviousState.Name,
-                                     instance.CurrentState.Name)
+                logMan.LogMessage("Instance state for %s: %s → %s\n",
+                                  aws.ToString(instance.InstanceId),
+                                  instance.PreviousState.Name,
+                                  instance.CurrentState.Name)
             }
         } ()
 
@@ -555,7 +542,7 @@ func main() {
 
     // Initialize the LoggerManager based on the flags
     logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig,
-                                             logGroup, logStream, false)
+                                             "Kloud-Kraken", false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

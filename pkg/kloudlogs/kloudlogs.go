@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -42,7 +45,6 @@ type LoggerManager struct {
 // - localLogFile:  Path where the logs will be stored locally on file
 // - awsConfig:  The initialized AWS configuration instance
 // - group:  The CloudWatch logging group
-// - stream:  The CloudWatch logging stream
 // - logToMemory:  Boolean toggler whether to log to memory or not
 //
 // @Returns
@@ -50,8 +52,7 @@ type LoggerManager struct {
 // - Error if it occurs, otherwise nil on success
 //
 func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
-                      group string, stream string, logToMemory bool) (
-                      *LoggerManager, error) {
+                      group string, logToMemory bool) (*LoggerManager, error) {
     var localLogger Logger
     var cloudLogger Logger
     var err error
@@ -66,7 +67,7 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 
     // Initialize CloudWatch logger if needed
     if logDestination == "cloudwatch" || logDestination == "both" {
-        cloudLogger, err = NewCloudWatchLogger(awsConfig, group, stream)
+        cloudLogger, err = NewCloudWatchLogger(awsConfig, group)
         if err != nil {
             return nil, err
         }
@@ -86,6 +87,61 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 //
 func (logMan *LoggerManager) GetLog() string {
     return logMan.LocalLogger.GetMemoryLog()
+}
+
+// Parses the variable length args  based on data type into different lists.
+//
+// @Parameters
+// - manager:  The logger manager for zap and CloudWatch instances
+// - level:  The level of logging
+// - message:  The message to be logged, supports printf format with below args
+// - args:  Variadic length list of args with zap.Fields and regular data types
+//          supporting printf format
+//
+func (manager *LoggerManager) LogMessage(level string, message string, args ...any) {
+    argList := []any{}
+    zapFields := []zap.Field {}
+    formattedMessage := ""
+
+    // Iterate through passed in arg list
+    for _, arg := range args {
+        // Case logic based on arg data type
+        switch argType := arg.(type) {
+        // If the arg type is a zap field, add it to the zap field list
+        case zap.Field:
+            zapFields = append(zapFields, argType)
+        // For other arg types, add it to the arg list
+        default:
+            argList = append(argList, argType)
+        }
+    }
+
+    // If there are any non-zap args to format into the message
+    if len(argList) > 0 {
+        formattedMessage = fmt.Sprintf(message, argList)
+    } else {
+        formattedMessage = message
+    }
+
+    // Log based on the level (info, error, warn) and include the fields
+    switch level {
+    case "debug":
+        manager.LogDebug(formattedMessage, zapFields...)
+    case "info":
+        manager.LogInfo(formattedMessage, zapFields...)
+    case "warn":
+        manager.LogWarn(formattedMessage, zapFields...)
+    case "error":
+        manager.LogError(formattedMessage, zapFields...)
+    case "dpanic":
+        manager.LogDPanic(formattedMessage, zapFields...)
+    case "panic":
+        manager.LogPanic(formattedMessage, zapFields...)
+    case "fatal":
+        manager.LogFatal(formattedMessage, zapFields...)
+    default:
+        log.Fatalf("[*] Error: Unknown logging level specified %v", level)
+    }
 }
 
 // Logs info message using both local and CloudWatch loggers
@@ -283,7 +339,7 @@ func (zapLog *ZapLogger) Fatal(msg string, fields ...zap.Field) {
 
 // CloudWatchLogger implements Logger interface for CloudWatch
 type CloudWatchLogger struct {
-    Client       *cloudwatchlogs.Client
+    Client       *cwl.Client
     CwMutex      sync.Mutex
     LogGroup     string
     LogStream    string
@@ -293,31 +349,65 @@ type CloudWatchLogger struct {
 // Creates and returns CloudWatch logger instance.
 //
 // @Parameters
-// -awsConfig:  The AWS configuration config struct
-// -group:  The CloudWatch logging group
-// -stream:  The CloudWatch logging stream
+// - awsConfig:  The AWS configuration config struct
+// - group:  The CloudWatch logging group
+// - stream:  The CloudWatch logging stream
 //
 // @Returns
 // - The initializes CloudWatch logger config instance
 // - Error if it occurs, otherwise nil on success
 //
-func NewCloudWatchLogger(awsConfig aws.Config, group string, stream string) (
+func NewCloudWatchLogger(awsConfig aws.Config, group string) (
                          Logger, error) {
+    var stream string
     // Establish CloudWatch client and set to run in background
-    client := cloudwatchlogs.NewFromConfig(awsConfig)
+    client := cwl.NewFromConfig(awsConfig)
     ctx := context.Background()
 
-    // Create log group & stream
-    client.CreateLogGroup(ctx, &cloudwatchlogs.CreateLogGroupInput{
+    // Set up client to the EC2 instance metadata service
+    metaDataService := imds.NewFromConfig(awsConfig)
+    // Get the EC2 insance id based on the AWS config
+    metaData, err := metaDataService.GetMetadata(ctx, &imds.GetMetadataInput{Path: "instance-id"})
+    if err != nil {
+        // Fallback to hostname if failed to retrieve instance id
+        stream, err = os.Hostname()
+        if err != nil {
+            return nil, fmt.Errorf("cannot determine host identity: %w", err)
+        }
+    } else {
+        // Get the EC2 instance id from metadata output
+        streamData, err := io.ReadAll(metaData.Content)
+        if err != nil {
+            return nil, fmt.Errorf("getting instance ID:  %w", err)
+        }
+
+        stream = string(streamData)
+    }
+
+    // Create the CloudWatch log group
+    _, err = client.CreateLogGroup(ctx, &cwl.CreateLogGroupInput{
         LogGroupName: aws.String(group),
     })
-    client.CreateLogStream(ctx, &cloudwatchlogs.CreateLogStreamInput{
+    if err != nil {
+        var ae *cwlTypes.ResourceAlreadyExistsException
+
+        // If the error is not having to do with group already existing
+        if !errors.As(err, &ae) {
+            return nil, fmt.Errorf("CreateLogGroup: %w", err)
+        }
+    }
+
+    // Create the CloudWatch log stream
+    _, err = client.CreateLogStream(ctx, &cwl.CreateLogStreamInput{
         LogGroupName:  aws.String(group),
         LogStreamName: aws.String(stream),
     })
+    if err != nil {
+        return nil, fmt.Errorf("CreateLogStream: %w", err)
+    }
 
     // Describe to grab initial token (nil if fresh)
-    res, err := client.DescribeLogStreams(ctx, &cloudwatchlogs.DescribeLogStreamsInput{
+    res, err := client.DescribeLogStreams(ctx, &cwl.DescribeLogStreamsInput{
         LogGroupName:        aws.String(group),
         LogStreamNamePrefix: aws.String(stream),
     })
@@ -343,13 +433,13 @@ func NewCloudWatchLogger(awsConfig aws.Config, group string, stream string) (
 // Method that packages message & fields, sends to CW, and updates token.
 //
 // @Parameters
-// -level:  The level that the log event will be set to
-// -msg:  The message of log event
-// -fields:  Any additional zap field to be added to log entry
+// - level:  The level that the log event will be set to
+// - msg:  The message of log event
+// - fields:  Any additional zap field to be added to log entry
 //
 func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...zap.Field) {
     // Build log entry
-    entry := map[string]interface{}{
+    entry := map[string]any{
         "timestamp": time.Now().UTC().Format(time.RFC3339Nano),
         "level":     level,
         "message":   msg,
@@ -364,12 +454,11 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...z
     // Format the data into JSON for transporting to CloudWatch
     payload, err := json.Marshal(entry)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "marshal log entry: %v\n", err)
-        return
+        log.Fatalf("marshal log entry: %v\n", err)
     }
 
     // Set up input log event message
-    event := types.InputLogEvent{
+    event := cwlTypes.InputLogEvent{
         Message:   aws.String(string(payload)),
         Timestamp: aws.Int64(time.Now().UnixNano() / int64(time.Millisecond)),
     }
@@ -378,18 +467,17 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...z
     cloudWatchLog.CwMutex.Lock()
     defer cloudWatchLog.CwMutex.Unlock()
 
-    inputEvent := &cloudwatchlogs.PutLogEventsInput{
+    inputEvent := &cwl.PutLogEventsInput{
         LogGroupName:  aws.String(cloudWatchLog.LogGroup),
         LogStreamName: aws.String(cloudWatchLog.LogStream),
-        LogEvents:     []types.InputLogEvent{event},
+        LogEvents:     []cwlTypes.InputLogEvent{event},
         SequenceToken: cloudWatchLog.NextSequence,
     }
 
     // Upload log entry via the log stream
     resp, err := cloudWatchLog.Client.PutLogEvents(context.Background(), inputEvent)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "PutLogEvents: %v\n", err)
-        return
+        log.Fatalf("PutLogEvents: %v\n", err)
     }
 
     // Set the next sequence token fron the response
@@ -456,60 +544,4 @@ func LogToMap(jsonStr string) (map[string]any, error) {
     }
 
     return logMap, nil
-}
-
-
-// Parses the variable length args  based on data type into different lists.
-//
-// @Parameters
-// - manager:  The logger manager for zap and CloudWatch instances
-// - level:  The level of logging
-// - message:  The message to be logged, supports printf format with below args
-// - args:  variable length list of args with zap.Fields and regular data types
-//          supporting printf format
-//
-func LogMessage(manager *LoggerManager, level string, message string, args ...any) {
-    argList := []any{}
-    zapFields := []zap.Field {}
-    formattedMessage := ""
-
-    // Iterate through passed in arg list
-    for _, arg := range args {
-        // Case logic based on arg data type
-        switch argType := arg.(type) {
-        // If the arg type is a zap field, add it to the zap field list
-        case zap.Field:
-            zapFields = append(zapFields, argType)
-        // For other arg types, add it to the arg list
-        default:
-            argList = append(argList, argType)
-        }
-    }
-
-    // If there are any non-zap args to format into the message
-    if len(argList) > 0 {
-        formattedMessage = fmt.Sprintf(message, argList)
-    } else {
-        formattedMessage = message
-    }
-
-    // Log based on the level (info, error, warn) and include the fields
-    switch level {
-    case "debug":
-        manager.LogDebug(formattedMessage, zapFields...)
-    case "info":
-        manager.LogInfo(formattedMessage, zapFields...)
-    case "warn":
-        manager.LogWarn(formattedMessage, zapFields...)
-    case "error":
-        manager.LogError(formattedMessage, zapFields...)
-    case "dpanic":
-        manager.LogDPanic(formattedMessage, zapFields...)
-    case "panic":
-        manager.LogPanic(formattedMessage, zapFields...)
-    case "fatal":
-        manager.LogFatal(formattedMessage, zapFields...)
-    default:
-        log.Fatalf("[*] Error: Unknown logging level specified %v", level)
-    }
 }
