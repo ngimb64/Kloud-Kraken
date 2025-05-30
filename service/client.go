@@ -378,8 +378,8 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Set up context handler for TLS listener
     ctx, cancel := context.WithCancel(context.Background())
     // Setup up TLS listener from existing raw TCP listener
-    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
-                                                         ctx, "", port, listener)
+    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
+                                                       ctx, "", port, listener)
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
     }
@@ -691,16 +691,13 @@ func main() {
     }
 
     // Generate the servers TLS PEM certificate and key and save in TLS manager
-    TlsMan.CertPemBlock,
-    TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false)
+    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false)
     if err != nil {
         log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
     }
 
     // Generate a TLS x509 certificate and cert pool
-    TlsMan.TlsCertificate, TlsMan.CaCertPool, err = tlsutils.CertGenAndPool(TlsMan.CertPemBlock,
-                                                                            TlsMan.KeyPemBlock,
-                                                                            TlsMan.CaCertPemBlocks)
+    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock, TlsMan.CaCertPemBlocks)
     if err != nil {
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }

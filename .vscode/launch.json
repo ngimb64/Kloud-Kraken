@@ -24,8 +24,6 @@
                 "-ipAddr=10.0.0.17",
                 "-port=6969",
                 "-awsRegion=us-east-1",
-                "-awsAccessKey=blahblah",
-                "-awsSecretKey=blahblah",
                 "-maxFileSizeInt64=17179869184",
                 "-crackingMode=0",
                 "-hashType=1700",

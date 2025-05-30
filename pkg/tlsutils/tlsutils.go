@@ -23,84 +23,12 @@ import (
 )
 
 // HTTP shared client (reuses connections) with global timeout
-var client = &http.Client{Timeout: 5*time.Minute}
+var Client = &http.Client{Timeout: 5*time.Minute}
 // Pre-compile IPv4/IPv6 regex once
-var reIpAddr = regexp.MustCompile(
+var ReIpAddr = regexp.MustCompile(
     `\b(?:\d{1,3}\.){3}\d{1,3}\b|` +  // IPv4
     `\b(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{1,4}\b`,  // IPv6 (simple form)
 )
-
-// Reads the passed in PEM encoded certificate file into memory
-// and attempts to append it to a newly generated cert pool.
-//
-// @Parameters
-// - caCertPemBlocks:  The byte PEM block to be used instead of file
-// - caCertFiles:  Variadic length slice of PEM files to be loaded into caCertPemBlocks
-//
-// @Returns
-// - The x509 certificate pool with loaded cert added to it
-// - Error if it occurs, otherwise nil on success
-//
-func CaCertPool(caCertPemBlocks [][]byte, caCertPemFiles ...string) (
-                *x509.CertPool, error) {
-    // If there are PEM cert file passed in, iterate through them
-    for _, pemFile := range caCertPemFiles {
-        // Read the PEM encoded TLS certificate file
-        pemBlock, err := os.ReadFile(pemFile)
-        if err != nil {
-            return nil, err
-        }
-
-        // Append the read PEM block to byte slice of PEM blocks
-        caCertPemBlocks = append(caCertPemBlocks, pemBlock)
-    }
-
-    // Create an x509 certificate pool
-    certPool := x509.NewCertPool()
-
-    // Iterate through the slice of PEM blocks
-    for _, pemBlock := range caCertPemBlocks {
-        // Attempt to add the loaded certificate to the cert pool
-        ok := certPool.AppendCertsFromPEM(pemBlock)
-        if !ok {
-            return nil, errors.New("failed to add certificate to pool")
-        }
-    }
-
-    return certPool, nil
-}
-
-
-// Generate the TLS certificate from cert & key PEM byte blocks, then adds the
-// certificate to the cert pool.
-//
-// @Parameters
-// - tlsCertPem:  The cert PEM bytes used for certificate generation
-// - tlsKeyPem:  The key PEM bytes used for certificate generation
-// - caCertPemBlocks:  The slice of byte slices used to store CA PEM blocks
-// - certsToAdd:  variadic length variable of PEM cert files to load and add
-//
-// @Returns
-// - The generated TLS certificate
-// - The generated TLS cert pool
-// - Error if it occurs, otherwise nil on success
-//
-func CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte, caCertPemBlocks [][]byte,
-                    certsToAdd ...string) (tls.Certificate, *x509.CertPool, error) {
-    // Generate certificate base on certificate & key PEM blocks
-    cert, err := tls.X509KeyPair(tlsCertPem, tlsKeyPem)
-    if err != nil {
-        return tls.Certificate{}, nil, err
-    }
-
-    // Create server x509 certificate pool
-    certPool, err := CaCertPool(caCertPemBlocks, certsToAdd...)
-    if err != nil {
-        return tls.Certificate{}, nil, err
-    }
-
-    return cert, certPool, nil
-}
 
 
 // Attempts a GET request to retrieve IP data from passed in API URL.
@@ -125,7 +53,7 @@ func GetIpData(ctx context.Context, cancel context.CancelFunc, url string) (
     }
 
     // Send HTTP GET request
-    response, err := client.Do(req)
+    response, err := Client.Do(req)
     if err != nil {
         return []byte(""), err
     }
@@ -156,7 +84,7 @@ func GetPublicIps() ([]string, error) {
 
     // Iterate through list of IP API enpoints
     for _, url := range endpoints {
-        // create a fresh 5s context for each request
+        // Create a fresh 5s context for each request
         ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
         // Execute GET request to retrieve IP data
         data, err := GetIpData(ctx, cancel, url)
@@ -167,7 +95,7 @@ func GetPublicIps() ([]string, error) {
         // Convert data to string and remove any outer whitespace
         textData := strings.TrimSpace(string(data))
         // Regex search for all IP address
-        matches := reIpAddr.FindAllString(textData, -1)
+        matches := ReIpAddr.FindAllString(textData, -1)
 
         // Iterate through matched IP addresses
         for _, match := range matches {
@@ -188,27 +116,6 @@ func GetPublicIps() ([]string, error) {
     }
 
     return ipAddrs, nil
-}
-
-
-// Function for handling the TLS config generation and client verification.
-//
-// @Parameters
-// - cert:  The TLS certificate to be used in config generation
-// - serverPool:  The servers TLS certificate pool
-//
-// @Returns
-// - function that returns the TLS config and errors if any occur
-//
-func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(
-                        *tls.ClientHelloInfo) (*tls.Config, error) {
-    return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-        // Generate new TLS configuration instance
-        cfg := NewServerTlsConfig(cert)
-        // Inject the VerifyPeerCertificate callback with access to hello
-        cfg.VerifyPeerCertificate = VerifyClientCert(serverPool, hello)
-        return cfg, nil
-    }
 }
 
 
@@ -281,44 +188,152 @@ func NewClientTLSConfig(clientPool *x509.CertPool,
 }
 
 
-// Function for generating a new server listener TLS configuration.
-//
-// @Parameters
-// - cert:  The TLS certificate to be used in config generation
-//
-// @Returns
-// - The TLS configuration instance
-//
-func NewServerTlsConfig(cert tls.Certificate) *tls.Config {
-    return &tls.Config{
-        Certificates: 			  []tls.Certificate{cert},
-        ClientAuth:   			  tls.NoClientCert,
-        CurvePreferences: 		  []tls.CurveID{tls.CurveP256},
-        MinVersion:         	  tls.VersionTLS13,
-        PreferServerCipherSuites: true,
-    }
+// Data structure for managing TLS components
+type TlsManager struct {
+    Addr            string
+    CaCertPemBlocks [][]byte
+    CaCertPool      *x509.CertPool
+    CertPemBlock    []byte
+    Ctx   	        context.Context
+    KeyPemBlock     []byte
+    TlsCertificate  tls.Certificate
+    TlsConfig       *tls.Config
 }
 
-
-// Creates new TLS server instance to accepting incomming connections
+// Add the cert to TlsManager CaCertPool
 //
 // @Parameters
-// - address:  The listener address
-// - ctx:  The context handler for mananging listeneer connection
-// - tlsConfig:  The TLS configuration instance
+// - pemBlock:  The byte PEM certifcate slice to be added to CaCertPool
 //
 // @Returns
-// - The created TLS server instance
+// - Error if it occurs, otherwise nil on success
 //
-func NewTlsServer(address string, ctx context.Context,
-                  tlsConfig *tls.Config) *TlsServer {
-    return &TlsServer{
-        Addr:      address,
-        Ctx:       ctx,
-        TlsConfig: tlsConfig,
+func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
+    // Add it to your slice for record-keeping
+    TlsMan.CaCertPemBlocks = append(TlsMan.CaCertPemBlocks, pemBlock)
+
+    // Append directly into the existing pool
+    ok := TlsMan.CaCertPool.AppendCertsFromPEM(pemBlock)
+    if !ok {
+        return fmt.Errorf("failed to append new CA cert PEM")
     }
+
+    return nil
 }
 
+// Generate the TLS certificate from cert & key PEM byte blocks, adds certificate
+// to the cert pool, and assigns the certificate & cert pool in TlsManager.
+//
+// @Parameters
+// - tlsCertPem:  The cert PEM bytes used for certificate generation
+// - tlsKeyPem:  The key PEM bytes used for certificate generation
+// - caCertPemBlocks:  The slice of byte slices used to store CA PEM blocks
+// - certsToAdd:  variadic length variable of PEM cert files to load and add
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func (TlsMan *TlsManager) CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte,
+                                        caCertPemBlocks [][]byte,
+                                        certsToAdd ...string) error {
+    // Generate certificate base on certificate & key PEM blocks
+    cert, err := tls.X509KeyPair(tlsCertPem, tlsKeyPem)
+    if err != nil {
+        return err
+    }
+
+    // Create server x509 certificate pool
+    certPool, err := TlsMan.CaCertPoolGen(caCertPemBlocks, certsToAdd...)
+    if err != nil {
+        return err
+    }
+
+    TlsMan.TlsCertificate = cert
+    TlsMan.CaCertPool = certPool
+
+    return nil
+}
+
+// Reads the passed in PEM encoded certificate file into memory
+// and attempts to append it to a newly generated cert pool.
+//
+// @Parameters
+// - caCertPemBlocks:  The byte PEM block to be used instead of file
+// - caCertFiles:  Variadic length slice of PEM files to be loaded into caCertPemBlocks
+//
+// @Returns
+// - The x509 certificate pool with loaded cert added to it
+// - Error if it occurs, otherwise nil on success
+//
+func (TlsMan *TlsManager) CaCertPoolGen(caCertPemBlocks [][]byte, caCertPemFiles ...string) (
+                                        *x509.CertPool, error) {
+    // If there are PEM cert file passed in, iterate through them
+    for _, pemFile := range caCertPemFiles {
+        // Read the PEM encoded TLS certificate file
+        pemBlock, err := os.ReadFile(pemFile)
+        if err != nil {
+            return nil, err
+        }
+
+        // Append the read PEM block to byte slice of PEM blocks
+        caCertPemBlocks = append(caCertPemBlocks, pemBlock)
+    }
+
+    // Create an x509 certificate pool
+    certPool := x509.NewCertPool()
+
+    // Iterate through the slice of PEM blocks
+    for _, pemBlock := range caCertPemBlocks {
+        // Attempt to add the loaded certificate to the cert pool
+        ok := certPool.AppendCertsFromPEM(pemBlock)
+        if !ok {
+            return nil, errors.New("failed to add certificate to pool")
+        }
+    }
+
+    return certPool, nil
+}
+
+// Generates the TLS certificate & key, saving the result in the TlsMan struct.
+//
+// @Parameters
+// - orgName:  The organization name to assign to the generated certificate
+// - testMode:  boolean toggle for whether PEM file should be generated or not
+// - hostnames:  variadic length variable of ip address and hostnames to add to hosts CSV string
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func (TlsMan *TlsManager) PemCertAndKeyGenHandler(orgName string, testMode bool,
+                                                  hostnames ...string) error {
+    // Add the localhost to CA hosts list
+    hosts := "localhost"
+
+    // Iterate through any passed in host names and add them to hosts CSV string
+    for _, host := range hostnames {
+        hosts += ("," + host)
+    }
+
+    // Get available usable public/private IP's assigned to network interfaces
+    ipAddrs, err := GetUsableIps()
+    if err != nil {
+        return err
+    }
+
+    // Iterate through the list IP's and add them to CSV string
+    for _, ipAddr := range ipAddrs {
+        hosts += ("," + ipAddr)
+    }
+
+    // Generate the TLS certificate/key and save them in app config
+    TlsMan.CertPemBlock,
+    TlsMan.KeyPemBlock, err = TlsMan.PemCertAndKeyGen(orgName, hosts, testMode)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
 
 // Generates a TLS certficate and key converted to PEM format, if generateFiles boolean is
 // toggled then PEM cert and key will be written as files in addition to returned in memory.
@@ -329,12 +344,13 @@ func NewTlsServer(address string, ctx context.Context,
 //           to be able to connect with the server that generated it
 // - generateFiles:  Toggle for specifying whether PEM files shoud be generated
 //
-// @ Returns
+// @Returns
 // - PEM byte block for TLS certificate
 // - PEM byte block for TLS key
 // - Error if it occurs, otherwise nil on success
 //
-func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []byte, error) {
+func (TlsMan *TlsManager) PemCertAndKeyGen(name string, hosts string, generateFiles bool) (
+                                           []byte, []byte, error) {
     // Create a cryptographically secure random 128 bit integer
     serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
     if err != nil {
@@ -367,6 +383,35 @@ func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
         }
     }
 
+    // Create the PEM certificate and key
+    certBytes, keyBytes, err := TlsMan.CreatePemCertAndKey(&template)
+    if err != nil {
+        return nil, nil, err
+    }
+
+    // If the PEM certificate and key are to be written as files
+    if generateFiles {
+        err = TlsMan.CreatePemCertFile(certBytes)
+        if err != nil {
+            return nil, nil, err
+        }
+    }
+
+    return certBytes, keyBytes, nil
+}
+
+// Generate the PEM certificate and key in memory and returns the result.
+//
+// @Parameters
+// - template:  The x509 certificate template
+//
+// @Returns
+// - The certificate PEM bytes
+// - The key PEM bytes
+// - Error if it occurs, otherwise nil on success
+//
+func (TlsMan *TlsManager) CreatePemCertAndKey(template *x509.Certificate) (
+                                              []byte, []byte, error) {
     // Generate ECDSA key for cert and key generation
     ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
     if err != nil {
@@ -374,7 +419,7 @@ func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
     }
 
     // Generate a x509 cerfiticate with ECDSA key
-    cert, err := x509.CreateCertificate(rand.Reader, &template, &template,
+    cert, err := x509.CreateCertificate(rand.Reader, template, template,
                                         &ecdsaKey.PublicKey, ecdsaKey)
     if err != nil {
         return nil, nil, err
@@ -398,77 +443,43 @@ func PemCertAndKeyGen(name string, hosts string, generateFiles bool) ([]byte, []
         return nil, nil, errors.New("unable to encode the PKCS into PEM format")
     }
 
-    // If the TLS certificate and key are to be written as PEM files
-    if generateFiles {
-        // Create a PEM file to encode for certificate
-        certFile, err := os.Create("tls-cert.pem")
-        if err != nil {
-            return nil, nil, err
-        }
-
-        // Write the certificate to PEM file
-        bytesWrote, err := certFile.Write(certBytes)
-        if err != nil {
-            return nil, nil, err
-        }
-
-        // If no bytes were written to PEM file
-        if bytesWrote < 1 {
-            return nil, nil, errors.New("no bytes were written to TLS cert PEM file")
-        }
-
-        // Close the generated PEM for certificate
-        if err := certFile.Close(); err != nil {
-            return nil, nil, err
-        }
-    }
-
     return certBytes, keyBytes, nil
 }
 
-
-// Generates the TLS certificate & key, saving the result in the appConifg struct.
+// Take the passed in PEM certificate bytes and writes them to a file.
 //
 // @Parameters
-// - orgName:  The organization name to assign to the generated certificate
-// - testMode:  boolean toggle for whether PEM file should be generated or not
-// - hostnames:  variadic length variable of ip address and hostnames to add to hosts CSV string
+// - certBytes:  The PEM certificate to be written to a file
 //
 // @Returns
-// - Generated certificate PEM byte block
-// - Generated key PEM byte block
 // - Error if it occurs, otherwise nil on success
 //
-func PemCertAndKeyGenHandler(orgName string, testMode bool,
-                             hostnames ...string) ([]byte, []byte, error) {
-    // Add the localhost to CA hosts list
-    hosts := "localhost"
-
-    // Iterate through any passed in host names and add them to hosts CSV string
-    for _, host := range hostnames {
-        hosts += ("," + host)
-    }
-
-    // Get available usable public/private IP's assigned to network interfaces
-    ipAddrs, err := GetUsableIps()
+func (TlsMan *TlsManager) CreatePemCertFile(certBytes []byte) error {
+    // Create a PEM file to encode for certificate
+    certFile, err := os.Create("tls-cert.pem")
     if err != nil {
-        return nil, nil, err
+        return err
     }
 
-    // Iterate through the list IP's and add them to CSV string
-    for _, ipAddr := range ipAddrs {
-        hosts += ("," + ipAddr)
-    }
-
-    // Generate the TLS certificate/key and save them in app config
-    certPem, keyPem, err := PemCertAndKeyGen(orgName, hosts, testMode)
+    // Write the certificate to PEM file
+    bytesWrote, err := certFile.Write(certBytes)
     if err != nil {
-        return nil, nil, err
+        return err
     }
 
-    return certPem, keyPem, nil
+    // If no bytes were written to PEM file
+    if bytesWrote < 1 {
+        return errors.New("no bytes were written to TLS cert PEM file")
+    }
+
+    // Close the generated PEM for certificate
+    err = certFile.Close()
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
-
 
 // Creates TLS x509 certificate and a cert pool which are used to setup the TLS
 // configuration instance. After a TLS listener is established and returned.
@@ -486,21 +497,24 @@ func PemCertAndKeyGenHandler(orgName string, testMode bool,
 // - The established TLS listener
 // - Error if it occurs, otherwise nil on success
 //
-func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
-                             ctx context.Context, listenIp string, listenPort int,
-                             listener net.Listener) (net.Listener, error) {
+func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
+                                                  ctx context.Context, listenIp string,
+                                                  listenPort int, listener net.Listener) (
+                                                  net.Listener, error) {
     // Create a TLS configuration instance
     tlsConfig := &tls.Config{
         Certificates:       []tls.Certificate{cert},
-        GetConfigForClient: GetServerTlsConfig(cert, certPool),
+        GetConfigForClient: TlsMan.GetServerTlsConfig(cert, certPool),
     }
 
     // Format listener address with port
     listenerAddr := listenIp + ":" + strconv.Itoa(listenPort)
-    // Create a TLS server instance
-    tlsServer := NewTlsServer(listenerAddr, ctx, tlsConfig)
+    // Set needed struct members for setting up TLS listener
+    TlsMan.Addr = listenerAddr
+    TlsMan.Ctx = ctx
+    TlsMan.TlsConfig = tlsConfig
     // Setup TLS listener from server instance
-    tlsListener, err := tlsServer.SetupTlsListener(listener)
+    tlsListener, err := TlsMan.SetupTlsListener(listener)
     if err != nil {
         return nil, err
     }
@@ -508,75 +522,43 @@ func SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
     return tlsListener, nil
 }
 
-
-// Struct for managing TLS connections
-type TlsServer struct {
-    Addr      string
-    Ctx   	  context.Context
-    TlsConfig *tls.Config
-}
-
-// TlsServer struct method to setup TLS supported TCP listener to handle incoming connections.
+// Function for handling the TLS config generation and client verification.
 //
 // @Parameters
-// - listener:  Established raw TCP socket listener, if nil one is created
+// - cert:  The TLS certificate to be used in config generation
+// - serverPool:  The servers TLS certificate pool
 //
 // @Returns
-// - The established TLS TCP listener
-// - Error if it occurs, otherwise nil on success
+// - function that returns the TLS config and errors if any occur
 //
-func (server *TlsServer) SetupTlsListener(listener net.Listener) (net.Listener, error) {
-    var err error
-
-    // If no active listener was passed in
-    if listener == nil {
-        // Establish raw TCP listener
-        listener, err = net.Listen("tcp", server.Addr)
-        if err != nil {
-            return nil, fmt.Errorf("binding to tcp %s: %w", server.Addr, err)
-        }
+func (TlsMan *TlsManager) GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(
+                                             *tls.ClientHelloInfo) (*tls.Config, error) {
+    return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+        // Generate new TLS configuration instance
+        cfg := TlsMan.NewServerTlsConfig(cert)
+        // Inject the VerifyPeerCertificate callback with access to hello
+        cfg.VerifyPeerCertificate = TlsMan.VerifyClientCert(serverPool, hello)
+        return cfg, nil
     }
-
-    // If the servers context is set
-    if server.Ctx != nil {
-        // Launch routine to catch it when signaled
-        go func() {
-            <-server.Ctx.Done()
-            // Close the TLS listener
-            _ = listener.Close()
-        }()
-    }
-
-    // Create new listener with TLS layer on top of raw TCP listner
-    tlsListener := tls.NewListener(listener, server.TlsConfig)
-
-    return tlsListener, nil
 }
 
-
-// Data structure for managing TLS components
-type TlsManager struct {
-    CertPemBlock    []byte
-    KeyPemBlock     []byte
-    CaCertPemBlocks [][]byte
-    TlsCertificate  tls.Certificate
-    CaCertPool      *x509.CertPool
-}
-
-// Method for adding cert to TlsManager CaCertPool
-func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
-    // Add it to your slice for record-keeping
-    TlsMan.CaCertPemBlocks = append(TlsMan.CaCertPemBlocks, pemBlock)
-
-    // Append directly into the existing pool
-    ok := TlsMan.CaCertPool.AppendCertsFromPEM(pemBlock)
-    if !ok {
-        return fmt.Errorf("failed to append new CA cert PEM")
+// Function for generating a new server listener TLS configuration.
+//
+// @Parameters
+// - cert:  The TLS certificate to be used in config generation
+//
+// @Returns
+// - The TLS configuration instance
+//
+func (TlsMan *TlsManager) NewServerTlsConfig(cert tls.Certificate) *tls.Config {
+    return &tls.Config{
+        Certificates: 			  []tls.Certificate{cert},
+        ClientAuth:   			  tls.NoClientCert,
+        CurvePreferences: 		  []tls.CurveID{tls.CurveP256},
+        MinVersion:         	  tls.VersionTLS13,
+        PreferServerCipherSuites: true,
     }
-
-    return nil
 }
-
 
 // Function for handling the TLS config generation and client verification
 //
@@ -587,8 +569,10 @@ func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
 // @Returns
 // - function that returns errors if any occur
 //
-func VerifyClientCert(serverPool *x509.CertPool, hello *tls.ClientHelloInfo) func(
-                      rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+func (TlsMan *TlsManager) VerifyClientCert(serverPool *x509.CertPool,
+                                           hello *tls.ClientHelloInfo) func(
+                                           rawCerts [][]byte,
+                                           verifiedChains [][]*x509.Certificate) error {
     return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
         // Verify x509 certificate options
         opts := x509.VerifyOptions{
@@ -596,7 +580,7 @@ func VerifyClientCert(serverPool *x509.CertPool, hello *tls.ClientHelloInfo) fun
             Roots:     serverPool,
         }
 
-        // figure out how the peer called us
+        // Figure out how the peer called us
         ip := strings.Split(hello.Conn.RemoteAddr().String(), ":")[0]
         // Lookup the hostname based on the on IP address
         hostnames, err := net.LookupAddr(ip)
@@ -630,4 +614,41 @@ func VerifyClientCert(serverPool *x509.CertPool, hello *tls.ClientHelloInfo) fun
 
         return errors.New("client authentication failed")
     }
+}
+
+// TlsServer struct method to setup TLS supported TCP listener to handle incoming connections.
+//
+// @Parameters
+// - listener:  Established raw TCP socket listener, if nil one is created
+//
+// @Returns
+// - The established TLS TCP listener
+// - Error if it occurs, otherwise nil on success
+//
+func (TlsMan *TlsManager) SetupTlsListener(listener net.Listener) (net.Listener, error) {
+    var err error
+
+    // If no active listener was passed in
+    if listener == nil {
+        // Establish raw TCP listener
+        listener, err = net.Listen("tcp", TlsMan.Addr)
+        if err != nil {
+            return nil, fmt.Errorf("binding to tcp %s: %w", TlsMan.Addr, err)
+        }
+    }
+
+    // If the servers context is set
+    if TlsMan.Ctx != nil {
+        // Launch routine to catch it when signaled
+        go func() {
+            <-TlsMan.Ctx.Done()
+            // Close the TLS listener
+            _ = listener.Close()
+        }()
+    }
+
+    // Create new listener with TLS layer on top of raw TCP listner
+    tlsListener := tls.NewListener(listener, TlsMan.TlsConfig)
+
+    return tlsListener, nil
 }

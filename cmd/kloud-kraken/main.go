@@ -248,8 +248,8 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
     // Set up the TLS listener to accept incoming connections
-    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool, ctx,
-                                                         "", appConfig.LocalConfig.ListenerPort, nil)
+    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool, ctx,
+                                                       "", appConfig.LocalConfig.ListenerPort, nil)
     if err != nil {
         logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
     }
@@ -291,7 +291,17 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 }
 
 
-// TODO:  document when finished
+// Takes the passed in args and formats them into the user data generated for EC2 creation.
+//
+// @Parameters
+// - appConf:  The configuration instance that stores program YAML data
+// - keyName:  The name of the key of the S3 bucket
+// - ipAddrs:  Slice of IP addresses to be formatted into CSV string
+// - ssmParam:  The path where the certificate is stored in SSM param store
+//
+// @Returns
+// - The generated EC2 user data with args formatted into it
+// - Error if it occurs, otherwise nil on success
 //
 func ec2UserDataGen(appConf *conf.AppConfig, keyName string, ipAddrs []string,
                     ssmParam string) (string, error) {
@@ -349,7 +359,17 @@ $CWD/client -applyOptimization=%t \
 }
 
 
-// TODO:  add doc
+// Generates permission policy for the server.
+//
+// @Parameters
+// - region:  The AWS region where actions will be performed
+// - accountId:  The AWS account ID where actions will be performed
+// - ssmParam:  The path where the certificate is stored in SSM param store
+// - bucketName:  The name of the S3 bucket where actions will be performed
+// - clientRoleName:  The name of IAM role the client will be using
+//
+// @Returns
+// - The generated permissions policy with args formatted into it
 //
 func serverPermPolicyGen(region string, accountId string, ssmParam string,
                          bucketName string, clientRoleName string) string {
@@ -402,7 +422,14 @@ func serverPermPolicyGen(region string, accountId string, ssmParam string,
 }
 
 
-// TODO:  add doc
+// Generates trust policy for the server.
+//
+// @Parameters
+// - accountId:  The AWS account ID where actions will be performed
+// - iamUser:  The IAM user that the policy will apply to
+//
+// @Returns
+// - The generated trust policy with args formatted into it
 //
 func serverTrustPolicyGen(accountId string, iamUser string) string {
     return fmt.Sprintf(`{
@@ -418,7 +445,17 @@ func serverTrustPolicyGen(accountId string, iamUser string) string {
 }
 
 
-// TODO:  add doc
+// Generates permission policy for the client.
+//
+// @Parameters
+// - bucketName:  The name of the S3 bucket where actions will be performed
+// - region:  The AWS region where actions will be performed
+// - accountId:  The AWS account ID where actions will be performed
+// - paramPath:  The path where the certificate is stored in SSM param store
+// - logGroup:  The name of the CloudWatch group being utilized
+//
+// @Returns
+// - The generated permissions policy with args formatted into it
 //
 func clientPermPolicyGen(bucketName string, region string, accountId string,
                          paramPath string, logGroup string) string {
@@ -460,7 +497,11 @@ func clientPermPolicyGen(bucketName string, region string, accountId string,
 }
 
 
-// TODO:  add doc
+// Generates trust policy for the client.
+//
+// @Returns
+// - The generated trust policy with args formatted into it
+//
 func clientTrustPolicyGen() string {
     return `{
   "Version": "2012-10-17",
@@ -560,15 +601,14 @@ func main() {
         }
 
         // Generate the servers TLS PEM certificate and key and save in TLS manager
-        TlsMan.CertPemBlock,
-        TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
+        err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
         if err != nil {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
         // Set up the AWS credentials based on local chain or environment variables
         awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
-                                                                        1 * time.Minute)
+                                                        1 * time.Minute)
         if err != nil {
             log.Fatalf("Error initializing AWS config:  %v", err)
         }
@@ -702,8 +742,7 @@ func main() {
     // If the program is being run in testing mode
     } else {
         // Generate the servers TLS PEM certificate & key and save in TLS manager
-        TlsMan.CertPemBlock,
-        TlsMan.KeyPemBlock, err = tlsutils.PemCertAndKeyGenHandler("Kloud Kraken", true)
+        err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", true)
         if err != nil {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
@@ -712,9 +751,7 @@ func main() {
     }
 
     // Generate a TLS x509 certificate and cert pool
-    TlsMan.TlsCertificate, TlsMan.CaCertPool, err = tlsutils.CertGenAndPool(TlsMan.CertPemBlock,
-                                                                            TlsMan.KeyPemBlock,
-                                                                            TlsMan.CaCertPemBlocks)
+    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock, TlsMan.CaCertPemBlocks)
     if err != nil {
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }
