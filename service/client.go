@@ -21,7 +21,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
@@ -610,9 +609,7 @@ func makeClientDirs() {
 // secret, set up logging manager, and set up connection with server.
 //
 func main() {
-    var awsAccessKey string
     var awsRegion string
-    var awsSecretKey string
     var certSsmParam string
     var ipAddrs string
     var isTesting bool
@@ -625,9 +622,7 @@ func main() {
     // Define command line flags with default values and descriptions
     flag.BoolVar(&HashcatArgsStruct.ApplyOptimization, "applyOptimization", false,
                  "Apply the -O flag for GPU optimization")
-    flag.StringVar(&awsAccessKey, "awsAccessKey", "", "The access key for AWS programmatic access")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
-    flag.StringVar(&awsSecretKey, "awsSecretKey", "", "The secret key for AWS programmatic access")
     flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
     flag.StringVar(&HashcatArgsStruct.CharSet1, "charSet1", "", "Custom character set 1 for masks")
     flag.StringVar(&HashcatArgsStruct.CharSet2, "charSet2", "", "Custom character set 2 for masks")
@@ -662,24 +657,17 @@ func main() {
 
     // If the program is being run in full mode (not testing)
     if !isTesting {
-        // If AWS access and secret key are not present
-        if awsAccessKey == "" || awsSecretKey == "" {
-            log.Fatalf("AWS access key or secret key missing and not in testing mode")
-        }
-
         // If parameter for SSM param store is not present
         if certSsmParam == "" {
             log.Fatalf("Missing parameter to retrieve TLS from SSM param store")
         }
 
-        // Set the AWS credentials provider
-        awsCreds := credentials.NewStaticCredentialsProvider(awsAccessKey, awsSecretKey, "")
-
-        // Load default config and override with custom credentials and region
-        awsConfig, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(awsRegion),
-                                                  config.WithCredentialsProvider(awsCreds))
+        // Load default config, which will include the instance-profile credentials
+        awsConfig, err := config.LoadDefaultConfig(context.TODO(),
+            config.WithRegion(awsRegion),
+        )
         if err != nil {
-            log.Fatalf("Error loading client AWS config:  %v", err)
+            log.Fatalf("Error loading AWS config: %v", err)
         }
 
         // Establish client to SSM

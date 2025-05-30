@@ -103,24 +103,41 @@ func CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte, caCertPemBlocks [][]byt
 }
 
 
-// Function for handling the TLS config generation and client verification.
+// Attempts a GET request to retrieve IP data from passed in API URL.
 //
 // @Parameters
-// - cert:  The TLS certificate to be used in config generation
-// - serverPool:  The servers TLS certificate pool
+// - ctx:  The context handler for the request
+// - cancel:  The cancel function for the context handler
+// - url:  The url of the API to attempt to retrieve IP data
 //
 // @Returns
-// - function that returns the TLS config and errors if any occur
+// - The retrieved IP data from the GET request
+// - Error if it occurs, otherwise nil on success
 //
-func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(
-                        *tls.ClientHelloInfo) (*tls.Config, error) {
-    return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-        // Generate new TLS configuration instance
-        cfg := NewServerTlsConfig(cert)
-        // Inject the VerifyPeerCertificate callback with access to hello
-        cfg.VerifyPeerCertificate = VerifyClientCert(serverPool, hello)
-        return cfg, nil
+func GetIpData(ctx context.Context, cancel context.CancelFunc, url string) (
+               []byte, error) {
+    // Cancel request context on local exit
+    defer cancel()
+    // Initialize HTTP GET request
+    req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+    if err != nil {
+        return []byte(""), err
     }
+
+    // Send HTTP GET request
+    response, err := client.Do(req)
+    if err != nil {
+        return []byte(""), err
+    }
+
+    // Read the response data of the request
+    data, err := io.ReadAll(response.Body)
+    response.Body.Close()
+    if err != nil {
+        return []byte(""), err
+    }
+
+    return data, nil
 }
 
 
@@ -141,23 +158,8 @@ func GetPublicIps() ([]string, error) {
     for _, url := range endpoints {
         // create a fresh 5s context for each request
         ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-        defer cancel()
-
-        // Initialize HTTP GET request
-        req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-        if err != nil {
-            continue
-        }
-
-        // Send HTTP GET request
-        response, err := client.Do(req)
-        if err != nil {
-            continue
-        }
-
-        // Read the response data of the request
-        data, err := io.ReadAll(response.Body)
-        response.Body.Close()
+        // Execute GET request to retrieve IP data
+        data, err := GetIpData(ctx, cancel, url)
         if err != nil {
             continue
         }
@@ -186,6 +188,27 @@ func GetPublicIps() ([]string, error) {
     }
 
     return ipAddrs, nil
+}
+
+
+// Function for handling the TLS config generation and client verification.
+//
+// @Parameters
+// - cert:  The TLS certificate to be used in config generation
+// - serverPool:  The servers TLS certificate pool
+//
+// @Returns
+// - function that returns the TLS config and errors if any occur
+//
+func GetServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(
+                        *tls.ClientHelloInfo) (*tls.Config, error) {
+    return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+        // Generate new TLS configuration instance
+        cfg := NewServerTlsConfig(cert)
+        // Inject the VerifyPeerCertificate callback with access to hello
+        cfg.VerifyPeerCertificate = VerifyClientCert(serverPool, hello)
+        return cfg, nil
+    }
 }
 
 

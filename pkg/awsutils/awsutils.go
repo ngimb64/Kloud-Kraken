@@ -16,9 +16,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
-	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/smithy-go"
 )
 
@@ -95,13 +97,14 @@ type Ec2Manger struct {
     Count        int
     InstanceType string
     Name         string
+    RoleName     string
     RunResult    *ec2.RunInstancesOutput
     UserData     []byte
 }
 
 // TODO:  add doc
 func NewEc2Manager(ami string, config aws.Config, count int, instanceType string,
-                   name string, userData []byte) *Ec2Manger {
+                   name string, roleName string, userData []byte) *Ec2Manger {
     // Setup a new EC2 client
     ec2Client := ec2.NewFromConfig(config)
 
@@ -112,6 +115,7 @@ func NewEc2Manager(ami string, config aws.Config, count int, instanceType string
         Count:        count,
         InstanceType: instanceType,
         Name:         name,
+        RoleName:     roleName,
         UserData:     userData,
     }
 }
@@ -136,6 +140,9 @@ func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration) (error) {
         MinCount:     aws.Int32(int32(Ec2Man.Count)),
         MaxCount:     aws.Int32(int32(Ec2Man.Count)),
         UserData:     aws.String(encodedUserData),
+        IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
+            Name: aws.String(Ec2Man.RoleName),
+        },
         // Tag instances on creation
         TagSpecifications: []ec2types.TagSpecification{
             {
@@ -187,6 +194,95 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
     }
 
     return termOutput, nil
+}
+
+
+// Creates an IAM role with the passed in JSON policy data applied.
+//
+// @Parameters
+// - awsConfig:
+// - callTime:
+// - roleName:  The IAM Role to attach to
+// - trustPolicyJson:  The JSON trust policy
+// - permPolicyName:  An identifier name for permissions policy
+// - permPolicyJSON:  The JSON permissions policy
+// - createProfile:  Toggle to set whether instance profiles are created or not
+//
+// @Returns
+// - The ARN of the existing or created role
+// - Error if it occurs, otherwise nil on success
+//
+func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName string,
+                     trustPolicyJson string, permPolicyName string,
+                     permPolicyJson string, createProfile bool) (string, error) {
+    var roleArn string
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Check if the IAM role exists
+    getOut, err := iamClient.GetRole(ctx, &iam.GetRoleInput{
+        RoleName: aws.String(roleName),
+    })
+    if err != nil {
+        var notFound *iamtypes.NoSuchEntityException
+
+        // If the IAM role does not exist
+        if ok := errors.As(err, &notFound); ok {
+            // Create the IAM role
+            createOut, err := iamClient.CreateRole(ctx, &iam.CreateRoleInput{
+                RoleName:                 aws.String(roleName),
+                AssumeRolePolicyDocument: aws.String(trustPolicyJson),
+            })
+            if err != nil {
+                return "", fmt.Errorf("CreateRole failed: %w", err)
+            }
+
+            // Set the role ARN from output
+            roleArn = aws.ToString(createOut.Role.Arn)
+        } else {
+            return "", fmt.Errorf("GetRole failed: %w", err)
+        }
+    } else {
+        // Role existed, grab its ARN
+        roleArn = aws.ToString(getOut.Role.Arn)
+    }
+
+    // Attach or overwrite the inline permissions policy
+    _, err = iamClient.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
+        RoleName:       aws.String(roleName),
+        PolicyName:     aws.String(permPolicyName),
+        PolicyDocument: aws.String(permPolicyJson),
+    })
+    if err != nil {
+        return "", fmt.Errorf("PutRolePolicy failed: %w", err)
+    }
+
+    if createProfile {
+        // Create the instance profile
+        _, err = iamClient.CreateInstanceProfile(ctx, &iam.CreateInstanceProfileInput{
+            InstanceProfileName: aws.String(roleName),
+        })
+        if err != nil {
+            var entityExists *iamtypes.EntityAlreadyExistsException
+
+            // If the error is not that the instance profile already exists
+            if !errors.As(err, &entityExists) {
+                return "", fmt.Errorf("CreateInstanceProfile failed: %w", err)
+            }
+        }
+
+        // Add role to the instance profile
+        _, err = iamClient.AddRoleToInstanceProfile(ctx, &iam.AddRoleToInstanceProfileInput{
+            InstanceProfileName: aws.String(roleName),
+            RoleName:            aws.String(roleName),
+        })
+        if err != nil {
+            return "", fmt.Errorf("AddRoleToInstanceProfile failed: %w", err)
+        }
+    }
+
+    return roleArn, nil
 }
 
 
@@ -388,7 +484,7 @@ func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Durati
 func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
                                           callTime time.Duration) (
                                           string, error) {
-    var existsErr *types.ParameterAlreadyExists
+    var existsErr *ssmtypes.ParameterAlreadyExists
 
     // Keep attemping parameters with number added until unused is found
     for i := 1;; i++ {
@@ -401,7 +497,7 @@ func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
         _, err := SsmMan.Client.PutParameter(ctx, &ssm.PutParameterInput{
             Name:      aws.String(candidate),
             Value:     aws.String(data),
-            Type:      types.ParameterTypeSecureString,
+            Type:      ssmtypes.ParameterTypeSecureString,
             Overwrite: aws.Bool(false),
         })
         // Cancel context per API call

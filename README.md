@@ -19,3 +19,35 @@
 - When running the program in full mode with AWS environment there are two options for credential setup
     - Configure API access credentials locally before running with `aws configure`
     - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY
+
+
+AWS Services Featured
+---
+- CloudWatch
+- EC2
+- IAM
+- S3 Buckets
+- SSM Parameter Store
+
+
+- Start out by creating an IAM user group with below permissions attached using the policy editor
+```
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:PutRolePolicy",
+        "iam:CreateInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "sts:AssumeRole"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+- Create a user and assign them to the created user group with IAM permissions

@@ -16,6 +16,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
@@ -289,9 +293,8 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 
 // TODO:  document when finished
 //
-func ec2UserDataGen(appConf *conf.AppConfig, accessKey string, secretKey string,
-                    keyName string, ipAddrs []string, ssmParam string) (
-                    string, error) {
+func ec2UserDataGen(appConf *conf.AppConfig, keyName string, ipAddrs []string,
+                    ssmParam string) (string, error) {
     var hasRuleset bool
     // Convert the slice of IP addresses to CSV string
     ipAddrsCsv, err := data.SliceToCsv(ipAddrs)
@@ -307,18 +310,13 @@ func ec2UserDataGen(appConf *conf.AppConfig, accessKey string, secretKey string,
     }
 
     data := fmt.Sprintf(`#!/bin/bash
-export AWS_ACCESS_KEY_ID=%s
-export AWS_SECRET_ACCESS_KEY=%s
-
 apt update && apt upgrade -y && apt install -y hashcat
 
 CWD=$(pwd)
 aws s3 cp s3://%s/%s $CWD/client --region %s --no-progress
 chmod +x $CWD/client
 $CWD/client -applyOptimization=%t \
-            -awsAccessKey=%s \
             -awsRegion=%s \
-            -awsSecretKey=%s \
             -certSsmParam=%s \
             -charSet1=%s \
             -charSet2=%s \
@@ -336,15 +334,142 @@ $CWD/client -applyOptimization=%t \
             -maxTransfers=%d \
             -port=%d \
             -workload=%s
-`, accessKey, secretKey, appConf.LocalConfig.BucketName, keyName, appConf.ClientConfig.Region, true,
-   accessKey, appConf.ClientConfig.Region, secretKey, ssmParam, appConf.ClientConfig.CharSet1,
-   appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
-   appConf.ClientConfig.CrackingMode, appConf.ClientConfig.HashMask, appConf.ClientConfig.HashType,
-   hasRuleset, ipAddrsCsv, false, appConf.ClientConfig.LogMode, appConf.ClientConfig.LogPath,
+`, appConf.LocalConfig.BucketName, keyName,
+   appConf.ClientConfig.Region, true,
+   appConf.ClientConfig.Region, ssmParam,
+   appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
+   appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
+   appConf.ClientConfig.CrackingMode, appConf.ClientConfig.HashMask,
+   appConf.ClientConfig.HashType, hasRuleset, ipAddrsCsv, false,
+   appConf.ClientConfig.LogMode, appConf.ClientConfig.LogPath,
    appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
    appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
     return data, nil
+}
+
+
+// TODO:  add doc
+//
+func serverPermPolicyGen(region string, accountId string, ssmParam string,
+                         bucketName string, clientRoleName string) string {
+    return fmt.Sprintf(`{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SSMUploadClientCert",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter"
+      ],
+      "Resource": "arn:aws:ssm:%s:%s:parameter%s*"
+    },
+    {
+      "Sid": "S3UploadClientBinary",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:PutObjectAcl"
+      ],
+      "Resource": "arn:aws:s3:::%s/*"
+    },
+    {
+      "Sid": "EC2LifecycleControl",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:TerminateInstances",
+        "ec2:DescribeInstances",
+        "ec2:CreateTags"
+      ],
+      "Resource": [
+        "arn:aws:ec2:%s:%s:instance/*",
+        "arn:aws:ec2:%s:%s:subnet/*",
+        "arn:aws:ec2:%s:%s:security-group/*"
+      ]
+    },
+    {
+      "Sid": "EC2PassRoleForInstanceProfile",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": "arn:aws:iam::%s:role/%s"
+    }
+  ]
+}`, region, accountId, ssmParam, bucketName, region, accountId, region,
+    accountId, region, accountId, accountId, clientRoleName)
+}
+
+
+// TODO:  add doc
+//
+func serverTrustPolicyGen(accountId string, iamUser string) string {
+    return fmt.Sprintf(`{
+  "Version":"2012-10-17",
+  "Statement":[{
+    "Effect":"Allow",
+    "Principal":{
+      "AWS":"arn:aws:iam::%s:user/%s"
+    },
+    "Action":"sts:AssumeRole"
+  }]
+}`, accountId, iamUser)
+}
+
+
+// TODO:  add doc
+//
+func clientPermPolicyGen(bucketName string, region string, accountId string,
+                         paramPath string, logGroup string) string {
+    return fmt.Sprintf(`{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3DownloadBinary",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::%s/*"
+    },
+    {
+      "Sid": "SSMFetchParameters",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath"
+      ],
+      "Resource": [
+        "arn:aws:ssm:%s:%s:parameter%s*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchLogging",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:%s:%s:log-group:/%s*"
+    }
+  ]
+}`, bucketName, region, accountId, paramPath, region, accountId, logGroup)
+}
+
+
+// TODO:  add doc
+func clientTrustPolicyGen() string {
+    return `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect":    "Allow",
+    "Principal": { "Service": "ec2.amazonaws.com" },
+    "Action":    "sts:AssumeRole"
+  }]
+}`
 }
 
 
@@ -442,17 +567,68 @@ func main() {
         }
 
         // Set up the AWS credentials based on local chain or environment variables
-        awsConfig, accessKey, secretKey, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
-                                                                        1*time.Minute)
+        awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
+                                                                        1 * time.Minute)
         if err != nil {
             log.Fatalf("Error initializing AWS config:  %v", err)
+        }
+
+
+        // TODO:  add account ID in YAML and add as third parameter in function below
+
+
+        // Setup client to IAM service
+        iamClient := iam.NewFromConfig(awsConfig)
+
+        // Generate the EC2 clients trust and permissions policy templates
+        trustPolicy := clientTrustPolicyGen()
+        permissionsPolicy := clientPermPolicyGen(appConfig.LocalConfig.BucketName,
+                                                 appConfig.ClientConfig.Region, "<add_account_id>",
+                                                 "/kloud-kraken/tls/cert", "Kloud-Kraken")
+        // Create and apply the EC2 client role
+        _, err = awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ClientRole", trustPolicy,
+                                          "ClientPermissions", permissionsPolicy, true)
+        if err != nil {
+            log.Fatalf("Error creating IAM ClientRole:  %v", err)
+        }
+
+
+        // TODO:  add IAM user in yaml data and add as second param and account id as first param below
+
+
+        // Generate the servers trust and permissions policy templates
+        trustPolicy = serverTrustPolicyGen("<add_account_id>", "<add_iam_user>")
+        permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region, "<add_account_id>",
+                                                "/kloud-kraken/tls/cert", appConfig.LocalConfig.BucketName,
+                                                "ClientRole")
+        // Create and apply role for local server permissions
+        serverArn, err := awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ServerRole", trustPolicy,
+                                                   "ServerPermissions", permissionsPolicy, false)
+        if err != nil {
+            log.Fatalf("Error creating IAM ServerRole:  %v", err)
+        }
+
+        // Set up client to Security Token Service
+        stsClient := sts.NewFromConfig(awsConfig)
+        // Format role ARN from created role
+        roleArn := "arn:aws:iam::" + serverArn + ":role/ServerRole"
+        // Create a provider that will call STS AssumeRole under the covers
+        assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
+
+        // Create fresh AWS config from new STS provider
+        awsConfig, err = config.LoadDefaultConfig(context.TODO(),
+            config.WithRegion(appConfig.LocalConfig.Region),
+            config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
+        )
+        if err != nil {
+            log.Fatalf("Error recreating server AWS credentials:  %v", err)
         }
 
         // Establish client to SSM
         ssmMan := awsutils.NewSsmManager(awsConfig)
         // Push the servers certificate PEM into SSM parameter store
         param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert", string(TlsMan.CertPemBlock),
-                                             1*time.Minute)
+                                             1 * time.Minute)
         if err != nil {
             log.Fatalf("Error putting TLS PEM certificate in SSM Parameter Store:  %v", err)
         }
@@ -467,7 +643,7 @@ func main() {
 
         // If S3 bucket does not exist create one
         if !exists {
-            err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1*time.Minute)
+            err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
             if err != nil {
                 log.Fatalf("Error creating S3 bucket:  %v", err)
             }
@@ -481,32 +657,35 @@ func main() {
 
         // Upload the client binary to S3 Bucket
         keyName, err := s3Man.PutS3Object(appConfig.LocalConfig.BucketName, "client",
-                                          binData, 1*time.Minute)
+                                          binData, 1 * time.Minute)
         if err != nil {
             log.Fatalf("Error putting object in S3 bucket:  %v", err)
         }
 
         // Generate user data script to set up client program in EC2
-        userData, err := ec2UserDataGen(appConfig, accessKey, secretKey,
-                                        keyName, publicIps, param)
+        userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
         if err != nil {
             log.Fatalf("Error generating user data for EC2:  %v", err)
         }
+
+
+        // TODO:  add subnets and security groups in YAML and add to below function
+
 
         // Setup EC2 creation instance with populated args
         ec2Man := awsutils.NewEc2Manager("ami-0eb94e3d16a6eea5f", awsConfig,
                                          appConfig.LocalConfig.NumberInstances,
                                          appConfig.LocalConfig.InstanceType,
-                                         "Kloud-Kraken", []byte(userData))
+                                         "Kloud-Kraken", "ClientRole", []byte(userData))
         // Create number of EC2 instances based on passed in data
-        err = ec2Man.CreateEc2Instances(20*time.Minute)
+        err = ec2Man.CreateEc2Instances(20 * time.Minute)
         if err != nil {
             log.Fatalf("Error creating EC2 instances:  %v", err)
         }
 
         defer func() {
             // Terminate the EC2 instances when processing is complete
-            termOutput, err := ec2Man.TerminateEc2Instances(time.Minute*10)
+            termOutput, err := ec2Man.TerminateEc2Instances(time.Minute * 10)
             if err != nil {
                 log.Fatalf("Error terminating EC2 instances:  %v", err)
             }
