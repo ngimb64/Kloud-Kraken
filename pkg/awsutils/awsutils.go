@@ -24,7 +24,18 @@ import (
 	"github.com/aws/smithy-go"
 )
 
-// TODO: add doc
+// Attempts to load AWS access and secret keys from the default keychain.
+//
+// @Parameters
+// - region:  The AWS region wherer the API credential are to be utilized
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - The AWS credentials config
+// - The AWS API access key ID
+// - The AWS API secret access key
+// - Boolean indicating whether the credentials exist or not in default keychain
+//
 func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
                                  aws.Config, string, string, bool) {
     // Load the local credential chain (env, ~/.aws, etc.)
@@ -51,6 +62,7 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 //
 // @Paramters
 // - region:  The AWS region wherer the API credential are to be utilized
+// - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns:
 // - The initialized AWS credentials config
@@ -89,11 +101,10 @@ func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, string, 
 }
 
 
-// Struct for managing EC2 instance creation
+// Struct for managing EC2 operations
 type Ec2Manger struct {
     AMI          string
     Client       *ec2.Client
-    Config       aws.Config
     Count        int
     InstanceType string
     Name         string
@@ -102,16 +113,28 @@ type Ec2Manger struct {
     UserData     []byte
 }
 
-// TODO:  add doc
-func NewEc2Manager(ami string, config aws.Config, count int, instanceType string,
+// Establishes connection to EC2 service and generates EC2 manager struct
+//
+// @Parameters
+// - ami:  The Amazon Machine Image that the EC2 instances will be using
+// - awsConfig:  The AWS credential configuration for connecting to service
+// - count:  The number of instances to be spawned
+// - instanceType:  The type of instance to be used
+// - name:  The name of the service to be tagged for easy reference
+// - roleName:  The name of the IAM role to be utilized
+// - userData:   The user data to be fed into each EC2 and executed
+//
+// @Returns
+// - The initialized EC2 manager with populated data
+//
+func NewEc2Manager(ami string, awsConfig aws.Config, count int, instanceType string,
                    name string, roleName string, userData []byte) *Ec2Manger {
     // Setup a new EC2 client
-    ec2Client := ec2.NewFromConfig(config)
+    ec2Client := ec2.NewFromConfig(awsConfig)
 
     return &Ec2Manger{
         AMI:          ami,
         Client:       ec2Client,
-        Config:       config,
         Count:        count,
         InstanceType: instanceType,
         Name:         name,
@@ -123,7 +146,11 @@ func NewEc2Manager(ami string, config aws.Config, count int, instanceType string
 // Launches EC2 instances based on passed in count, pausing between each based on
 // based in delay.
 //
-// TODO: finish doc
+// @Parameters
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration) (error) {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -165,7 +192,15 @@ func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration) (error) {
     return nil
 }
 
-// TODO:  add doc
+// Terminates the EC2 instances by ID's collected from creation method result.
+//
+// @Parameters
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - The output from the EC2 termination API call
+// - Error if it occurs, otherwise nil on success
+//
 func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
                                                *ec2.TerminateInstancesOutput, error) {
     var ids []string
@@ -200,8 +235,8 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
 // Creates an IAM role with the passed in JSON policy data applied.
 //
 // @Parameters
-// - awsConfig:
-// - callTime:
+// - iamClient:  The client to the IAM service
+// - callTime:  The length of time the API call is allowed to execute
 // - roleName:  The IAM Role to attach to
 // - trustPolicyJson:  The JSON trust policy
 // - permPolicyName:  An identifier name for permissions policy
@@ -286,10 +321,19 @@ func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName str
 }
 
 
+// Struct for managing S3 bucket operations
 type S3Manager struct {
     Client     *s3.Client
 }
 
+// Establishes connection to EC2 service and generates EC2 manager struct
+//
+// @Parameters
+// - awsConfig:  The AWS credential configuration for connecting to service
+//
+// @Returns
+// - The initialized S3 manager with client reference
+//
 func NewS3Manager(config aws.Config) *S3Manager {
     // Set up a new S3 client
     s3Client := s3.NewFromConfig(config)
@@ -299,7 +343,16 @@ func NewS3Manager(config aws.Config) *S3Manager {
     }
 }
 
-// TODO: add doc
+// Checks to see if an S3 bucket already exists.
+//
+// @Parameters
+// - bucketName:  The name of the S3 bucket to check existence
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - Boolean toggle whether the bucket exists or not
+// - Error if it occurs, otherwise nil on success
+//
 func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) (
                                      bool, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -331,7 +384,15 @@ func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) 
     return false, err
 }
 
-// TODO: add doc
+// Create an S3 bucket.
+//
+// @Parameters
+// - bucketName:  The name of the bucket to be created
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
 func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) error {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -362,7 +423,17 @@ func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) 
     return err
 }
 
-// TODO: add doc
+// Retrieve object from S3 bucket.
+//
+// @Parameters
+// - bucketName:  The name of the bucket where the object will be retrieved
+// - key:  The key in bucket used to identify the object to retrieve
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - The retrieved S3 object as a byte slice
+// - Error if it occurs, otherwise nil on success
+//
 func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
                                     callTime time.Duration) (
                                     []byte, error) {
@@ -391,15 +462,26 @@ func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
     return rawData, nil
 }
 
-// TODO:  add doc
-func (S3Man *S3Manager) PutS3Object(bucketName string, keyName string, data []byte,
+// Put an object into a S3 bucket.
+//
+// @Parameters
+// - bucketName:  The name of the S3 bucket where the object will be stored
+// - key:  The key in bucket used to identify where the object will be stored
+// - data:  The data to be stored associated with the key of in the S3 bucket
+// - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+// - The final key name that is used
+// - Error if it occurs, otherwise nil on success
+//
+func (S3Man *S3Manager) PutS3Object(bucketName string, key string, data []byte,
                                     callTime time.Duration) (string, error) {
     var apiErr smithy.APIError
 
     // Keep attemping key with number added until unused is found
     for i := 1; ; i++ {
         // Add number to end of key name
-        candidate := keyName + "-" + strconv.Itoa(i)
+        candidate := key + "-" + strconv.Itoa(i)
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
@@ -429,10 +511,19 @@ func (S3Man *S3Manager) PutS3Object(bucketName string, keyName string, data []by
 }
 
 
+// Struct for managing S3 bucket operations
 type SsmManager struct {
     Client    *ssm.Client
 }
 
+// Establishes connection to SSM service and generates SSM manager struct
+//
+// @Parameters
+// - awsConfig:  The AWS credential configuration for connecting to service
+//
+// @Returns
+// - The initialized SSM manager with client reference
+//
 func NewSsmManager(config aws.Config) *SsmManager {
     // Set up a new SSM client
     ssmClient := ssm.NewFromConfig(config)
@@ -445,7 +536,7 @@ func NewSsmManager(config aws.Config) *SsmManager {
 // Retrieve value from AWS SSM Parameter Store.
 //
 // @Parameters
-// - name:  name of the parameter to retrieve
+// - parameter:  name of the parameter to retrieve
 // - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
@@ -473,7 +564,7 @@ func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Durati
 // Put value into AWS SSM Parameter Store.
 //
 // @Parameters
-// - name:  name of the parameter to retrieve
+// - parameter:  name of the parameter to retrieve
 // - data:  The data to store with associated parameter
 // - callTime:  The length of time the API call is allowed to execute
 //
