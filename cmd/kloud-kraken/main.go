@@ -514,6 +514,138 @@ func clientTrustPolicyGen() string {
 }
 
 
+// Sets the up AWS credentials, uses the IAM permissions in the credentials to set up client
+// and server roles in IAM. Then assumes created server role via the STS service. Puts the
+// generated TLS certificate in SSM parameter store and client binary in S3 bucket for later
+// retrieval. Concludes by launching EC2 instances.
+//
+// @Parameters
+// - appConfig:  The configuration instance with program YAML data
+// - publicIps:  List of public IPs to format into user data template
+//
+// @Returns
+// - The EC2 manager instance to utilize for later operations
+// - Error if it occurs, otherwise nil on success
+//
+func awsSetup(appConfig *conf.AppConfig, publicIps []string) (*awsutils.Ec2Manger, error) {
+    var ec2Man *awsutils.Ec2Manger
+    // Set up the AWS credentials based on local chain or environment variables
+    awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
+                                                    1 * time.Minute)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Setup client to IAM service
+    iamClient := iam.NewFromConfig(awsConfig)
+
+    // Generate the EC2 clients trust and permissions policy templates
+    trustPolicy := clientTrustPolicyGen()
+    permissionsPolicy := clientPermPolicyGen(appConfig.LocalConfig.BucketName,
+                                                appConfig.ClientConfig.Region,
+                                                appConfig.LocalConfig.AccountId,
+                                                "/kloud-kraken/tls/cert", "Kloud-Kraken")
+    // Create and apply the EC2 client role
+    _, err = awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ClientRole", trustPolicy,
+                                        "ClientPermissions", permissionsPolicy, true)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Generate the servers trust and permissions policy templates
+    trustPolicy = serverTrustPolicyGen(appConfig.LocalConfig.AccountId,
+                                        appConfig.LocalConfig.IamUsername)
+    permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region,
+                                            appConfig.LocalConfig.AccountId,
+                                            "/kloud-kraken/tls/cert",
+                                            appConfig.LocalConfig.BucketName,
+                                            "ClientRole")
+    // Create and apply role for local server permissions
+    serverArn, err := awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ServerRole", trustPolicy,
+                                                "ServerPermissions", permissionsPolicy, false)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Set up client to Security Token Service
+    stsClient := sts.NewFromConfig(awsConfig)
+    // Format role ARN from created role
+    roleArn := "arn:aws:iam::" + serverArn + ":role/ServerRole"
+    // Create a provider that will call STS AssumeRole under the covers
+    assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
+
+    // Create fresh AWS config from new STS provider
+    awsConfig, err = config.LoadDefaultConfig(context.TODO(),
+        config.WithRegion(appConfig.LocalConfig.Region),
+        config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
+    )
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Establish client to SSM
+    ssmMan := awsutils.NewSsmManager(awsConfig)
+    // Push the servers certificate PEM into SSM parameter store
+    param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert", string(TlsMan.CertPemBlock),
+                                            1 * time.Minute)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Establish client to S3
+    s3Man := awsutils.NewS3Manager(awsConfig)
+    // Check to see if S3 bucket exists
+    exists, err := s3Man.BucketExists(appConfig.LocalConfig.BucketName, 1*time.Minute)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // If S3 bucket does not exist create one
+    if !exists {
+        err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
+        if err != nil {
+            return ec2Man, err
+        }
+    }
+
+    // Read the client binary into memory
+    binData, err := os.ReadFile("./client")
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Upload the client binary to S3 Bucket
+    keyName, err := s3Man.PutS3Object(appConfig.LocalConfig.BucketName, "client",
+                                        binData, 1 * time.Minute)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Generate user data script to set up client program in EC2
+    userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    // Setup EC2 creation instance with populated args
+    ec2Man = awsutils.NewEc2Manager("ami-0eb94e3d16a6eea5f", awsConfig,
+                                    appConfig.LocalConfig.NumberInstances,
+                                    appConfig.LocalConfig.InstanceType,
+                                    "Kloud-Kraken", "ClientRole",
+                                    appConfig.LocalConfig.SecurityGroupIds,
+                                    appConfig.LocalConfig.SecurityGroups,
+                                    appConfig.LocalConfig.SubnetId,
+                                    []byte(userData))
+    // Create number of EC2 instances based on passed in data
+    err = ec2Man.CreateEc2Instances(20 * time.Minute)
+    if err != nil {
+        return ec2Man, err
+    }
+
+    return ec2Man, nil
+}
+
+
 // Create the required dirs for program operation.
 //
 func makeServerDirs() {
@@ -606,121 +738,12 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        // Set up the AWS credentials based on local chain or environment variables
-        awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
-                                                        1 * time.Minute)
+        // Call handler function that sets up AWS IAM user permissions,
+        // transfers client binary via S3, set TLS certificate via SSM
+        // parameter store, and launches EC2 instances
+        ec2Man, err := awsSetup(appConfig, publicIps)
         if err != nil {
-            log.Fatalf("Error initializing AWS config:  %v", err)
-        }
-
-
-        // TODO:  add account ID in YAML and add as third parameter in function below
-
-
-        // Setup client to IAM service
-        iamClient := iam.NewFromConfig(awsConfig)
-
-        // Generate the EC2 clients trust and permissions policy templates
-        trustPolicy := clientTrustPolicyGen()
-        permissionsPolicy := clientPermPolicyGen(appConfig.LocalConfig.BucketName,
-                                                 appConfig.ClientConfig.Region, "<add_account_id>",
-                                                 "/kloud-kraken/tls/cert", "Kloud-Kraken")
-        // Create and apply the EC2 client role
-        _, err = awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ClientRole", trustPolicy,
-                                          "ClientPermissions", permissionsPolicy, true)
-        if err != nil {
-            log.Fatalf("Error creating IAM ClientRole:  %v", err)
-        }
-
-
-        // TODO:  add IAM user in yaml data and add as second param and account id as first param below
-
-
-        // Generate the servers trust and permissions policy templates
-        trustPolicy = serverTrustPolicyGen("<add_account_id>", "<add_iam_user>")
-        permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region, "<add_account_id>",
-                                                "/kloud-kraken/tls/cert", appConfig.LocalConfig.BucketName,
-                                                "ClientRole")
-        // Create and apply role for local server permissions
-        serverArn, err := awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ServerRole", trustPolicy,
-                                                   "ServerPermissions", permissionsPolicy, false)
-        if err != nil {
-            log.Fatalf("Error creating IAM ServerRole:  %v", err)
-        }
-
-        // Set up client to Security Token Service
-        stsClient := sts.NewFromConfig(awsConfig)
-        // Format role ARN from created role
-        roleArn := "arn:aws:iam::" + serverArn + ":role/ServerRole"
-        // Create a provider that will call STS AssumeRole under the covers
-        assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
-
-        // Create fresh AWS config from new STS provider
-        awsConfig, err = config.LoadDefaultConfig(context.TODO(),
-            config.WithRegion(appConfig.LocalConfig.Region),
-            config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
-        )
-        if err != nil {
-            log.Fatalf("Error recreating server AWS credentials:  %v", err)
-        }
-
-        // Establish client to SSM
-        ssmMan := awsutils.NewSsmManager(awsConfig)
-        // Push the servers certificate PEM into SSM parameter store
-        param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert", string(TlsMan.CertPemBlock),
-                                             1 * time.Minute)
-        if err != nil {
-            log.Fatalf("Error putting TLS PEM certificate in SSM Parameter Store:  %v", err)
-        }
-
-        // Establish client to S3
-        s3Man := awsutils.NewS3Manager(awsConfig)
-        // Check to see if S3 bucket exists
-        exists, err := s3Man.BucketExists(appConfig.LocalConfig.BucketName, 1*time.Minute)
-        if err != nil {
-            log.Fatalf("Error checking S3 bucket existence:  %v", err)
-        }
-
-        // If S3 bucket does not exist create one
-        if !exists {
-            err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
-            if err != nil {
-                log.Fatalf("Error creating S3 bucket:  %v", err)
-            }
-        }
-
-        // Read the client binary into memory
-        binData, err := os.ReadFile("./client")
-        if err != nil {
-            log.Fatalf("Error reading client binary from disk:  %v", err)
-        }
-
-        // Upload the client binary to S3 Bucket
-        keyName, err := s3Man.PutS3Object(appConfig.LocalConfig.BucketName, "client",
-                                          binData, 1 * time.Minute)
-        if err != nil {
-            log.Fatalf("Error putting object in S3 bucket:  %v", err)
-        }
-
-        // Generate user data script to set up client program in EC2
-        userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
-        if err != nil {
-            log.Fatalf("Error generating user data for EC2:  %v", err)
-        }
-
-
-        // TODO:  add subnets and security groups in YAML and add to below function
-
-
-        // Setup EC2 creation instance with populated args
-        ec2Man := awsutils.NewEc2Manager("ami-0eb94e3d16a6eea5f", awsConfig,
-                                         appConfig.LocalConfig.NumberInstances,
-                                         appConfig.LocalConfig.InstanceType,
-                                         "Kloud-Kraken", "ClientRole", []byte(userData))
-        // Create number of EC2 instances based on passed in data
-        err = ec2Man.CreateEc2Instances(20 * time.Minute)
-        if err != nil {
-            log.Fatalf("Error creating EC2 instances:  %v", err)
+            log.Fatalf("Error with AWS setup code:  %v", err)
         }
 
         defer func() {

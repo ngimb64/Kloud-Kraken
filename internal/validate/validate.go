@@ -16,6 +16,34 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 )
 
+// Package level variables
+var ReAccountId = regexp.MustCompile(`^\d{12}$`)
+var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
+var ReSecurityGroupId = regexp.MustCompile(`^sg-[0-9a-f]{8,}$`)
+var ReSecurityGroupName = regexp.MustCompile(
+    `^[A-Za-z0-9\s\.\_\-\:\/\(\)\#\,\@\[\]\+\=\&\;\{\}\!\$\*]{1,255}$`,
+)
+var ReSubnetId = regexp.MustCompile(`^subnet-[0-9a-f]{8,}$`)
+
+
+// Ensure the AWS account ID is of proper format.
+//
+// @Parameters
+// - accountId:  The ID number for the AWS account
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateAccountId(accountId string) error {
+    // If the account ID is not 12 digits
+    if !ReAccountId.MatchString(accountId) {
+        return errors.New("invalid AWS account ID, must be exactly 12 digits")
+    }
+
+    return nil
+}
+
+
 // Ensures the S3 bucket name is of proper format.
 //
 // @Parameters
@@ -274,6 +302,25 @@ func ValidateHashType(hashType string) bool {
 
     // Check to see if arg hash type is in the allowed hash types
     return data.StringSliceHasItem(hashTypes, hashType)
+}
+
+
+// Ensures the AWS IAM username is of proper format.
+//
+// @Parameters
+// - iamUsername:  The username of the IAM to be validated
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateIamUsername(iamUsername string) error {
+    // If the IAM username is not of proper format
+    if !ReIamUsername.MatchString(iamUsername) {
+        return errors.New("invalid IAM username, must be 1-64 characters and " +
+                          "only contain alphanumeric characters and +=,.@-_")
+    }
+
+    return nil
 }
 
 
@@ -548,6 +595,76 @@ func ValidateRulesetFile(filePath string) error {
     }
 
     return nil
+}
+
+
+// Ensures any security group IDs are of proper format.
+//
+// @Parameters
+// - securityGroupIds:  Slice of security group IDs to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateSecurityGroupIds(securityGroupIds []string) error {
+    // Iterate through passed in list of security group IDs
+    for _, sg := range securityGroupIds {
+        // If the current security group is not of proper format
+        if !ReSecurityGroupId.MatchString(sg) {
+            return fmt.Errorf("invalid security group ID - %q", sg)
+        }
+    }
+
+    return nil
+}
+
+
+// Ensures any security group names are of proper format.
+//
+// @Parameters
+// - securityGroups:  Slice of security group names to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateSecurityGroups(securityGroups []string) error {
+    // Iterate through passed in list of security group names
+    for _, name := range securityGroups {
+        // If the security group name is not of proper length
+        if len(name) == 0 || len(name) > 255 {
+            return fmt.Errorf("invalid security group name: %q (must be 1–255 characters)", name)
+        }
+
+        // If the security group has "sg-" prefix reserve for IDs
+        if len(name) >= 3 && name[:3] == "sg-" {
+            return fmt.Errorf("invalid security group name: %q (cannot start with \"sg-\")", name)
+        }
+
+        // If the security group name is not of proper format
+        if !ReSecurityGroupName.MatchString(name) {
+            return fmt.Errorf("invalid security group name - %q", name)
+        }
+    }
+
+    return nil
+}
+
+
+// Ensures the AWS subnet ID is of proper format.
+//
+// @Parameters
+// - subnetId:  Subnet ID to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateSubnetId(subnetId string) error {
+    // Ensure the AWS subnet ID is of proper format
+	if !ReSubnetId.MatchString(subnetId) {
+		return fmt.Errorf("invalid subnet ID - %q", subnetId)
+	}
+
+	return nil
 }
 
 

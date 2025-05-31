@@ -103,14 +103,17 @@ func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, string, 
 
 // Struct for managing EC2 operations
 type Ec2Manger struct {
-    AMI          string
-    Client       *ec2.Client
-    Count        int
-    InstanceType string
-    Name         string
-    RoleName     string
-    RunResult    *ec2.RunInstancesOutput
-    UserData     []byte
+    AMI              string
+    Client           *ec2.Client
+    Count            int
+    InstanceType     string
+    Name             string
+    RoleName         string
+    RunResult        *ec2.RunInstancesOutput
+    SecurityGroupIds []string
+    SecurityGroups   []string
+    SubnetId         string
+    UserData         []byte
 }
 
 // Establishes connection to EC2 service and generates EC2 manager struct
@@ -122,24 +125,31 @@ type Ec2Manger struct {
 // - instanceType:  The type of instance to be used
 // - name:  The name of the service to be tagged for easy reference
 // - roleName:  The name of the IAM role to be utilized
+// - securityGroupIds:  List of security group IDs to apply
+// - securityGroups:  List of security group names to apply
+// - subnetId:  The subnet ID to apply
 // - userData:   The user data to be fed into each EC2 and executed
 //
 // @Returns
 // - The initialized EC2 manager with populated data
 //
 func NewEc2Manager(ami string, awsConfig aws.Config, count int, instanceType string,
-                   name string, roleName string, userData []byte) *Ec2Manger {
+                   name string, roleName string, securityGroupIds []string,
+                   securityGroups []string, subnetId string, userData []byte) *Ec2Manger {
     // Setup a new EC2 client
     ec2Client := ec2.NewFromConfig(awsConfig)
 
     return &Ec2Manger{
-        AMI:          ami,
-        Client:       ec2Client,
-        Count:        count,
-        InstanceType: instanceType,
-        Name:         name,
-        RoleName:     roleName,
-        UserData:     userData,
+        AMI:              ami,
+        Client:           ec2Client,
+        Count:            count,
+        InstanceType:     instanceType,
+        Name:             name,
+        RoleName:         roleName,
+        SecurityGroupIds: securityGroupIds,
+        SecurityGroups:   securityGroups,
+        SubnetId:         subnetId,
+        UserData:         userData,
     }
 }
 
@@ -179,6 +189,21 @@ func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration) (error) {
                 },
             },
         },
+    }
+
+    // If there security groups IDs to apply
+    if len(Ec2Man.SecurityGroupIds) > 0 {
+        input.SecurityGroupIds = Ec2Man.SecurityGroupIds
+    }
+
+    // If there are security group names to apply
+    if len(Ec2Man.SecurityGroups) > 0 {
+        input.SecurityGroups = Ec2Man.SecurityGroups
+    }
+
+    // If there is specified subnet to apply
+    if Ec2Man.SubnetId != "" {
+        input.SubnetId = &Ec2Man.SubnetId
     }
 
     // Execute call to run the EC2 instance

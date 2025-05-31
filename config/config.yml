@@ -1,6 +1,8 @@
 local_config:
+  account_id: ""
   bucket_name: ""
   hash_file_path: "/home/thebugfather/Documents/project_testing/test-hashes"
+  iam_username: ""
   instance_type: "t2-micro"
   listener_port: 6969
   load_dir: "/home/thebugfather/Documents/project_testing/project_data"
@@ -11,6 +13,9 @@ local_config:
   number_instances: 1
   region: "us-east-1"
   ruleset_path: ""
+  security_group_ids: []
+  security_groups: []
+  subnet_id: ""
 
 client_config:
   apply_optimization: false

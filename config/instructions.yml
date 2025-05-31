@@ -1,0 +1,37 @@
+# Note:  each entry format   <label>: <description> | <default_value> | <options>
+
+local_config:
+  account_id: "The AWS account ID where operations will occur" | ""
+  bucket_name: "The AWS S3 bucket name" | "Kloud-Kraken"
+  hash_file_path: "The file path to the file of hashes to attempt to crack"
+  iam_username: "The IAM username initially setup manually"
+  instance_type: "The type of EC2 instance to be utilized for cracking"
+  listener_port: "The port of TLS listener to connect to access messaging system"
+  load_dir: "The path to the directory containing wordlist data for cracking attempts"
+  local_testing: "Toggle to specify whether the program is being tested locally (VMs) or in AWS"
+  log_path: "The path where the local log file will be produced"
+  max_merging_size: "The maximum file size (or within max range) where wordlist merging process occurs"
+  max_size_range: "Percentage range withing used to determine if value is in upper percentile of max file size or max merging"
+  number_instances: "The number of EC2 instances to use for cracking"
+  region: "The AWS region used for local server operations"
+  ruleset_path: "Path to the hashcat ruleset file to be utilized"
+  # Note:  If both security_group_ids and security_groups are empty, the defaults assigned by AWS will apply
+  security_group_ids: "List of security group IDs to use, if used security_groups can NOT be used"
+  security_groups: "List of security group names to use, if used security_group_ids can NOT be used"
+  subnet_id: "The subenet id where instances will be spawned, if empty default AWS assigned subnet will be used"
+
+client_config:
+  apply_optimization: "Toggle to specify whether GPU optimizations are to be applied to hashcat cracking process"
+  char_set1: "Specify custom charset used in hashmask, ignored if hash mask is not present"
+  char_set2: "Specify custom charset used in hashmask, ignored if hash mask is not present"
+  char_set3: "Specify custom charset used in hashmask, ignored if hash mask is not present"
+  char_set4: "Specify custom charset used in hashmask, ignored if hash mask is not present"
+  cracking_mode: "The cracking mode used by hashcat for cracking"
+  hash_mask: "The hash mask applied to hashcat for cracking"
+  hash_type: "The type of hash attempting to crack"
+  log_mode: "The log mode to be utilized on the client" | "both" | "both", "cloudwatch", "local"
+  log_path: "The path where the client log file will be produced"
+  max_file_size: "The max file size the client will ever expect to receive"
+  max_transfers: "The maximum number of transfer to occur at the same time"
+  region: "The AWS region used for remote client operations"
+  workload: "The workload for hashcat cracking process"

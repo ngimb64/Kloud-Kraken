@@ -1,3 +1,5 @@
+- Design CLI output and interface
+
 - Rerun system testing in AWS environment
 
 - Implement unit tests for tlsutils, awsutils, & kloudlogs

@@ -12,6 +12,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+
+func TestValidateAccountId(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateAccountId("123412341234")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateAccountId("blahblah")
+    // Ensure the error is not nil meaning failed operation
+    assert.NotEqual(nil, err)
+}
+
+
 func TestValidateBucketName(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -238,6 +255,22 @@ func TestValidateHashType(t *testing.T) {
     for _, falacy := range falacies {
         assert.False(validate.ValidateHashType(falacy))
     }
+}
+
+
+func TestValidateIamUsername(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateIamUsername("Dookie-Shoez")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateAccountId("!@)#%* $#)%\\|)!@#>>C<C")
+    // Ensure the error is not nil meaning failed operation
+    assert.NotEqual(nil, err)
 }
 
 
@@ -483,6 +516,65 @@ func TestValidateRulesetFile(t *testing.T) {
     err = os.RemoveAll(testDir)
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
+}
+
+
+func TestValidateSecurityGroupIds(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateSecurityGroupIds([]string{"sg-0a1b2c3d",
+                                                      "sg-0a1b2c3d4e5f6a7b8",
+                                                      "sg-abcdef1234567890abcdef"})
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateSecurityGroupIds([]string{"SG-01234567",
+                                                     "sg-0123456",
+                                                     "sg-0123 567",
+                                                     "sg-0123-4567"})
+    // Ensure the error is not nil meaning failed operation
+    assert.NotEqual(nil, err)
+}
+
+
+func TestValidateSecurityGroups(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateSecurityGroups([]string{"my-security-group",
+                                                    "AdminDatabaseSG",
+                                                    "web.server@frontend",
+                                                    "Production SG 01"})
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateSecurityGroups([]string{"sg-override",
+                                                   "Invalid~Name",
+                                                   "Name/With\\Backslash",
+                                                   "NameWith%Percent"})
+    // Ensure the error is not nil meaning failed operation
+    assert.NotEqual(nil, err)
+}
+
+
+func TestValidateSubnetId(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateSubnetId("subnet-0a1b2c3d4e5f6a7b8")
+    // Ensure the error is nil meaning successful operation
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateSubnetId("subnet-01234g78")
+    // Ensure the error is not nil meaning failed operation
+    assert.NotEqual(nil, err)
 }
 
 

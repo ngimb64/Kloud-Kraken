@@ -17,19 +17,24 @@ type AppConfig struct {
 
 // LocalConfig contains the yaml configuration for local server settings
 type LocalConfig struct {
-    BucketName          string  `yaml:"bucket_name"`
-    HashFilePath        string  `yaml:"hash_file_path"`
-    InstanceType        string  `yaml:"instance_type"`
-    ListenerPort        int     `yaml:"listener_port"`
-    LoadDir	   	        string  `yaml:"load_dir"`
-    LocalTesting        bool    `yaml:"local_testing"`
-    LogPath             string  `yaml:"log_path"`
-    MaxMergingSize      string  `yaml:"max_merging_size"`
-    MaxMergingSizeInt64 int64   `yaml:"-"`                 // Parsed later
-    MaxSizeRange        float64 `yaml:"max_size_range"`
-    NumberInstances     int     `yaml:"number_instances"`
-    Region              string  `yaml:"region"`
-    RulesetPath         string  `yaml:"ruleset_path"`
+    AccountId           string   `yaml:"account_id"`
+    BucketName          string   `yaml:"bucket_name"`
+    HashFilePath        string   `yaml:"hash_file_path"`
+    IamUsername         string   `yaml:"iam_username"`
+    InstanceType        string   `yaml:"instance_type"`
+    ListenerPort        int      `yaml:"listener_port"`
+    LoadDir	   	        string   `yaml:"load_dir"`
+    LocalTesting        bool     `yaml:"local_testing"`
+    LogPath             string   `yaml:"log_path"`
+    MaxMergingSize      string   `yaml:"max_merging_size"`
+    MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
+    MaxSizeRange        float64  `yaml:"max_size_range"`
+    NumberInstances     int      `yaml:"number_instances"`
+    Region              string   `yaml:"region"`
+    RulesetPath         string   `yaml:"ruleset_path"`
+    SecurityGroupIds    []string `yaml:"security_group_ids"`
+    SecurityGroups      []string `yaml:"security_groups"`
+    SubnetId            string   `yaml:"subnet_id"`
 }
 
 // ClientConfig contains the yaml configuration for the client settings
@@ -103,8 +108,14 @@ func LoadConfig(filePath string) *AppConfig {
 // - Error if it occurs, otherwise nil on success
 //
 func ValidateLocalConfig(localConfig *LocalConfig) error {
+    // Ensure the account id is of proper format
+    err := validate.ValidateAccountId(localConfig.AccountId)
+    if err != nil {
+        return err
+    }
+
     // Ensure the S3 bucket name is of proper format if exists
-    err := validate.ValidateBucketName(localConfig.BucketName)
+    err = validate.ValidateBucketName(localConfig.BucketName)
     if err != nil {
         return err
     }
@@ -115,20 +126,15 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
+    // Ensure the IAM username is valid
+    err = validate.ValidateIamUsername(localConfig.IamUsername)
+    if err != nil {
+        return err
+    }
+
     // Ensure instance type is in supported list
     if !validate.ValidateInstanceType(localConfig.InstanceType) {
         fmt.Errorf("improper instance_type - %w", err)
-    }
-
-    // Parse and convert the max merging size to raw bytes from any units
-    localConfig.MaxMergingSizeInt64, err = validate.ValidateFileSize(localConfig.MaxMergingSize)
-    if err != nil {
-        fmt.Errorf("improper max_merging_size - %w", err)
-    }
-
-    // Ensure the max size range is less or equal to 50 percent
-    if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
-        return fmt.Errorf("max_size_range greater than 50 percent")
     }
 
     // If the listerner port is less than 1000
@@ -148,6 +154,17 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
         return fmt.Errorf("improper log_path specified - %w", err)
     }
 
+    // Parse and convert the max merging size to raw bytes from any units
+    localConfig.MaxMergingSizeInt64, err = validate.ValidateFileSize(localConfig.MaxMergingSize)
+    if err != nil {
+        fmt.Errorf("improper max_merging_size - %w", err)
+    }
+
+    // Ensure the max size range is less or equal to 50 percent
+    if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
+        return fmt.Errorf("max_size_range greater than 50 percent")
+    }
+
     // If the number of instances is less than one
     if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
         return fmt.Errorf("number_instances must be a positive integer")
@@ -160,6 +177,24 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure the ruleset file path exists
     err = validate.ValidateRulesetFile(localConfig.RulesetPath)
+    if err != nil {
+        return err
+    }
+
+    // Ensure specified security group IDs are valid
+    err = validate.ValidateSecurityGroupIds(localConfig.SecurityGroupIds)
+    if err != nil {
+        return err
+    }
+
+    // Ensure specified security group names are valid
+    err = validate.ValidateSecurityGroups(localConfig.SecurityGroups)
+    if err != nil {
+        return err
+    }
+
+    // Ensure specified subnet ID is valid
+    err = validate.ValidateSubnetId(localConfig.SubnetId)
     if err != nil {
         return err
     }
