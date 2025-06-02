@@ -125,7 +125,7 @@ func TestSliceToCsv(t *testing.T) {
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the resulting CSV string is of proper format
-    assert.Equal("foo,bar,shazam,shamar", resultCsv)
+    assert.Equal("foo,bar,shazam,shamar\n", resultCsv)
 }
 
 

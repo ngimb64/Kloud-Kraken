@@ -58,11 +58,11 @@ func TestLoadConfig(t *testing.T) {
     yamlPath := "testdata.yml"
     testData := fmt.Sprintf(`
 local_config:
-  account_id: "123456789"
+  account_id: "123456789123"
   bucket_name: "test-bucket"
   hash_file_path: "%s"
   iam_username: "doug"
-  instance_type: "t2-micro"
+  instance_type: "p4d.24xlarge"
   listener_port: 6969
   load_dir: "%s"
   local_testing: true
@@ -72,9 +72,13 @@ local_config:
   number_instances: 3
   region: "us-east-1"
   ruleset_path: "%s"
-  security_group_ids: ["sg-01234567", "sg-0a1b2c3d4e5f6a7b8",
-                       "sg-abcdef1234567890abcdef]
-  security_groups: ["my-security-group", "web.server@frontend"]
+  security_group_ids:
+    - "sg-01234567"
+    - "sg-0a1b2c3d4e5f6a7b8"
+    - "sg-abcdef1234567890abcdef"
+  security_groups:
+    - "my-security-group"
+    - "web.server@frontend"
   subnet_id: "subnet-0a1b2c3d4e5f6a7b8"
 
 
@@ -103,11 +107,11 @@ client_config:
     config := conf.LoadConfig(yamlPath)
 
     // Validate local config fields to original data
-    assert.Equal("123456789", config.LocalConfig.AccountId)
+    assert.Equal("123456789123", config.LocalConfig.AccountId)
     assert.Equal("test-bucket", config.LocalConfig.BucketName)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
     assert.Equal("doug", config.LocalConfig.IamUsername)
-    assert.Equal("t2-micro", config.LocalConfig.InstanceType)
+    assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
     assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(testDir, config.LocalConfig.LoadDir)
     assert.True(config.LocalConfig.LocalTesting)

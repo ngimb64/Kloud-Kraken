@@ -134,7 +134,7 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure instance type is in supported list
     if !validate.ValidateInstanceType(localConfig.InstanceType) {
-        fmt.Errorf("improper instance_type - %w", err)
+        return fmt.Errorf("improper instance_type - %w", err)
     }
 
     // If the listerner port is less than 1000
@@ -157,7 +157,7 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
     // Parse and convert the max merging size to raw bytes from any units
     localConfig.MaxMergingSizeInt64, err = validate.ValidateFileSize(localConfig.MaxMergingSize)
     if err != nil {
-        fmt.Errorf("improper max_merging_size - %w", err)
+        return fmt.Errorf("improper max_merging_size - %w", err)
     }
 
     // Ensure the max size range is less or equal to 50 percent
