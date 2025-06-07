@@ -43,7 +43,6 @@ var LogPath string       // Stores log file to be returned to client
 var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 var RulesetFilePath string     // Stores ruleset file when received
-var Loot = filepath.Join(HashesPath, "loot.txt")  // Path to cracked hashes stored permanently
 var HashcatArgsStruct = new(hashcat.HashcatArgs)  // Initialze struct where hashcat options stored
 var TlsMan = new(tlsutils.TlsManager)             // Struct for managing TLS certs, keys, etc.
 
@@ -51,12 +50,15 @@ var TlsMan = new(tlsutils.TlsManager)             // Struct for managing TLS cer
 // Ensure the final cracked hashes file exists and has a message informing
 // the user no hashes were cracked.
 //
+// @Parmeters
+// - lootFile:  The file path where final cracked hashes are stored
+//
 // @ Returns
 // - Error if it occurs, otherwise nil on success
 //
-func createFailureResult() error {
+func createFailureResult(lootPath string) error {
     // Open the final cracked hashes file or create if it does not exist
-    hashesHandle, err := os.OpenFile(Loot, os.O_RDWR|os.O_CREATE, 0644)
+    hashesHandle, err := os.OpenFile(lootPath, os.O_RDWR|os.O_CREATE, 0644)
     if err != nil {
         return err
     }
@@ -107,8 +109,9 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 // - transferManager:  Manages calculating the amount of data being transferred locally
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, transferChannel chan struct{},
-                       waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
+func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
+                       transferChannel chan struct{}, waitGroup *sync.WaitGroup,
+                       transferManager *data.TransferManager,
                        logMan *kloudlogs.LoggerManager) {
     completed := false
     // Decrements the wait group counter upon local exit
@@ -125,8 +128,9 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, tra
         return
     }
 
-    // Format the path for temp cracked hashes file
+    // Format the path for temp & permanent cracked hashes files
     crackedPath := path.Join(cwd, "cracked.txt")
+    lootPath := filepath.Join(HashesPath, "loot.txt")
 
     // If GPU optimization is to be applied, append it to options slice
     if HashcatArgsStruct.ApplyOptimization {
@@ -239,11 +243,11 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, tra
         if exists && !isDir && hasData {
             // If there is data in cracked user hash file prior to processing,
             // append it to the final loot file
-            err = disk.AppendFile(crackedPath, Loot)
+            err = disk.AppendFile(crackedPath, lootPath)
             if err != nil {
                 logMan.LogMessage("error", "Error appending data to file:  %v", err,
                                   zap.String("source file", "cracked.txt"),
-                                  zap.String("destination file", Loot))
+                                  zap.String("destination file", lootPath))
                 return
             }
         }
@@ -267,7 +271,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, tra
     defer BufferMutex.Unlock()
 
     // Check to see if final cracked hashes file exits before sending back to server
-    exists, _, hasData, err := disk.PathExists(Loot)
+    exists, _, hasData, err := disk.PathExists(lootPath)
     if err != nil {
         logMan.LogMessage("error", "Error checking final cracked hashes file existence:  %v", err)
         return
@@ -277,7 +281,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, tra
     if !exists || !hasData {
         // Ensure final cracked hashes files exists with a message
         // that says cracking attempts were unsuccessful
-        err = createFailureResult()
+        err = createFailureResult(lootPath)
         if err != nil {
             logMan.LogMessage("error", "Error creating unsuccessful attempt " +
                               "message for clint:  %v", err)
@@ -286,7 +290,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{}, tra
     }
 
     // Transfer the final cracked user hash file to server
-    err = netio.UploadFile(connection, buffer, Loot, globals.LOOT_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, buffer, lootPath, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error occured sending the cracked hashes to server:  %v", err)
         return
@@ -435,8 +439,9 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 // - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 // - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{}, transferChannel chan struct{},
-                      waitGroup *sync.WaitGroup, transferManager *data.TransferManager,
+func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
+                      transferChannel chan struct{}, waitGroup *sync.WaitGroup,
+                      transferManager *data.TransferManager,
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
@@ -663,7 +668,8 @@ func main() {
         }
 
         // Load default config, which will include the instance-profile credentials
-        awsConfig, err := config.LoadDefaultConfig(context.TODO(),
+        awsConfig, err := config.LoadDefaultConfig(
+            context.TODO(),
             config.WithRegion(awsRegion),
         )
         if err != nil {
@@ -675,7 +681,7 @@ func main() {
         // Retrieve the server TLS cert from SSM param store
         certPemString, err := ssmMan.GetSsmParameter(certSsmParam, 1*time.Minute)
         if err != nil {
-            log.Fatalf("Error getting server TLS cert via SSM Parameter Store:  %v", err)
+            log.Fatalf("Error getting server TLS cert via SSM Param Store:  %v", err)
         }
 
         // Convert retrieved TLS cert PEM block to bytes
@@ -697,7 +703,8 @@ func main() {
     }
 
     // Generate a TLS x509 certificate and cert pool
-    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock, TlsMan.CaCertPemBlocks)
+    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
+                                TlsMan.CaCertPemBlocks)
     if err != nil {
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }

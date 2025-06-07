@@ -30,6 +30,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 	"github.com/ngimb64/Kloud-Kraken/pkg/tlsutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/tui"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
 	"go.uber.org/zap"
 )
@@ -51,9 +52,12 @@ var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, e
 // - waitGroup:  Used to synchronize the Goroutines running
 // - appConfig:  The configuration struct with loaded yaml program data
 // - logMan:  The kloudlogs logger manager for local logging
+// - ipAddr:  The IP address of the remote client connected to the server
+// - t:  The tui interface for displaying output
 //
 func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGroup,
-                    appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
+                    appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
+                    ipAddr string, t *tui.TUI) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
                                                appConfig.ClientConfig.MaxFileSizeInt64)
@@ -89,13 +93,6 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         return
     }
 
-    // Get the IP address from the ip:port host address
-    ipAddr, _, err := netio.GetIpPort(connection)
-    if err != nil {
-        logMan.LogMessage("error", "Error occcurred spliting host address to get IP/port:  %v", err)
-        return
-    }
-
     var port uint16
     // Receive bytes of port of client port to connect to for file transfer
     err = binary.Read(connection, binary.LittleEndian, &port)
@@ -115,7 +112,22 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         return
     }
 
-    logMan.LogMessage("info", "Connected remote client at %s on port %d", ipAddr, port)
+    // Display the remote client connected for file transfer in left panel
+    t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                    tui.LightCyan, "!"), "",
+                                    tui.NeonAzure, "Connected remote client ",
+                                    tui.RadiantAmethyst, ipAddr,
+                                    tui.NeonAzure, " on port ",
+                                    tui.KrakenGlowGreen, strconv.Itoa(int(port)))
+
+    // Display the file path to be transfered in right panel
+    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                     tui.LightCyan, "!"), "",
+                                     tui.RadiantAmethyst, filePath,
+                                     tui.NeonAzure, " to be transfered")
+
+    logMan.LogMessage("info", "Connected remote client %s on port %d, %s to be transfered",
+                      ipAddr, port, filePath)
     // Increment waitgroup counter
     waitGroup.Add(1)
 
@@ -129,6 +141,12 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         if err != nil {
             logMan.LogMessage("error", "Error occured transfering file to client:  %v", err)
         }
+
+        // Display the file path to be transfered in right panel
+        t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                        tui.LightCyan, "$"), "",
+                                        tui.RadiantAmethyst, filePath,
+                                        tui.NeonAzure, " transfer completed")
     } ()
 }
 
@@ -142,12 +160,15 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
 // - waitGroup:  Used to synchronize the Goroutines running
 // - appConfig:  The configuration struct with loaded yaml program data
 // - logMan:  The kloudlogs logger manager for local logging
+// - remoteAddr:  IP address to remote client that has connected
+// - t:  The tui interface for displaying output
 //
 func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
-                      appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
+                      appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
+                      remoteAddr string, t *tui.TUI) {
     // Close connection and decrement waitGroup counter on local exit
-    defer connection.Close()
     defer waitGroup.Done()
+    defer connection.Close()
 
     // Set buffer to receive client PEM certificate
     buffer := make([]byte, 2 * globals.KB)
@@ -162,6 +183,12 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     // Add the read client PEM cert to the cert pool
     TlsMan.AddCACert(buffer[:bytesRead])
 
+    // Notify TLS cerificate has been received in the tui right panel
+    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                     tui.LightCyan, "$"), "",
+                                     tui.NeonAzure, "TLS certificate received from client ",
+                                     tui.RadiantAmethyst, remoteAddr)
+
     // Reset buffer to messaging size
     buffer = make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
@@ -173,6 +200,12 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         return
     }
 
+    // Notify the hash file has been sent in the tui right panel
+    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                     tui.LightCyan, "$"), "",
+                                     tui.NeonAzure, "Hash file sent to client ",
+                                     tui.RadiantAmethyst, remoteAddr)
+
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
         // Upload the ruleset file to connection client
@@ -182,6 +215,12 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
             logMan.LogMessage("error", "Error sending the ruleset to server:  %v", err)
             return
         }
+
+        // Notify the ruleset file has been sent in the tui right panel
+        t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                         tui.LightCyan, "$"), "",
+                                         tui.NeonAzure, "Ruleset file sent to client ",
+                                         tui.RadiantAmethyst, remoteAddr)
     }
 
     for {
@@ -203,7 +242,8 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         // If the read data contains transfer request message
         if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_MARKER) {
             // Call method to handle file transfer based
-            handleTransfer(connection, buffer, waitGroup, appConfig, logMan)
+            handleTransfer(connection, buffer, waitGroup,
+                           appConfig, logMan, remoteAddr, t)
         }
     }
 
@@ -215,6 +255,12 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         return
     }
 
+    // Notify the cracked hashes file has been received in the tui right panel
+    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                     tui.LightCyan, "$"), "",
+                                     tui.NeonAzure, "Cracked hashes received from client ",
+                                     tui.RadiantAmethyst, remoteAddr)
+
     // Receive log file from client
     _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
                                globals.LOG_TRANSFER_PREFIX)
@@ -223,8 +269,20 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         return
     }
 
+    // Notify the log file has been received in the tui right panel
+    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                     tui.LightCyan, "$"), "",
+                                     tui.NeonAzure, "Log file received from client ",
+                                     tui.RadiantAmethyst, remoteAddr)
+
     // Decrement the active connection count
     CurrentConnections.Add(-1)
+
+    // Display the connection termination information in the left tui panel
+    t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                    tui.LightCyan, "-"), "",
+                                    tui.NeonAzure, "Connection closed for ",
+                                    tui.RadiantAmethyst, remoteAddr)
 
     logMan.LogMessage("info", "Connection processing handled",
                       zap.Int32("remaining connections", CurrentConnections.Load()))
@@ -244,6 +302,11 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
 
+    // Setup TUI interface for and ensure it closes on local exit
+    t := tui.NewTUI(100, "Connections", 500 * time.Millisecond, 3, "File Transfers")
+    go t.Start(tui.SkyBlue, tui.BrightMagenta, tui.BrightMint)
+    defer t.Stop()
+
     // Set up context handler for TLS listener
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
@@ -257,7 +320,15 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     // Close the TLS listener on local exit
     defer tlsListener.Close()
 
-    logMan.LogMessage("info", "Server started, waiting for connections ..")
+    // Display port TLS listener is on in the left panel
+    t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                    tui.LightCyan, "!"), "",
+                                    tui.NeonAzure, "Listening on port ",
+                                    tui.KrakenGlowGreen,
+                                    strconv.Itoa(appConfig.LocalConfig.ListenerPort))
+
+    logMan.LogMessage("info", "Listening for connections on port %s ..",
+                      appConfig.LocalConfig.ListenerPort)
 
     for {
         // If current number of connection is greater than or equal to number of instances
@@ -276,22 +347,32 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
         // Increment the active connection count
         CurrentConnections.Add(1)
 
-        logMan.LogMessage("info", "Connection accepted to remote client",
+        // Get the remote IP address for output/logging
+        remoteAddr := connection.RemoteAddr().String()
+
+        // Display the connection spawning information in the left tui panel
+        t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                        tui.LightCyan, "+"), "",
+                                        tui.NeonAzure, "Connection accepted from ",
+                                        tui.RadiantAmethyst, remoteAddr)
+
+        logMan.LogMessage("info", "Connection accepted from %s", remoteAddr,
                           zap.Int32("active connections", CurrentConnections.Load()))
 
         // Increment wait group and handle connection in separate Goroutine
         waitGroup.Add(1)
-        go handleConnection(connection, &waitGroup, appConfig, logMan)
+        go handleConnection(connection, &waitGroup, appConfig, logMan, remoteAddr, t)
     }
 
     // Wait for all active Goroutines to finish before shutting down the server
     waitGroup.Wait()
 
-    logMan.LogMessage("info", "All connections handled .. server shutting down")
+    // Sleep for a few seconds so information can be displayed before tui is stopped
+    time.Sleep(3 * time.Second)
 }
 
 
-// Takes the passed in args and formats them into the user data generated for EC2 creation.
+// Takes passed in args and formats into user data generated for EC2 creation.
 //
 // @Parameters
 // - appConf:  The configuration instance that stores program YAML data
@@ -514,26 +595,27 @@ func clientTrustPolicyGen() string {
 }
 
 
-// Sets the up AWS credentials, uses the IAM permissions in the credentials to set up client
-// and server roles in IAM. Then assumes created server role via the STS service. Puts the
-// generated TLS certificate in SSM parameter store and client binary in S3 bucket for later
-// retrieval. Concludes by launching EC2 instances.
+// Sets up AWS credentials, uses IAM permissions in the credentials to set up
+// client and server roles in IAM. Then assumes created server role via STS
+// service. Puts generated TLS certificate in SSM parameter store and client
+// binary in S3 bucket for later retrieval. Concludes by launching EC2 instances.
 //
 // @Parameters
 // - appConfig:  The configuration instance with program YAML data
 // - publicIps:  List of public IPs to format into user data template
 //
 // @Returns
+// - The initialized AWS configuration instance
 // - The EC2 manager instance to utilize for later operations
 // - Error if it occurs, otherwise nil on success
 //
-func awsSetup(appConfig *conf.AppConfig, publicIps []string) (*awsutils.Ec2Manger, error) {
+func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsutils.Ec2Manger, error) {
     var ec2Man *awsutils.Ec2Manger
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
                                                     1 * time.Minute)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
     // Setup client to IAM service
@@ -542,30 +624,36 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (*awsutils.Ec2Mange
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := clientTrustPolicyGen()
     permissionsPolicy := clientPermPolicyGen(appConfig.LocalConfig.BucketName,
-                                                appConfig.ClientConfig.Region,
-                                                appConfig.LocalConfig.AccountId,
-                                                "/kloud-kraken/tls/cert", "Kloud-Kraken")
+                                             appConfig.ClientConfig.Region,
+                                             appConfig.LocalConfig.AccountId,
+                                             "/kloud-kraken/tls/cert", "Kloud-Kraken")
     // Create and apply the EC2 client role
-    _, err = awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ClientRole", trustPolicy,
-                                        "ClientPermissions", permissionsPolicy, true)
+    _, err = awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ClientRole",
+                                      trustPolicy, "ClientPermissions",
+                                      permissionsPolicy, true)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
     // Generate the servers trust and permissions policy templates
     trustPolicy = serverTrustPolicyGen(appConfig.LocalConfig.AccountId,
-                                        appConfig.LocalConfig.IamUsername)
+                                       appConfig.LocalConfig.IamUsername)
     permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region,
                                             appConfig.LocalConfig.AccountId,
                                             "/kloud-kraken/tls/cert",
                                             appConfig.LocalConfig.BucketName,
                                             "ClientRole")
     // Create and apply role for local server permissions
-    serverArn, err := awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ServerRole", trustPolicy,
-                                                "ServerPermissions", permissionsPolicy, false)
+    serverArn, err := awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ServerRole",
+                                               trustPolicy, "ServerPermissions",
+                                               permissionsPolicy, false)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
+
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "IAM server and client roles created"))
 
     // Set up client to Security Token Service
     stsClient := sts.NewFromConfig(awsConfig)
@@ -575,56 +663,73 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (*awsutils.Ec2Mange
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
 
     // Create fresh AWS config from new STS provider
-    awsConfig, err = config.LoadDefaultConfig(context.TODO(),
+    awsConfig, err = config.LoadDefaultConfig(
+        context.TODO(),
         config.WithRegion(appConfig.LocalConfig.Region),
         config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
     )
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
     // Establish client to SSM
     ssmMan := awsutils.NewSsmManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
-    param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert", string(TlsMan.CertPemBlock),
-                                            1 * time.Minute)
+    param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert",
+                                         string(TlsMan.CertPemBlock),
+                                         1 * time.Minute)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
+
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                            tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "TLS certificate uploaded to " +
+                               "SSM Parameter Store for client retrieval"))
 
     // Establish client to S3
     s3Man := awsutils.NewS3Manager(awsConfig)
     // Check to see if S3 bucket exists
-    exists, err := s3Man.BucketExists(appConfig.LocalConfig.BucketName, 1*time.Minute)
+    exists, err := s3Man.BucketExists(appConfig.LocalConfig.BucketName, 1 * time.Minute)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
     // If S3 bucket does not exist create one
     if !exists {
         err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
         if err != nil {
-            return ec2Man, err
+            return awsConfig, ec2Man, err
         }
+
+        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                tui.LightCyan, "$"), "",
+                                   tui.NeonAzure, "Created S3 bucket ",
+                                   tui.RadiantAmethyst, appConfig.LocalConfig.BucketName))
     }
 
     // Read the client binary into memory
     binData, err := os.ReadFile("./client")
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
     // Upload the client binary to S3 Bucket
     keyName, err := s3Man.PutS3Object(appConfig.LocalConfig.BucketName, "client",
-                                        binData, 1 * time.Minute)
+                                      binData, 1 * time.Minute)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
+
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "Uploaded client binary to S3 bucket ",
+                               tui.RadiantAmethyst, appConfig.LocalConfig.BucketName))
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
     // Setup EC2 creation instance with populated args
@@ -639,10 +744,14 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (*awsutils.Ec2Mange
     // Create number of EC2 instances based on passed in data
     err = ec2Man.CreateEc2Instances(20 * time.Minute)
     if err != nil {
-        return ec2Man, err
+        return awsConfig, ec2Man, err
     }
 
-    return ec2Man, nil
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "EC2 instance creation completed"))
+
+    return awsConfig, ec2Man, nil
 }
 
 
@@ -705,6 +814,12 @@ func main() {
     appConfig := parseArgs()
     // Make the server directories
     makeServerDirs()
+
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "!"), "",
+                               tui.NeonAzure, "Wordlist merging started, this could " +
+                               "take time depending on the amount of data being processed"))
+
     // Merge the wordlists in the load dir based on max file size
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
                                      appConfig.LocalConfig.MaxMergingSizeInt64,
@@ -721,7 +836,12 @@ func main() {
         log.Fatalf("Error deleting load dir subdirs:  %v", err)
     }
 
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "Wordlist merging completed"))
+
     var awsConfig aws.Config
+    var ec2Man *awsutils.Ec2Manger
     var logMan *kloudlogs.LoggerManager
 
     // If the program is being run in full mode (not testing)
@@ -732,33 +852,48 @@ func main() {
             log.Fatalf("Error getting public IP addresses:  %v", err)
         }
 
+        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                   tui.LightCyan, "$"), "",
+                                   tui.NeonAzure, "Server public IP addresses retrieved"))
+
         // Generate the servers TLS PEM certificate and key and save in TLS manager
         err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
         if err != nil {
-            log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
+            log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
         }
+
+        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                                tui.LightCyan, "$"), "",
+                                   tui.NeonAzure, "Server TLS PEM certificate " +
+                                   "and key generated"))
 
         // Call handler function that sets up AWS IAM user permissions,
         // transfers client binary via S3, set TLS certificate via SSM
         // parameter store, and launches EC2 instances
-        ec2Man, err := awsSetup(appConfig, publicIps)
+        awsConfig, ec2Man, err = awsSetup(appConfig, publicIps)
         if err != nil {
-            log.Fatalf("Error with AWS setup code:  %v", err)
+            log.Fatalf("Error with AWS setup:  %v", err)
         }
 
         defer func() {
             // Terminate the EC2 instances when processing is complete
             termOutput, err := ec2Man.TerminateEc2Instances(time.Minute * 10)
             if err != nil {
-                log.Fatalf("Error terminating EC2 instances:  %v", err)
+                log.Printf("Error terminating EC2 instances:  %v", err)
             }
 
             // Iterate through list of terminated instance ids
             for _, instance := range termOutput.TerminatingInstances {
-                logMan.LogMessage("Instance state for %s: %s → %s\n",
-                                  aws.ToString(instance.InstanceId),
-                                  instance.PreviousState.Name,
-                                  instance.CurrentState.Name)
+                if logMan != nil {
+                    logMan.LogMessage("Instance state for %s: %s -> %s\n",
+                                      aws.ToString(instance.InstanceId),
+                                      instance.PreviousState.Name,
+                                      instance.CurrentState.Name)
+                } else {
+                    log.Println("Instance state for " + aws.ToString(instance.InstanceId),
+                                ": " + instance.PreviousState.Name + " -> " +
+                                instance.CurrentState.Name)
+                }
             }
         } ()
 
@@ -770,21 +905,38 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        log.Println("Testing mode:  PEM cert & key generated, transfer cert to client before execution")
+        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple, tui.LightCyan,
+                                                   "TESTING"), "",
+                                   tui.NeonAzure, "PEM cert generated, transfer " +
+                                   " to client before execution"))
     }
 
     // Generate a TLS x509 certificate and cert pool
-    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock, TlsMan.CaCertPemBlocks)
+    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
+                                TlsMan.CaCertPemBlocks)
     if err != nil {
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }
 
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "X509 cerificate pool generated " +
+                               "and server certifcate added to pool"))
+
     // Initialize the LoggerManager based on the flags
-    logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath, awsConfig,
-                                             "Kloud-Kraken", false)
+    logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath,
+                                             awsConfig, "Kloud-Kraken", false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
 
+    // Listen for incoming client connections and handle them
     startServer(appConfig, logMan)
+
+    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
+                                               tui.LightCyan, "$"), "",
+                               tui.NeonAzure, "All connections handled " +
+                               ".. server shutting down"))
+
+    logMan.LogMessage("info", "All connections handled .. server shutting down")
 }
