@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
@@ -113,18 +114,18 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     }
 
     // Display the remote client connected for file transfer in left panel
-    t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                    tui.LightCyan, "!"), "",
-                                    tui.NeonAzure, "Connected remote client ",
-                                    tui.RadiantAmethyst, ipAddr,
-                                    tui.NeonAzure, " on port ",
-                                    tui.KrakenGlowGreen, strconv.Itoa(int(port)))
+    t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                            color.LightCyan, "!"), "",
+                                        color.NeonAzure, "Connected remote client ",
+                                        color.RadiantAmethyst, ipAddr,
+                                        color.NeonAzure, " on port ",
+                                        color.KrakenGlowGreen, strconv.Itoa(int(port)))
 
     // Display the file path to be transfered in right panel
-    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                     tui.LightCyan, "!"), "",
-                                     tui.RadiantAmethyst, filePath,
-                                     tui.NeonAzure, " to be transfered")
+    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "!"), "",
+                                         color.RadiantAmethyst, filePath,
+                                         color.NeonAzure, " to be transfered")
 
     logMan.LogMessage("info", "Connected remote client %s on port %d, %s to be transfered",
                       ipAddr, port, filePath)
@@ -143,10 +144,10 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         }
 
         // Display the file path to be transfered in right panel
-        t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                        tui.LightCyan, "$"), "",
-                                        tui.RadiantAmethyst, filePath,
-                                        tui.NeonAzure, " transfer completed")
+        t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                 color.LightCyan, "$"), "",
+                                             color.RadiantAmethyst, filePath,
+                                             color.NeonAzure, " transfer completed")
     } ()
 }
 
@@ -184,10 +185,10 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     TlsMan.AddCACert(buffer[:bytesRead])
 
     // Notify TLS cerificate has been received in the tui right panel
-    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                     tui.LightCyan, "$"), "",
-                                     tui.NeonAzure, "TLS certificate received from client ",
-                                     tui.RadiantAmethyst, remoteAddr)
+    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "$"), "",
+                                         color.NeonAzure, "TLS certificate received from client ",
+                                         color.RadiantAmethyst, remoteAddr)
 
     // Reset buffer to messaging size
     buffer = make([]byte, globals.MESSAGE_BUFFER_SIZE)
@@ -201,10 +202,10 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     }
 
     // Notify the hash file has been sent in the tui right panel
-    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                     tui.LightCyan, "$"), "",
-                                     tui.NeonAzure, "Hash file sent to client ",
-                                     tui.RadiantAmethyst, remoteAddr)
+    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "$"), "",
+                                         color.NeonAzure, "Hash file sent to client ",
+                                         color.RadiantAmethyst, remoteAddr)
 
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
@@ -217,10 +218,10 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
         }
 
         // Notify the ruleset file has been sent in the tui right panel
-        t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                         tui.LightCyan, "$"), "",
-                                         tui.NeonAzure, "Ruleset file sent to client ",
-                                         tui.RadiantAmethyst, remoteAddr)
+        t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                 color.LightCyan, "$"), "",
+                                             color.NeonAzure, "Ruleset file sent to client ",
+                                             color.RadiantAmethyst, remoteAddr)
     }
 
     for {
@@ -256,10 +257,10 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     }
 
     // Notify the cracked hashes file has been received in the tui right panel
-    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                     tui.LightCyan, "$"), "",
-                                     tui.NeonAzure, "Cracked hashes received from client ",
-                                     tui.RadiantAmethyst, remoteAddr)
+    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "$"), "",
+                                         color.NeonAzure, "Cracked hashes received from client ",
+                                         color.RadiantAmethyst, remoteAddr)
 
     // Receive log file from client
     _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
@@ -270,19 +271,19 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     }
 
     // Notify the log file has been received in the tui right panel
-    t.RightPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                     tui.LightCyan, "$"), "",
-                                     tui.NeonAzure, "Log file received from client ",
-                                     tui.RadiantAmethyst, remoteAddr)
+    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "$"), "",
+                                         color.NeonAzure, "Log file received from client ",
+                                         color.RadiantAmethyst, remoteAddr)
 
     // Decrement the active connection count
     CurrentConnections.Add(-1)
 
     // Display the connection termination information in the left tui panel
-    t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                    tui.LightCyan, "-"), "",
-                                    tui.NeonAzure, "Connection closed for ",
-                                    tui.RadiantAmethyst, remoteAddr)
+    t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                            color.LightCyan, "-"), "",
+                                        color.NeonAzure, "Connection closed for ",
+                                        color.RadiantAmethyst, remoteAddr)
 
     logMan.LogMessage("info", "Connection processing handled",
                       zap.Int32("remaining connections", CurrentConnections.Load()))
@@ -304,7 +305,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 
     // Setup TUI interface for and ensure it closes on local exit
     t := tui.NewTUI(100, "Connections", 500 * time.Millisecond, 3, "File Transfers")
-    go t.Start(tui.SkyBlue, tui.BrightMagenta, tui.BrightMint)
+    go t.Start(color.SkyBlue, color.BrightMagenta, color.BrightMint)
     defer t.Stop()
 
     // Set up context handler for TLS listener
@@ -321,11 +322,11 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     defer tlsListener.Close()
 
     // Display port TLS listener is on in the left panel
-    t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                    tui.LightCyan, "!"), "",
-                                    tui.NeonAzure, "Listening on port ",
-                                    tui.KrakenGlowGreen,
-                                    strconv.Itoa(appConfig.LocalConfig.ListenerPort))
+    t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                            color.LightCyan, "!"), "",
+                                        color.NeonAzure, "Listening on port ",
+                                        color.KrakenGlowGreen,
+                                        strconv.Itoa(appConfig.LocalConfig.ListenerPort))
 
     logMan.LogMessage("info", "Listening for connections on port %s ..",
                       appConfig.LocalConfig.ListenerPort)
@@ -351,10 +352,10 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
         remoteAddr := connection.RemoteAddr().String()
 
         // Display the connection spawning information in the left tui panel
-        t.LeftPanelCh <- tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                        tui.LightCyan, "+"), "",
-                                        tui.NeonAzure, "Connection accepted from ",
-                                        tui.RadiantAmethyst, remoteAddr)
+        t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                color.LightCyan, "+"), "",
+                                            color.NeonAzure, "Connection accepted from ",
+                                            color.RadiantAmethyst, remoteAddr)
 
         logMan.LogMessage("info", "Connection accepted from %s", remoteAddr,
                           zap.Int32("active connections", CurrentConnections.Load()))
@@ -651,9 +652,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsut
         return awsConfig, ec2Man, err
     }
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "IAM server and client roles created"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "IAM server and client roles created"))
 
     // Set up client to Security Token Service
     stsClient := sts.NewFromConfig(awsConfig)
@@ -682,10 +683,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsut
         return awsConfig, ec2Man, err
     }
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                            tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "TLS certificate uploaded to " +
-                               "SSM Parameter Store for client retrieval"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "TLS certificate uploaded to " +
+                                   "SSM Parameter Store for client retrieval"))
 
     // Establish client to S3
     s3Man := awsutils.NewS3Manager(awsConfig)
@@ -702,10 +703,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsut
             return awsConfig, ec2Man, err
         }
 
-        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                tui.LightCyan, "$"), "",
-                                   tui.NeonAzure, "Created S3 bucket ",
-                                   tui.RadiantAmethyst, appConfig.LocalConfig.BucketName))
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Created S3 bucket ",
+                                       color.RadiantAmethyst, appConfig.LocalConfig.BucketName))
     }
 
     // Read the client binary into memory
@@ -721,10 +722,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsut
         return awsConfig, ec2Man, err
     }
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "Uploaded client binary to S3 bucket ",
-                               tui.RadiantAmethyst, appConfig.LocalConfig.BucketName))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "Uploaded client binary to S3 bucket ",
+                                   color.RadiantAmethyst, appConfig.LocalConfig.BucketName))
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
@@ -747,9 +748,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsut
         return awsConfig, ec2Man, err
     }
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "EC2 instance creation completed"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "EC2 instance creation completed"))
 
     return awsConfig, ec2Man, nil
 }
@@ -815,10 +816,10 @@ func main() {
     // Make the server directories
     makeServerDirs()
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "!"), "",
-                               tui.NeonAzure, "Wordlist merging started, this could " +
-                               "take time depending on the amount of data being processed"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Wordlist merging started, this could " +
+                                   "take time depending on the amount of data being processed"))
 
     // Merge the wordlists in the load dir based on max file size
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
@@ -836,9 +837,9 @@ func main() {
         log.Fatalf("Error deleting load dir subdirs:  %v", err)
     }
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "Wordlist merging completed"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "Wordlist merging completed"))
 
     var awsConfig aws.Config
     var ec2Man *awsutils.Ec2Manger
@@ -852,9 +853,9 @@ func main() {
             log.Fatalf("Error getting public IP addresses:  %v", err)
         }
 
-        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                   tui.LightCyan, "$"), "",
-                                   tui.NeonAzure, "Server public IP addresses retrieved"))
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Server public IP addresses retrieved"))
 
         // Generate the servers TLS PEM certificate and key and save in TLS manager
         err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
@@ -862,10 +863,10 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
         }
 
-        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                                tui.LightCyan, "$"), "",
-                                   tui.NeonAzure, "Server TLS PEM certificate " +
-                                   "and key generated"))
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Server TLS PEM certificate " +
+                                       "and key generated"))
 
         // Call handler function that sets up AWS IAM user permissions,
         // transfers client binary via S3, set TLS certificate via SSM
@@ -905,10 +906,10 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple, tui.LightCyan,
-                                                   "TESTING"), "",
-                                   tui.NeonAzure, "PEM cert generated, transfer " +
-                                   " to client before execution"))
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple, color.LightCyan,
+                                                           "TESTING"), "",
+                                       color.NeonAzure, "PEM cert generated, transfer " +
+                                       " to client before execution"))
     }
 
     // Generate a TLS x509 certificate and cert pool
@@ -918,10 +919,10 @@ func main() {
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "X509 cerificate pool generated " +
-                               "and server certifcate added to pool"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "X509 cerificate pool generated " +
+                                   "and server certifcate added to pool"))
 
     // Initialize the LoggerManager based on the flags
     logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath,
@@ -933,10 +934,10 @@ func main() {
     // Listen for incoming client connections and handle them
     startServer(appConfig, logMan)
 
-    fmt.Println(tui.CtextMulti(tui.CtextPrefix(tui.KrakenPurple,
-                                               tui.LightCyan, "$"), "",
-                               tui.NeonAzure, "All connections handled " +
-                               ".. server shutting down"))
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "All connections handled " +
+                                   ".. server shutting down"))
 
     logMan.LogMessage("info", "All connections handled .. server shutting down")
 }
