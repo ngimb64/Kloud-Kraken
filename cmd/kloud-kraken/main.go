@@ -891,9 +891,9 @@ func main() {
                                       instance.PreviousState.Name,
                                       instance.CurrentState.Name)
                 } else {
-                    log.Println("Instance state for " + aws.ToString(instance.InstanceId),
-                                ": " + instance.PreviousState.Name + " -> " +
-                                instance.CurrentState.Name)
+                    log.Println("Instance state for " + aws.ToString(instance.InstanceId) +
+                                ": " + string(instance.PreviousState.Name) + " -> " +
+                                string(instance.CurrentState.Name))
                 }
             }
         } ()

@@ -230,8 +230,8 @@ func (logMan *LoggerManager) LogFatal(msg string, fields ...zap.Field) {
 // ZapLogger implements Logger interface using file
 // and optional memory logging
 type ZapLogger struct {
-    Logger       *zap.Logger
-    MemoryBuffer *bytes.Buffer
+    logger       *zap.Logger
+    memoryBuffer *bytes.Buffer
 }
 
 // NewZapLogger creates a zap logger instance with either file or memory logging.
@@ -265,8 +265,8 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
 
         // Return the logger along with the memory buffer
         return &ZapLogger{
-            Logger:       logger,
-            MemoryBuffer: memoryBuffer,
+            logger:       logger,
+            memoryBuffer: memoryBuffer,
         }, nil
     // Othwise logging to file
     } else {
@@ -282,8 +282,8 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
         }
 
         return &ZapLogger{
-            Logger:       logger,
-            MemoryBuffer: nil,
+            logger:       logger,
+            memoryBuffer: nil,
         }, nil
     }
 }
@@ -295,55 +295,55 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
 // - The string JSON log from the zap logging instance
 //
 func (zapLog *ZapLogger) GetMemoryLog() string {
-    if zapLog.MemoryBuffer != nil {
-        return zapLog.MemoryBuffer.String()
+    if zapLog.memoryBuffer != nil {
+        return zapLog.memoryBuffer.String()
     }
     return ""
 }
 
 // Logs a debug message to zap logger
 func (zapLog *ZapLogger) Debug(msg string, fields ...zap.Field) {
-    zapLog.Logger.Debug(msg, fields...)
+    zapLog.logger.Debug(msg, fields...)
 }
 
 // Logs a info message to zap logger
 func (zapLog *ZapLogger) Info(msg string, fields ...zap.Field) {
-    zapLog.Logger.Info(msg, fields...)
+    zapLog.logger.Info(msg, fields...)
 }
 
 // Logs a warning message to zap logger
 func (zapLog *ZapLogger) Warn(msg string, fields ...zap.Field) {
-    zapLog.Logger.Warn(msg, fields...)
+    zapLog.logger.Warn(msg, fields...)
 }
 
 // Logs a error message to zap logger
 func (zapLog *ZapLogger) Error(msg string, fields ...zap.Field) {
-    zapLog.Logger.Error(msg, fields...)
+    zapLog.logger.Error(msg, fields...)
 }
 
 // Logs a developer panic message to zap logger
 func (zapLog *ZapLogger) DPanic(msg string, fields ...zap.Field) {
-    zapLog.Logger.DPanic(msg, fields...)
+    zapLog.logger.DPanic(msg, fields...)
 }
 
 // Logs a panic message to zap logger
 func (zapLog *ZapLogger) Panic(msg string, fields ...zap.Field) {
-    zapLog.Logger.Panic(msg, fields...)
+    zapLog.logger.Panic(msg, fields...)
 }
 
 // Logs a fatal message to zap logger
 func (zapLog *ZapLogger) Fatal(msg string, fields ...zap.Field) {
-    zapLog.Logger.Fatal(msg, fields...)
+    zapLog.logger.Fatal(msg, fields...)
 }
 
 
 // CloudWatchLogger implements Logger interface for CloudWatch
 type CloudWatchLogger struct {
-    Client       *cwl.Client
-    CwMutex      sync.Mutex
-    LogGroup     string
-    LogStream    string
-    NextSequence *string
+    client       *cwl.Client
+    cwMutex      sync.Mutex
+    logGroup     string
+    logStream    string
+    nextSequence *string
 }
 
 // Creates and returns CloudWatch logger instance.
@@ -423,10 +423,10 @@ func NewCloudWatchLogger(awsConfig aws.Config, group string) (
     }
 
     return &CloudWatchLogger{
-        Client:       client,
-        LogGroup:     group,
-        LogStream:    stream,
-        NextSequence: token,
+        client:       client,
+        logGroup:     group,
+        logStream:    stream,
+        nextSequence: token,
     }, nil
 }
 
@@ -464,24 +464,24 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...z
     }
 
     // Set mutex for logging operation
-    cloudWatchLog.CwMutex.Lock()
-    defer cloudWatchLog.CwMutex.Unlock()
+    cloudWatchLog.cwMutex.Lock()
+    defer cloudWatchLog.cwMutex.Unlock()
 
     inputEvent := &cwl.PutLogEventsInput{
-        LogGroupName:  aws.String(cloudWatchLog.LogGroup),
-        LogStreamName: aws.String(cloudWatchLog.LogStream),
+        LogGroupName:  aws.String(cloudWatchLog.logGroup),
+        LogStreamName: aws.String(cloudWatchLog.logStream),
         LogEvents:     []cwlTypes.InputLogEvent{event},
-        SequenceToken: cloudWatchLog.NextSequence,
+        SequenceToken: cloudWatchLog.nextSequence,
     }
 
     // Upload log entry via the log stream
-    resp, err := cloudWatchLog.Client.PutLogEvents(context.Background(), inputEvent)
+    resp, err := cloudWatchLog.client.PutLogEvents(context.Background(), inputEvent)
     if err != nil {
         log.Fatalf("PutLogEvents: %v\n", err)
     }
 
     // Set the next sequence token fron the response
-    cloudWatchLog.NextSequence = resp.NextSequenceToken
+    cloudWatchLog.nextSequence = resp.NextSequenceToken
 }
 
 // Current dummy handler to follow interface contract (zap only)

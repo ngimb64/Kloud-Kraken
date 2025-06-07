@@ -190,14 +190,14 @@ func NewClientTLSConfig(clientPool *x509.CertPool,
 
 // Data structure for managing TLS components
 type TlsManager struct {
-    Addr            string
+    addr            string
     CaCertPemBlocks [][]byte
     CaCertPool      *x509.CertPool
     CertPemBlock    []byte
-    Ctx   	        context.Context
+    ctx   	        context.Context
     KeyPemBlock     []byte
     TlsCertificate  tls.Certificate
-    TlsConfig       *tls.Config
+    tlsConfig       *tls.Config
 }
 
 // Add the cert to TlsManager CaCertPool
@@ -510,9 +510,9 @@ func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate, certPool
     // Format listener address with port
     listenerAddr := listenIp + ":" + strconv.Itoa(listenPort)
     // Set needed struct members for setting up TLS listener
-    TlsMan.Addr = listenerAddr
-    TlsMan.Ctx = ctx
-    TlsMan.TlsConfig = tlsConfig
+    TlsMan.addr = listenerAddr
+    TlsMan.ctx = ctx
+    TlsMan.tlsConfig = tlsConfig
     // Setup TLS listener from server instance
     tlsListener, err := TlsMan.SetupTlsListener(listener)
     if err != nil {
@@ -631,24 +631,24 @@ func (TlsMan *TlsManager) SetupTlsListener(listener net.Listener) (net.Listener,
     // If no active listener was passed in
     if listener == nil {
         // Establish raw TCP listener
-        listener, err = net.Listen("tcp", TlsMan.Addr)
+        listener, err = net.Listen("tcp", TlsMan.addr)
         if err != nil {
-            return nil, fmt.Errorf("binding to tcp %s: %w", TlsMan.Addr, err)
+            return nil, fmt.Errorf("binding to tcp %s: %w", TlsMan.addr, err)
         }
     }
 
     // If the servers context is set
-    if TlsMan.Ctx != nil {
+    if TlsMan.ctx != nil {
         // Launch routine to catch it when signaled
         go func() {
-            <-TlsMan.Ctx.Done()
+            <-TlsMan.ctx.Done()
             // Close the TLS listener
             _ = listener.Close()
         }()
     }
 
     // Create new listener with TLS layer on top of raw TCP listner
-    tlsListener := tls.NewListener(listener, TlsMan.TlsConfig)
+    tlsListener := tls.NewListener(listener, TlsMan.tlsConfig)
 
     return tlsListener, nil
 }

@@ -103,17 +103,17 @@ func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, string, 
 
 // Struct for managing EC2 operations
 type Ec2Manger struct {
-    AMI              string
-    Client           *ec2.Client
-    Count            int
-    InstanceType     string
-    Name             string
-    RoleName         string
-    RunResult        *ec2.RunInstancesOutput
-    SecurityGroupIds []string
-    SecurityGroups   []string
-    SubnetId         string
-    UserData         []byte
+    ami              string
+    client           *ec2.Client
+    count            int
+    instanceType     string
+    name             string
+    roleName         string
+    runResult        *ec2.RunInstancesOutput
+    securityGroupIds []string
+    securityGroups   []string
+    subnetId         string
+    userData         []byte
 }
 
 // Establishes connection to EC2 service and generates EC2 manager struct
@@ -140,16 +140,16 @@ func NewEc2Manager(ami string, awsConfig aws.Config, count int, instanceType str
     ec2Client := ec2.NewFromConfig(awsConfig)
 
     return &Ec2Manger{
-        AMI:              ami,
-        Client:           ec2Client,
-        Count:            count,
-        InstanceType:     instanceType,
-        Name:             name,
-        RoleName:         roleName,
-        SecurityGroupIds: securityGroupIds,
-        SecurityGroups:   securityGroups,
-        SubnetId:         subnetId,
-        UserData:         userData,
+        ami:              ami,
+        client:           ec2Client,
+        count:            count,
+        instanceType:     instanceType,
+        name:             name,
+        roleName:         roleName,
+        securityGroupIds: securityGroupIds,
+        securityGroups:   securityGroups,
+        subnetId:         subnetId,
+        userData:         userData,
     }
 }
 
@@ -168,52 +168,52 @@ func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration) (error) {
     defer cancel()
 
     // Base64 encode the user data script
-    encodedUserData := base64.StdEncoding.EncodeToString(Ec2Man.UserData)
+    encodedUserData := base64.StdEncoding.EncodeToString(Ec2Man.userData)
 
     // Prepare the RunInstances input
     input := &ec2.RunInstancesInput{
-        ImageId:      aws.String(Ec2Man.AMI),
-        InstanceType: ec2types.InstanceType(Ec2Man.InstanceType),
-        MinCount:     aws.Int32(int32(Ec2Man.Count)),
-        MaxCount:     aws.Int32(int32(Ec2Man.Count)),
+        ImageId:      aws.String(Ec2Man.ami),
+        InstanceType: ec2types.InstanceType(Ec2Man.instanceType),
+        MinCount:     aws.Int32(int32(Ec2Man.count)),
+        MaxCount:     aws.Int32(int32(Ec2Man.count)),
         UserData:     aws.String(encodedUserData),
         IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
-            Name: aws.String(Ec2Man.RoleName),
+            Name: aws.String(Ec2Man.roleName),
         },
         // Tag instances on creation
         TagSpecifications: []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInstance,
                 Tags: []ec2types.Tag{
-                    {Key: aws.String("Service"), Value: aws.String(Ec2Man.Name)},
+                    {Key: aws.String("Service"), Value: aws.String(Ec2Man.name)},
                 },
             },
         },
     }
 
     // If there security groups IDs to apply
-    if len(Ec2Man.SecurityGroupIds) > 0 {
-        input.SecurityGroupIds = Ec2Man.SecurityGroupIds
+    if len(Ec2Man.securityGroupIds) > 0 {
+        input.SecurityGroupIds = Ec2Man.securityGroupIds
     }
 
     // If there are security group names to apply
-    if len(Ec2Man.SecurityGroups) > 0 {
-        input.SecurityGroups = Ec2Man.SecurityGroups
+    if len(Ec2Man.securityGroups) > 0 {
+        input.SecurityGroups = Ec2Man.securityGroups
     }
 
     // If there is specified subnet to apply
-    if Ec2Man.SubnetId != "" {
-        input.SubnetId = &Ec2Man.SubnetId
+    if Ec2Man.subnetId != "" {
+        input.SubnetId = &Ec2Man.subnetId
     }
 
     // Execute call to run the EC2 instance
-    runOutput, err := Ec2Man.Client.RunInstances(ctx, input)
+    runOutput, err := Ec2Man.client.RunInstances(ctx, input)
     if err != nil {
         return err
     }
 
     // Assign run API call to EC2 manager struct
-    Ec2Man.RunResult = runOutput
+    Ec2Man.runResult = runOutput
     return nil
 }
 
@@ -235,7 +235,7 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
     defer cancel()
 
     // Iterate through instances from result output
-    for _, instance := range Ec2Man.RunResult.Instances {
+    for _, instance := range Ec2Man.runResult.Instances {
         // If the instance ID is present add to ids slice
         if instance.InstanceId != nil {
             ids = append(ids, *instance.InstanceId)
@@ -248,7 +248,7 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
     }
 
     // Terminate all the collected instance id's
-    termOutput, err := Ec2Man.Client.TerminateInstances(ctx, terminateInput)
+    termOutput, err := Ec2Man.client.TerminateInstances(ctx, terminateInput)
     if err != nil {
         return nil, err
     }
@@ -348,7 +348,7 @@ func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName str
 
 // Struct for managing S3 bucket operations
 type S3Manager struct {
-    Client     *s3.Client
+    client     *s3.Client
 }
 
 // Establishes connection to EC2 service and generates EC2 manager struct
@@ -364,7 +364,7 @@ func NewS3Manager(config aws.Config) *S3Manager {
     s3Client := s3.NewFromConfig(config)
 
     return &S3Manager{
-        Client:     s3Client,
+        client:     s3Client,
     }
 }
 
@@ -385,7 +385,7 @@ func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) 
     defer cancel()
 
     // Check if the bucket exists and get information
-    _, err := S3Man.Client.HeadBucket(ctx, &s3.HeadBucketInput{
+    _, err := S3Man.client.HeadBucket(ctx, &s3.HeadBucketInput{
         Bucket: aws.String(bucketName),
     })
     // If there was no error, bucket exists and is accessible
@@ -424,7 +424,7 @@ func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) 
     defer cancel()
 
     // Create the bucket based on the bucket name in S3 manager
-    _, err := S3Man.Client.CreateBucket(ctx, &s3.CreateBucketInput{
+    _, err := S3Man.client.CreateBucket(ctx, &s3.CreateBucketInput{
         Bucket: aws.String(bucketName),
     })
     // If the bucket was successfully created
@@ -467,7 +467,7 @@ func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
     defer cancel()
 
     // Retrieve the object from S3 storage
-    resp, err := S3Man.Client.GetObject(ctx, &s3.GetObjectInput{
+    resp, err := S3Man.client.GetObject(ctx, &s3.GetObjectInput{
         Bucket: aws.String(bucketName),
         Key:    aws.String(key),
     })
@@ -511,7 +511,7 @@ func (S3Man *S3Manager) PutS3Object(bucketName string, key string, data []byte,
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
         // Put the object in S3 storage based on key
-        _, err := S3Man.Client.PutObject(ctx, &s3.PutObjectInput{
+        _, err := S3Man.client.PutObject(ctx, &s3.PutObjectInput{
             Bucket:      aws.String(bucketName),
             Key:         aws.String(candidate),
             Body:        bytes.NewReader(data),
@@ -538,7 +538,7 @@ func (S3Man *S3Manager) PutS3Object(bucketName string, key string, data []byte,
 
 // Struct for managing S3 bucket operations
 type SsmManager struct {
-    Client    *ssm.Client
+    client    *ssm.Client
 }
 
 // Establishes connection to SSM service and generates SSM manager struct
@@ -554,7 +554,7 @@ func NewSsmManager(config aws.Config) *SsmManager {
     ssmClient := ssm.NewFromConfig(config)
 
     return &SsmManager{
-        Client:    ssmClient,
+        client:    ssmClient,
     }
 }
 
@@ -575,7 +575,7 @@ func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Durati
     defer cancel()
 
     // Get parameter from AWS SSM Parameter Store
-    output, err := SsmMan.Client.GetParameter(ctx, &ssm.GetParameterInput{
+    output, err := SsmMan.client.GetParameter(ctx, &ssm.GetParameterInput{
         Name:           aws.String(parameter),
         WithDecryption: aws.Bool(true),
     })
@@ -610,7 +610,7 @@ func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
         // Put parameter into AWS SSM Parameter Store
-        _, err := SsmMan.Client.PutParameter(ctx, &ssm.PutParameterInput{
+        _, err := SsmMan.client.PutParameter(ctx, &ssm.PutParameterInput{
             Name:      aws.String(candidate),
             Value:     aws.String(data),
             Type:      ssmtypes.ParameterTypeSecureString,
