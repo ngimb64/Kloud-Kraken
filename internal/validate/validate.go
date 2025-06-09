@@ -334,35 +334,32 @@ func ValidateIamUsername(iamUsername string) error {
 //
 func ValidateInstanceType(instanceType string) bool {
     var supportedInstances = []string{
-        // === G4dn instances ===
-        "g4dn.xlarge", "g4dn.2xlarge", "g4dn.4xlarge",
+        // === G4dn (always NVMe) ===
+        "g4dn.xlarge",  "g4dn.2xlarge",  "g4dn.4xlarge",
         "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
 
-        // === G5 instances ===
-        "g5.2xlarge", "g5.4xlarge", "g5.8xlarge",
-        "g5.12xlarge", "g5.16xlarge", "g5.24xlarge",
-        "g5.48xlarge",
+        // === G5d (d-variant of G5) ===
+        "g5d.2xlarge",  "g5d.4xlarge",  "g5d.8xlarge",
+        "g5d.12xlarge", "g5d.16xlarge", "g5d.24xlarge",
+        "g5d.48xlarge",
 
-        // === G6 instances ===
-        "g6.xlarge", "g6.2xlarge", "g6.4xlarge",
-        "g6.8xlarge", "g6.12xlarge", "g6.16xlarge",
-        "g6.24xlarge", "g6.48xlarge",
+        // === G6gd (Graviton d-variant of G6) ===
+        "g6gd.xlarge",   "g6gd.2xlarge",  "g6gd.4xlarge",
+        "g6gd.8xlarge",  "g6gd.12xlarge", "g6gd.16xlarge",
+        "g6gd.24xlarge", "g6gd.48xlarge",
 
-        // === Gr6 instances ===
-        "gr6.4xlarge", "gr6.8xlarge",
+        // === G6ed (Intel d-variant of G6e) ===
+        "g6ed.xlarge",   "g6ed.2xlarge",  "g6ed.4xlarge",
+        "g6ed.8xlarge",  "g6ed.12xlarge", "g6ed.16xlarge",
+        "g6ed.24xlarge", "g6ed.48xlarge",
 
-        // === G6e instances ===
-        "g6e.xlarge", "g6e.2xlarge", "g6e.4xlarge",
-        "g6e.8xlarge", "g6e.12xlarge", "g6e.16xlarge",
-        "g6e.24xlarge", "g6e.48xlarge",
+        // === P4 families ===
+        "p4d.24xlarge",  "p4de.24xlarge",
 
-        // === P4d and P4de instances ===
-        "p4d.24xlarge", "p4de.24xlarge",
+        // === P5 families ===
+        "p5.48xlarge",   "p5e.48xlarge",
 
-        // === P5 and P5e instances ===
-        "p5.48xlarge", "p5e.48xlarge",
-
-        // === P6-B200 instances ===
+        // === P6-B200 ===
         "p6-b200.48xlarge",
     }
 

@@ -402,6 +402,44 @@ func ec2UserDataGen(appConf *conf.AppConfig, keyName string, ipAddrs []string,
     }
 
     data := fmt.Sprintf(`#!/bin/bash
+set -euxo pipefail
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+# === NVMe RAID0 instance-store setup ===
+mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE |
+    awk '$2=="disk" && $1 ~ /^nvme[0-9]+n1$/ {print "/dev/" $1}')
+if (( ${#DEVICES[@]} == 0 )); then
+    echo "ERROR: no NVMe instance‐store devices found"
+    shutdown -h now
+    exit 1
+fi
+
+retries=0
+until DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y mdadm; do
+    ((retries++))
+    (( retries>=3 )) && { echo "ERROR: apt-get install failed"; shutdown -h now; exit 1; }
+    sleep 5
+done
+
+if ! mdadm --detail /dev/md0 &>/dev/null; then
+    yes | mdadm --create /dev/md0 --level=0 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
+fi
+
+mdadm --detail --scan | tee /etc/mdadm/mdadm.conf
+update-initramfs -u
+
+if ! blkid /dev/md0 &>/dev/null; then
+    mkfs.ext4 -F /dev/md0
+fi
+
+mkdir -p /mnt/instance-store
+grep -q '/mnt/instance-store' /etc/fstab || \
+    echo "/dev/md0  /mnt/instance-store  ext4  defaults,nofail  0 2" >> /etc/fstab
+mountpoint -q /mnt/instance-store || mount /mnt/instance-store
+
+echo "✓ Instance-store ready at /mnt/instance-store"
+
+# === Application bootstrap ===
 apt update && apt upgrade -y && apt install -y hashcat
 
 CWD=$(pwd)
@@ -610,7 +648,8 @@ func clientTrustPolicyGen() string {
 // - The EC2 manager instance to utilize for later operations
 // - Error if it occurs, otherwise nil on success
 //
-func awsSetup(appConfig *conf.AppConfig, publicIps []string) (aws.Config, *awsutils.Ec2Manger, error) {
+func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
+              aws.Config, *awsutils.Ec2Manger, error) {
     var ec2Man *awsutils.Ec2Manger
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
@@ -906,8 +945,8 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
         }
 
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple, color.LightCyan,
-                                                           "TESTING"), "",
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "TESTING"), "",
                                        color.NeonAzure, "PEM cert generated, transfer " +
                                        " to client before execution"))
     }

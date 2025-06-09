@@ -179,50 +179,35 @@ func CreateRandFile(dirPath string, nameLen int, baseName string, extension stri
 }
 
 
-// Checks the disk to get the total and available space.
-// The reserved space for the OS is subtracted from the free.
-//
-// @Returns
-// - The remaining space (free - OS_RESERVED)
-// - The total space
-// - Error if it occurs, otherwise nil on success
-//
-func DiskCheck() (int64, int64, error) {
-    // Get the total and available disk space
-    total, free, err := GetDiskSpace()
-    if err != nil {
-        return -1, -1, err
-    }
-
-    // Subtract reserved space (for OS) from free space
-    remainingSpace := free - globals.OS_RESERVED_SPACE
-
-    return remainingSpace, total, nil
-}
-
-
 // Gets the total and available space on the root disk.
+//
+// @Parameters
+// - path:  path to location on disk where size will be queried
+// - reservedSpace:  The amount of space reserved for the OS
 //
 // @Returns
 // - The total space on disk
 // - the available free space
 // - Error if it occurs, otherwise nil on success
 //
-func GetDiskSpace() (total int64, free int64, err error) {
+func GetDiskSpace(path string, reservedSpace int) (
+                  total int64, free int64, err error) {
     var statfs unix.Statfs_t
 
-    // Get the stats of the root filesystem ("/")
-    err = unix.Statfs("/", &statfs)
+    // Get the stats of the passed in path
+    err = unix.Statfs(string), &statfs)
     if err != nil {
-        return 0, 0, fmt.Errorf("failed to get disk space - %w", err)
+        return -1, -1, err
     }
 
     // Total space is (blocks * block size)
     total = int64(statfs.Blocks) * statfs.Bsize
     // Free space is (free blocks * block size)
     free = int64(statfs.Bfree) * statfs.Bsize
+    // Subtract the reserved  OS space from from available
+    remaining := free - int64(reservedSpace)
 
-    return total, free, nil
+    return remaining, total, nil
 }
 
 

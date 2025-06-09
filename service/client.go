@@ -33,18 +33,19 @@ import (
 )
 
 // Package level variables
-const HashesPath = "/tmp/hashes"       // Path where hash files are stored
-const RulesetPath = "/tmp/rulesets"    // Path where ruleset files are stored
-const WordlistPath = "/tmp/wordlists"  // Path where wordlists are stored
-var BufferMutex = &sync.Mutex{}        // Mutex for message buffer synchronization
+var BufferMutex = &sync.Mutex{}             // Mutex for message buffer synchronization
+var DataPath string                         // Path where data dirs will be stored
+var HashcatArgs = new(hashcat.HashcatArgs)  // Initialze where hashcat args are stored
 var HashFilePath string  // Stores hash file path when received
+var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
 var LogPath string       // Stores log file to be returned to client
 var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 var RulesetFilePath string     // Stores ruleset file when received
-var HashcatArgsStruct = new(hashcat.HashcatArgs)  // Initialze struct where hashcat options stored
-var TlsMan = new(tlsutils.TlsManager)             // Struct for managing TLS certs, keys, etc.
+var RulesetPath string         // Path where ruleset files are stored
+var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
+var WordlistPath string                // Path where wordlists are stored
 
 
 // Ensure the final cracked hashes file exists and has a message informing
@@ -117,8 +118,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
 
-    charsets := []string{HashcatArgsStruct.CharSet1, HashcatArgsStruct.CharSet2,
-                         HashcatArgsStruct.CharSet3, HashcatArgsStruct.CharSet4}
+    charsets := []string{HashcatArgs.CharSet1, HashcatArgs.CharSet2,
+                         HashcatArgs.CharSet3, HashcatArgs.CharSet4}
     cmdOptions := []string{}
 
     // Get the current working directory
@@ -133,7 +134,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     lootPath := filepath.Join(HashesPath, "loot.txt")
 
     // If GPU optimization is to be applied, append it to options slice
-    if HashcatArgsStruct.ApplyOptimization {
+    if HashcatArgs.ApplyOptimization {
         cmdOptions = append(cmdOptions, "-O")
     }
 
@@ -142,8 +143,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
     // Append command args used by all attack modes
     cmdOptions = append(cmdOptions, "--remove", "-o", crackedPath, "-a",
-                        HashcatArgsStruct.CrackingMode, "-m", HashcatArgsStruct.HashType,
-                        "-w", HashcatArgsStruct.Workload, HashFilePath)
+                        HashcatArgs.CrackingMode, "-m", HashcatArgs.HashType,
+                        "-w", HashcatArgs.Workload, HashFilePath)
 
     // If a ruleset is in use and it has a path
     if HasRuleset && RulesetFilePath != "" {
@@ -195,25 +196,25 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
         var cmdArgs []string
 
-        switch HashcatArgsStruct.CrackingMode {
+        switch HashcatArgs.CrackingMode {
         case "3":
             // Appened incremental mode and available charsets for hash mask
             cmdArgs = append(cmdOptions, "--incremental")
             hashcat.AppendCharsets(&cmdArgs, charsets)
             // Append the hash mask
-            cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask)
+            cmdArgs = append(cmdArgs, HashcatArgs.HashMask)
         case "6":
             // Appened incremental mode and available charsets for hash mask
             cmdArgs = append(cmdOptions, "--incremental")
             hashcat.AppendCharsets(&cmdArgs, charsets)
             // Append the wordlist path then the hash mask
-            cmdArgs = append(cmdArgs, filePath, HashcatArgsStruct.HashMask)
+            cmdArgs = append(cmdArgs, filePath, HashcatArgs.HashMask)
         case "7":
             // Appened incremental mode and available charsets for hash mask
             cmdArgs = append(cmdOptions, "--incremental")
             hashcat.AppendCharsets(&cmdArgs, charsets)
             // Append the hash mask then the wordlist path
-            cmdArgs = append(cmdArgs, HashcatArgsStruct.HashMask, filePath)
+            cmdArgs = append(cmdArgs, HashcatArgs.HashMask, filePath)
         default:
             // For straight mode (0), just append the wordlist path
             cmdArgs = append(cmdOptions, filePath)
@@ -479,9 +480,20 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     // Send signal to other routine that hash and ruleset file has been received
     hashcatOptChannel <- struct{}{}
 
+    var diskPath string
+    // If the program is being run in testing mode
+    if DataPath == "/tmp" {
+        // Query the root directory for total space
+        diskPath = "/"
+    // If the program is being run in full mode (not testing)
+    } else {
+        // Query the /mnt/instance-store dir for total space
+        diskPath = DataPath
+    }
+
     for {
         // Get the remaining available and total disk space
-        remainingSpace, total, err := disk.DiskCheck()
+        remainingSpace, total, err := disk.GetDiskSpace(diskPath, globals.OS_RESERVED_SPACE)
         if err != nil {
             logMan.LogMessage("error", "Error checking disk space on client:  %v", err)
             return
@@ -625,17 +637,17 @@ func main() {
     var testPemCert string
 
     // Define command line flags with default values and descriptions
-    flag.BoolVar(&HashcatArgsStruct.ApplyOptimization, "applyOptimization", false,
+    flag.BoolVar(&HashcatArgs.ApplyOptimization, "applyOptimization", false,
                  "Apply the -O flag for GPU optimization")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
     flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
-    flag.StringVar(&HashcatArgsStruct.CharSet1, "charSet1", "", "Custom character set 1 for masks")
-    flag.StringVar(&HashcatArgsStruct.CharSet2, "charSet2", "", "Custom character set 2 for masks")
-    flag.StringVar(&HashcatArgsStruct.CharSet3, "charSet3", "", "Custom character set 3 for masks")
-    flag.StringVar(&HashcatArgsStruct.CharSet4, "charSet4", "", "Custom character set 4 for masks")
-    flag.StringVar(&HashcatArgsStruct.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
-    flag.StringVar(&HashcatArgsStruct.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
-    flag.StringVar(&HashcatArgsStruct.HashType, "hashType", "1000", "Hashcat hash type to crack")
+    flag.StringVar(&HashcatArgs.CharSet1, "charSet1", "", "Custom character set 1 for masks")
+    flag.StringVar(&HashcatArgs.CharSet2, "charSet2", "", "Custom character set 2 for masks")
+    flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
+    flag.StringVar(&HashcatArgs.CharSet4, "charSet4", "", "Custom character set 4 for masks")
+    flag.StringVar(&HashcatArgs.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
+    flag.StringVar(&HashcatArgs.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
+    flag.StringVar(&HashcatArgs.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
     flag.StringVar(&ipAddrs, "ipAddrs", "localhost", "IP addresses of server to connect to in CSV format")
     flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
@@ -647,12 +659,27 @@ func main() {
     flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
     flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
     flag.StringVar(&testPemCert, "testPemCert", "", "Path to TLS PEM certificate file for local testing")
-    flag.StringVar(&HashcatArgsStruct.Workload, "workload", "3", "Workload profile number to apply")
+    flag.StringVar(&HashcatArgs.Workload, "workload", "3", "Workload profile number to apply")
 
     // Parse the command line flags
     flag.Parse()
 
+    // Ensure the max transfers is proper data type
     MaxTransfersInt32 = int32(maxTransfers)
+
+    // If the program is being run in full mode (not testing)
+    if !isTesting {
+        DataPath = "/mnt/instance-store"
+    // If the program is being run in testing mode
+    } else {
+        DataPath = "/tmp"
+    }
+
+    // Join the base path to the data folders to be created
+    HashesPath = path.Join(DataPath, "hashes")
+    RulesetPath = path.Join(DataPath, "rulesets")
+    WordlistPath = path.Join(DataPath, "wordlists")
+
     // Create directories for client
     makeClientDirs()
 

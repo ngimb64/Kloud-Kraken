@@ -4,7 +4,7 @@ const KB = 1024
 const MB = 1024 * 1024
 const GB = 1024 * 1024 * 1024
 const MESSAGE_BUFFER_SIZE = 256
-const OS_RESERVED_SPACE = 10 * GB
+const OS_RESERVED_SPACE = 20 * GB
 const RAND_STRING_SIZE = 16
 
 var COLON_DELIMITER = []byte(":")

@@ -113,26 +113,12 @@ func TestCreateRandFile(t *testing.T) {
 }
 
 
-func TestDiskCheck(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Get the remaining and total space on disk
-    remaining, total, err := disk.DiskCheck()
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-    // Ensure the remaining and total are greater than 0
-    assert.Less(int64(0), remaining)
-    assert.Less(int64(0), total)
-}
-
-
 func TestGetDiskSpace(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
     // Get the total and free disk space
-    total, free, err := disk.GetDiskSpace()
+    total, free, err := disk.GetDiskSpace("/", 20 * (1024 * 1024 * 1024))
     // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the total size is greater than 0
