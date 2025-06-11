@@ -7,7 +7,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"golang.org/x/sys/unix"
 )
@@ -195,7 +194,7 @@ func GetDiskSpace(path string, reservedSpace int) (
     var statfs unix.Statfs_t
 
     // Get the stats of the passed in path
-    err = unix.Statfs(string), &statfs)
+    err = unix.Statfs(path, &statfs)
     if err != nil {
         return -1, -1, err
     }
