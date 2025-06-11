@@ -5,9 +5,8 @@ test/*.coverprofile
 # Go module dependency files
 go.sum
 
-# Local logs
-cmd/kloud-kraken/KloudKraken.log
-cmd/kloud-kraken/tls-cert.pem
+# Test TLS certificate
+tls-cert.pem
 
 # Build folder
 bin

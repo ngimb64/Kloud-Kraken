@@ -328,7 +328,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
                                         color.KrakenGlowGreen,
                                         strconv.Itoa(appConfig.LocalConfig.ListenerPort))
 
-    logMan.LogMessage("info", "Listening for connections on port %s ..",
+    logMan.LogMessage("info", "Listening for connections on port %d ..",
                       appConfig.LocalConfig.ListenerPort)
 
     for {
@@ -969,6 +969,9 @@ func main() {
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
+
+    // Sleep briefly to so output can be read before tui starts
+    time.Sleep(4 * time.Second)
 
     // Listen for incoming client connections and handle them
     startServer(appConfig, logMan)

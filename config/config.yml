@@ -1,13 +1,13 @@
 local_config:
   account_id: "123456789123"
   bucket_name: "test-bucket"
-  hash_file_path: "/home/testuser/Documents/project_testing/test-hashes"
+  hash_file_path: "/home/thebugfather/Documents/project_testing/test-hashes"
   iam_username: "test-user"
   instance_type: "p4d.24xlarge"
   listener_port: 6969
-  load_dir: "/home/testuser/Documents/project_testing/project_data"
-  local_testing: false
-  log_path: "KloudKraken.log"
+  load_dir: "/home/thebugfather/Documents/project_testing/project_data"
+  local_testing: true
+  log_path: "./bin/KloudKraken.log"
   max_merging_size: "750MB"
   max_size_range: 15.0
   number_instances: 1

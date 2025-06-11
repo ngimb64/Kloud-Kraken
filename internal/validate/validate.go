@@ -656,6 +656,10 @@ func ValidateSecurityGroups(securityGroups []string) error {
 // - Error if it occurs, otherwise nil on success
 //
 func ValidateSubnetId(subnetId string) error {
+    if subnetId == "" {
+        return nil
+    }
+
     // Ensure the AWS subnet ID is of proper format
 	if !ReSubnetId.MatchString(subnetId) {
 		return fmt.Errorf("invalid subnet ID - %q", subnetId)

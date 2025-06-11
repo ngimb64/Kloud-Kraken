@@ -272,8 +272,8 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
     } else {
         // If logging to file
         cfg := zap.NewProductionConfig()
-        cfg.OutputPaths = []string{"stdout", logFile}
-        cfg.ErrorOutputPaths = []string{"stderr", logFile}
+        cfg.OutputPaths = []string{logFile}
+        cfg.ErrorOutputPaths = []string{logFile}
 
         // Build the file-based logger
         logger, err = cfg.Build()
