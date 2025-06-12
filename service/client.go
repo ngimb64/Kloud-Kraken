@@ -383,8 +383,9 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     // Set up context handler for TLS listener
     ctx, cancel := context.WithCancel(context.Background())
     // Setup up TLS listener from existing raw TCP listener
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool,
-                                                       ctx, "", port, listener)
+    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
+                                                       TlsMan.CaCertPool, ctx,
+                                                       "", port, listener)
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
     }
@@ -737,7 +738,11 @@ func main() {
     }
 
     // Append the client TLS cert PEM block to management list
-    TlsMan.AddCACert(serverCertPemBlock)
+    err = TlsMan.AddCACert(serverCertPemBlock)
+    if err != nil {
+        log.Fatalf("Error adding PEM cert to pool:  %v", err)
+        return
+    }
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig,

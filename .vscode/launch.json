@@ -21,7 +21,7 @@
             "mode": "debug",
             "program": "${workspaceFolder}/service/client.go",
             "args": [
-                "-ipAddr=10.0.0.17",
+                "-ipAddrs=10.0.0.17",
                 "-port=6969",
                 "-awsRegion=us-east-1",
                 "-maxFileSizeInt64=17179869184",

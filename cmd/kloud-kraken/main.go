@@ -182,7 +182,11 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
     }
 
     // Add the read client PEM cert to the cert pool
-    TlsMan.AddCACert(buffer[:bytesRead])
+    err = TlsMan.AddCACert(buffer[:bytesRead])
+    if err != nil {
+        logMan.LogMessage("error", "Error adding PEM cert to pool:  %v", err)
+        return
+    }
 
     // Notify TLS cerificate has been received in the tui right panel
     t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -312,8 +316,9 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
     // Set up the TLS listener to accept incoming connections
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate, TlsMan.CaCertPool, ctx,
-                                                       "", appConfig.LocalConfig.ListenerPort, nil)
+    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
+                                                       TlsMan.CaCertPool, ctx, "",
+                                                       appConfig.LocalConfig.ListenerPort, nil)
     if err != nil {
         logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
     }
