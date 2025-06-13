@@ -209,7 +209,7 @@ type TlsManager struct {
 // - Error if it occurs, otherwise nil on success
 //
 func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
-    // Add it to your slice for record-keeping
+    // Add it to slice for record-keeping
     TlsMan.CaCertPemBlocks = append(TlsMan.CaCertPemBlocks, pemBlock)
 
     // Append directly into the existing pool

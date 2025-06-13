@@ -741,7 +741,6 @@ func main() {
     err = TlsMan.AddCACert(serverCertPemBlock)
     if err != nil {
         log.Fatalf("Error adding PEM cert to pool:  %v", err)
-        return
     }
 
     // Initialize the LoggerManager based on the flags

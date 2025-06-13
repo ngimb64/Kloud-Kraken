@@ -102,8 +102,10 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         return
     }
 
+    // Strip the original port used for connection from address
+    ipAddr = strings.Split(ipAddr, ":")[0]
     // Format remote address with IP and  received port for transfer
-    remoteAddr := strings.Split(ipAddr, ":")[0] + ":" + strconv.Itoa(int(port))
+    remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
 
     // Make a connection to the remote brain server
     transferConn, err := tls.Dial("tcp", remoteAddr,
