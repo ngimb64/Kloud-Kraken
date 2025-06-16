@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -104,14 +105,14 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
 
     // Strip the original port used for connection from address
     ipAddr = strings.Split(ipAddr, ":")[0]
-    // Format remote address with IP and  received port for transfer
+    // Format remote address with parsed IP and received port for transfer
     remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
 
     // Make a connection to the remote brain server
     transferConn, err := tls.Dial("tcp", remoteAddr,
                                   tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
-        logMan.LogMessage("fatal", "Error connecting to remote client for transfer:  %v", err)
+        logMan.LogMessage("error", "Error connecting to remote client for transfer:  %v", err)
         return
     }
 
@@ -123,11 +124,12 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
                                         color.NeonAzure, " on port ",
                                         color.KrakenGlowGreen, strconv.Itoa(int(port)))
 
-    // Display the file path to be transfered in right panel
+    // Display the file name to be transfered in right panel
     t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                              color.LightCyan, "!"), "",
-                                         color.RadiantAmethyst, filePath,
-                                         color.NeonAzure, " to be transfered")
+                                         color.RadiantAmethyst, filepath.Base(filePath),
+                                         color.NeonAzure, " transfering to ",
+                                         color.RadiantAmethyst, ipAddr)
 
     logMan.LogMessage("info", "Connected remote client %s on port %d, %s to be transfered",
                       ipAddr, port, filePath)
@@ -148,8 +150,9 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
         // Display the file path to be transfered in right panel
         t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                                  color.LightCyan, "$"), "",
-                                             color.RadiantAmethyst, filePath,
-                                             color.NeonAzure, " transfer completed")
+                                             color.RadiantAmethyst, filepath.Base(filePath),
+                                             color.NeonAzure, " transfer completed to ",
+                                             color.RadiantAmethyst, ipAddr)
     } ()
 }
 
@@ -376,7 +379,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     waitGroup.Wait()
 
     // Sleep for a few seconds so information can be displayed before tui is stopped
-    time.Sleep(3 * time.Second)
+    time.Sleep(5 * time.Second)
 }
 
 
@@ -802,6 +805,33 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 }
 
 
+// Displays the Kloud Kraken ascii banner.
+//
+func printBanner() {
+    // Print program banner
+    fmt.Println(color.MistyAqua + `
+          ,.                                     ..
+           xO:     c. .                  .    'o0,
+           .XM'  l0. .d     co    c.  d  kKdOWMk
+           .MM.;NN' xM;   lKKxXx.lMl  MX,oMx,oM0'
+           .MM0Ml   OM.   dM. dM'lMc  MN oMl  xMk
+           .MMXMx   OM.  'dM. dM'lMc  MN oMl  dMo
+           .MM cMO. OM..0'kM' xM,lMd .MW oMl .0M0.
+           xMM. :MX,xXNOx:'dN0Kc..cKKNd'.KMXOWK:.
+      .;, .'Wl '..cko.,   . .d    . :..;o:..,:. .  ,c'.
+        dWd.'lXd:0coO:. .dWl. 'O; lkd:llo0c.d0'  KWd
+        .Md dN: oMl'KWd .M0M. ;Mc,Nk. KW';o dM0  OM.
+        ,MKNO.  lMx0Xc  xX.Md ;MKMo   KMco  dMN0 0M
+        .MNdWO  lMkxWo .MKkNW.;MOdW;  KM;' ,dM'KKXM
+        .Mx :Wx oM: oM.OM  'MO:Ml oM: XMldN,xM..0MM.
+        lM0  lX0;0.  Oldx   xk.X. .c0d''ok,'Nd. :MMo
+        OWo.   ,o,    :.     . .     .,   .o.   .cXX.
+       dd.       .                        .        :O.
+      ;.                                             :.
+    ` + color.AnsiReset)
+}
+
+
 // Create the required dirs for program operation.
 //
 func makeServerDirs() {
@@ -861,11 +891,13 @@ func main() {
     appConfig := parseArgs()
     // Make the server directories
     makeServerDirs()
+    // Display the kloud kraken banner
+    printBanner()
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Wordlist merging started, this could " +
-                                   "take time depending on the amount of data being processed"))
+                                   color.NeonAzure, "Wordlist merging started, time varies " +
+                                   "greatly depending on the amount of data being processed"))
 
     // Merge the wordlists in the load dir based on max file size
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
@@ -885,7 +917,7 @@ func main() {
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
-                                   color.NeonAzure, "Wordlist merging completed"))
+                                   color.NeonAzure, "Wordlist merging process completed"))
 
     var awsConfig aws.Config
     var ec2Man *awsutils.Ec2Manger
@@ -978,10 +1010,13 @@ func main() {
     }
 
     // Sleep briefly to so output can be read before tui starts
-    time.Sleep(4 * time.Second)
+    time.Sleep(5 * time.Second)
 
     // Listen for incoming client connections and handle them
     startServer(appConfig, logMan)
+
+    // Redisplay banner once processing is complete
+    printBanner()
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",

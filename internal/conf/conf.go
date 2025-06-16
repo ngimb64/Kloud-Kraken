@@ -83,13 +83,13 @@ func LoadConfig(filePath string) *AppConfig {
     }
 
     // Validate local config section of YAML data
-    err = ValidateLocalConfig(&config.LocalConfig)
+    err = validateLocalConfig(&config.LocalConfig)
     if err != nil {
         log.Fatalf("Invalid local config:  %v", err)
     }
 
     // Validate client config section of YAML data
-    err = ValidateClientConfig(&config.ClientConfig)
+    err = validateClientConfig(&config.ClientConfig)
     if err != nil {
         log.Fatalf("Invalid client config:  %v", err)
     }
@@ -107,7 +107,7 @@ func LoadConfig(filePath string) *AppConfig {
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func ValidateLocalConfig(localConfig *LocalConfig) error {
+func validateLocalConfig(localConfig *LocalConfig) error {
     // Ensure the account id is of proper format
     err := validate.ValidateAccountId(localConfig.AccountId)
     if err != nil {
@@ -212,7 +212,7 @@ func ValidateLocalConfig(localConfig *LocalConfig) error {
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func ValidateClientConfig(clientConfig *ClientConfig) error {
+func validateClientConfig(clientConfig *ClientConfig) error {
     var err error
 
     // If the there are custom charsets but missing hash masks or improper mode
