@@ -119,7 +119,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     // Display the remote client connected for file transfer in left panel
     t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                             color.LightCyan, "!"), "",
-                                        color.NeonAzure, "Connected remote client ",
+                                        color.NeonAzure, "Connected ",
                                         color.RadiantAmethyst, ipAddr,
                                         color.NeonAzure, " on port ",
                                         color.KrakenGlowGreen, strconv.Itoa(int(port)))
@@ -364,7 +364,7 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
         // Display the connection spawning information in the left tui panel
         t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                                 color.LightCyan, "+"), "",
-                                            color.NeonAzure, "Connection accepted from ",
+                                            color.NeonAzure, "Accepted ",
                                             color.RadiantAmethyst, remoteAddr)
 
         logMan.LogMessage("info", "Connection accepted from %s", remoteAddr,
@@ -897,7 +897,7 @@ func main() {
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
                                    color.NeonAzure, "Wordlist merging started, time varies " +
-                                   "greatly depending on the amount of data being processed"))
+                                   "greatly depending on how much data"))
 
     // Merge the wordlists in the load dir based on max file size
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
@@ -915,7 +915,8 @@ func main() {
         log.Fatalf("Error deleting load dir subdirs:  %v", err)
     }
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+    fmt.Println(display.CtextMulti(color.FoamWhite, "\\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Wordlist merging process completed"))
 
