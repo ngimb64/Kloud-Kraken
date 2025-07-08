@@ -6,9 +6,8 @@
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenTextLogo.jpeg?raw=true)
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenLogo.jpeg?raw=true)
-<br>
 </div>
-
+<br>
 
 ## Table of Contents
 
@@ -17,7 +16,7 @@
 - [Usage](#Usage)
 - [Contributing or Issues](#Contributing-or-Issues)
 - [License](#License)
-
+<br>
 
 ## Features
 
