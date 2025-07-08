@@ -5,4 +5,4 @@
 - Try improving tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os
 
-- Try to fix rustmerger and replace original wordlist merging logic with it
+- Optimize wordlist merging and file shaving logic with custom rust programs
