@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -115,8 +116,23 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                        transferManager *data.TransferManager,
                        logMan *kloudlogs.LoggerManager) {
     completed := false
+    var err error
+    // Set the message buffer size
+    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Decrements the wait group counter upon local exit
     defer waitGroup.Done()
+
+    defer func() {
+        // Lock the mutex and ensure it unlocks on defered function exit
+        BufferMutex.Lock()
+        defer BufferMutex.Unlock()
+
+        // Transfer the log file to server
+        err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
+        if err != nil {
+            logMan.LogMessage("error", "Error occured sending the log file to server:  %v", err)
+        }
+    } ()
 
     charsets := []string{HashcatArgs.CharSet1, HashcatArgs.CharSet2,
                          HashcatArgs.CharSet3, HashcatArgs.CharSet4}
@@ -264,13 +280,6 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         transferManager.RemoveTransferSize(fileSize)
     }
 
-    // Set the message buffer size
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
-
-    // Lock the mutex and ensure it unlocks on local exit
-    BufferMutex.Lock()
-    defer BufferMutex.Unlock()
-
     // Check to see if final cracked hashes file exits before sending back to server
     exists, _, hasData, err := disk.PathExists(lootPath)
     if err != nil {
@@ -290,17 +299,14 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         }
     }
 
+    // Lock the mutex and ensure it unlocks on local exit
+    BufferMutex.Lock()
+    defer BufferMutex.Unlock()
+
     // Transfer the final cracked user hash file to server
     err = netio.UploadFile(connection, buffer, lootPath, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error occured sending the cracked hashes to server:  %v", err)
-        return
-    }
-
-    // Transfer the log file to server
-    err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
-    if err != nil {
-        logMan.LogMessage("error", "Error occured sending the log file to server:  %v", err)
         return
     }
 }
@@ -394,8 +400,14 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     transferConn, err := tlsListener.Accept()
     if err != nil {
         logMan.LogMessage("error", "Error accepting server connection:  %v", err)
-        // Ensure TLS listener and raw TCP socket are closed
-        tlsListener.Close()
+
+        // Ensure TLS listener is closed
+        err = tlsListener.Close()
+        if err != nil {
+            logMan.LogMessage("Error", "Error closing TLS listener:  %v", err)
+        }
+
+        // Call cancel function to ensure raw TCP socket is closed
         cancel()
         return
     }
@@ -406,12 +418,24 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
     transferManager.AddTransferSize(fileSize)
 
     go func() {
-        // Decrement the waitgroup on local exit
-        defer waitGroup.Done()
-        // Close TLS listener and transfer connection on local exit
-        defer cancel()
-        defer tlsListener.Close()
-        defer transferConn.Close()
+        defer func() {
+            // Close the transfer connection
+            err = transferConn.Close()
+            if err != nil {
+                logMan.LogMessage("Error", "Error closing transfer connection:  %v", err)
+            }
+
+            // Close the TLS listener
+            err = tlsListener.Close()
+            if err != nil {
+                logMan.LogMessage("Error", "Error closing the TLS listener:  %v", err)
+            }
+
+            // Call cancel function to close raw TCP socket
+            cancel()
+            // Decrement the waitgroup
+            waitGroup.Done()
+        } ()
 
         // Receive the file from remote server
         _, err = netio.HandleTransferRecv(transferConn, WordlistPath, string(fileName), fileSize)
@@ -575,6 +599,7 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 //
 func connectRemote(ipAddrs string, port int, logMan *kloudlogs.LoggerManager,
                    maxFileSizeInt64 int64) error {
+
     // Split the comma separated string into slice of addresses
     addresses := strings.Split(ipAddrs, ",")
 
@@ -591,15 +616,20 @@ func connectRemote(ipAddrs string, port int, logMan *kloudlogs.LoggerManager,
             continue
         }
 
-        // Close connection on local exit
-        defer connection.Close()
+        defer func() {
+            // Close connection to remote server
+            cerr := connection.Close()
+            if cerr != nil {
+                err = errors.Join(err, fmt.Errorf("closing client connection:  %w", cerr))
+            }
+        } ()
 
         logMan.LogMessage("info", "Connected to remote server",
                           zap.String("ip address", addr), zap.Int("port", port))
 
         // Set up goroutines for receiving and processing data
         handleConnection(connection, logMan, maxFileSizeInt64)
-        return nil
+        return err
     }
 
     return fmt.Errorf("Unable to connect to any of the address, check log for more info")
@@ -751,5 +781,8 @@ func main() {
     }
 
     // Connect to remote server to begin receiving data for processing
-    connectRemote(ipAddrs, port, logMan, maxFileSizeInt64)
+    err = connectRemote(ipAddrs, port, logMan, maxFileSizeInt64)
+    if err != nil {
+        logMan.LogMessage("Error", "Error connecting to remote server:  %v", err)
+    }
 }

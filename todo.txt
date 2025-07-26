@@ -1,4 +1,11 @@
-- Rerun system testing in AWS environment
+- AWS code logic needs to account for subsequent uses instead of just a one time use approach
+    - Add logic to delete S3 bucket and certificate from SSM Param Store after EC2 instances are terminated
+
+- Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
+
+- Add option to build VPC for project instead of default
+
+- Rerun system testing locally and in AWS environment
 
 - Implement unit tests for tlsutils, awsutils, & kloudlogs
 

@@ -137,14 +137,23 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     waitGroup.Add(1)
 
     go func() {
-        // Decrement waitgroup counter and close transfer connection on local exit
-        defer waitGroup.Done()
-        defer transferConn.Close()
+        // Close transfer connection on local exit
+        defer func() {
+            err = transferConn.Close()
+            if err != nil {
+                logMan.LogMessage("Error", "Error closing file transfer connection %s:  %v",
+                                  remoteAddr, err)
+            }
+
+            // Decrement waitgroup counter
+            waitGroup.Done()
+        }()
 
         // Transfer the file to client
         err = netio.TransferFile(transferConn, filePath, fileSize)
         if err != nil {
-            logMan.LogMessage("error", "Error occured transfering file to client:  %v", err)
+            logMan.LogMessage("error", "Error occured transfering file to client %s:  %v",
+                              remoteAddr, err)
         }
 
         // Display the file path to be transfered in right panel
@@ -172,12 +181,50 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
 func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
                       appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
                       remoteAddr string, t *tui.TUI) {
-    // Close connection and decrement waitGroup counter on local exit
-    defer waitGroup.Done()
-    defer connection.Close()
+    var buffer []byte
+    var err error
+    // Close the connection on local exit
+    defer func() {
+        err = connection.Close()
+        if err != nil {
+            logMan.LogMessage("Error", "Error closing client connection %s:  %v",
+                              connection.RemoteAddr(), err)
+        }
+
+        // Decrement the active connection count
+        CurrentConnections.Add(-1)
+
+        // Display the connection termination information in the left tui panel
+        t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                color.LightCyan, "-"), "",
+                                            color.NeonAzure, "Connection closed for ",
+                                            color.RadiantAmethyst, remoteAddr)
+
+        logMan.LogMessage("info", "Connection processing handled",
+                        zap.Int32("remaining connections", CurrentConnections.Load()))
+
+        // Decrement waitGroup counter on local exit
+        waitGroup.Done()
+    } ()
+
+    defer func () {
+        // Receive log file from client
+        _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
+                                globals.LOG_TRANSFER_PREFIX)
+        if err != nil {
+            logMan.LogMessage("error", "Error receiving log file:  %v", err)
+            return
+        }
+
+        // Notify the log file has been received in the tui right panel
+        t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                color.LightCyan, "$"), "",
+                                             color.NeonAzure, "Log file received from client ",
+                                             color.RadiantAmethyst, remoteAddr)
+    } ()
 
     // Set buffer to receive client PEM certificate
-    buffer := make([]byte, 2 * globals.KB)
+    buffer = make([]byte, 2 * globals.KB)
 
     // Receive the client PEM certificate bytes
     bytesRead, err := netio.ReadHandler(connection, &buffer)
@@ -270,32 +317,6 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
                                                              color.LightCyan, "$"), "",
                                          color.NeonAzure, "Cracked hashes received from client ",
                                          color.RadiantAmethyst, remoteAddr)
-
-    // Receive log file from client
-    _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
-                               globals.LOG_TRANSFER_PREFIX)
-    if err != nil {
-        logMan.LogMessage("error", "Error receiving log file:  %v", err)
-        return
-    }
-
-    // Notify the log file has been received in the tui right panel
-    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                             color.LightCyan, "$"), "",
-                                         color.NeonAzure, "Log file received from client ",
-                                         color.RadiantAmethyst, remoteAddr)
-
-    // Decrement the active connection count
-    CurrentConnections.Add(-1)
-
-    // Display the connection termination information in the left tui panel
-    t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                            color.LightCyan, "-"), "",
-                                        color.NeonAzure, "Connection closed for ",
-                                        color.RadiantAmethyst, remoteAddr)
-
-    logMan.LogMessage("info", "Connection processing handled",
-                      zap.Int32("remaining connections", CurrentConnections.Load()))
 }
 
 
@@ -329,7 +350,12 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
     }
 
     // Close the TLS listener on local exit
-    defer tlsListener.Close()
+    defer func() {
+        err = tlsListener.Close()
+        if err != nil {
+            logMan.LogMessage("error", "Error closing TLS listener:  %v", err)
+        }
+    } ()
 
     // Display port TLS listener is on in the left panel
     t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,

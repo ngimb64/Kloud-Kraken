@@ -338,7 +338,7 @@ func (TlsMan *TlsManager) PemCertAndKeyGenHandler(orgName string, testMode bool,
 // Generates a TLS certficate and key converted to PEM format, if generateFiles boolean is
 // toggled then PEM cert and key will be written as files in addition to returned in memory.
 //
-// @Params
+// @Parameters
 // - name:  name of organization to put on the certificate
 // - hosts:  A comma-separated string with the IP addresses and DNS names used by clients
 //           to be able to connect with the server that generated it
