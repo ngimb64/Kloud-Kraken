@@ -1,8 +1,8 @@
 package conf
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
@@ -19,6 +19,7 @@ type AppConfig struct {
 type LocalConfig struct {
     AccountId           string   `yaml:"account_id"`
     BucketName          string   `yaml:"bucket_name"`
+    CidrBlock           string   `yaml:"cidr_block"`
     HashFilePath        string   `yaml:"hash_file_path"`
     IamUsername         string   `yaml:"iam_username"`
     InstanceType        string   `yaml:"instance_type"`
@@ -35,6 +36,7 @@ type LocalConfig struct {
     SecurityGroupIds    []string `yaml:"security_group_ids"`
     SecurityGroups      []string `yaml:"security_groups"`
     SubnetId            string   `yaml:"subnet_id"`
+    VpcId               string   `yaml:"vpc_id"`
 }
 
 // ClientConfig contains the yaml configuration for the client settings
@@ -62,39 +64,46 @@ type ClientConfig struct {
 //
 // @Returns
 // - The initialized AppConfig struct loaded with validated data
+// - Error if it occurs, otherwise nil on success
 //
-func LoadConfig(filePath string) *AppConfig {
+func LoadConfig(filePath string) (_ *AppConfig, err error) {
+    // Create a new AppConfig instance
+    var config AppConfig
+
     // Open the YAML file
     file, err := os.Open(filePath)
     if err != nil {
-        log.Fatalf("Could not open YAML file:  %v", err)
+        return &config, err
     }
-    // Close file on local exit
-    defer file.Close()
 
-    // Create a new AppConfig instance
-    var config AppConfig
+    // Close file on local exit
+    defer func() {
+        cerr := file.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing config file:  %w", cerr))
+        }
+    }()
 
     // Decode YAML into AppConfig struct
     decoder := yaml.NewDecoder(file)
     err = decoder.Decode(&config)
     if err != nil {
-        log.Fatalf("Could not decode YAML into AppConfig:  %v", err)
+        return &config, err
     }
 
     // Validate local config section of YAML data
     err = validateLocalConfig(&config.LocalConfig)
     if err != nil {
-        log.Fatalf("Invalid local config:  %v", err)
+        return &config, err
     }
 
     // Validate client config section of YAML data
     err = validateClientConfig(&config.ClientConfig)
     if err != nil {
-        log.Fatalf("Invalid client config:  %v", err)
+        return &config, err
     }
 
-    return &config
+    return &config, nil
 }
 
 
@@ -116,6 +125,12 @@ func validateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure the S3 bucket name is of proper format if exists
     err = validate.ValidateBucketName(localConfig.BucketName)
+    if err != nil {
+        return err
+    }
+
+    // Ensure the CIDR block is of proper format if exists
+    err = validate.ValidateCidrBlock(localConfig.CidrBlock)
     if err != nil {
         return err
     }
@@ -197,6 +212,12 @@ func validateLocalConfig(localConfig *LocalConfig) error {
     err = validate.ValidateSubnetId(localConfig.SubnetId)
     if err != nil {
         return err
+    }
+
+    // Ensure the VPC ID is valid
+    err = validate.ValidateVpcId(localConfig.VpcId)
+    if err != nil {
+        return  err
     }
 
     return nil

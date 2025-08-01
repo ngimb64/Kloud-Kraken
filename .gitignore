@@ -1,7 +1,3 @@
-# Go test coverage files
-test/*.coverage
-test/*.coverprofile
-
 # Go module dependency files
 go.sum
 
@@ -10,3 +6,6 @@ tls-cert.pem
 
 # Build folder
 bin
+
+# Log file
+KloudKraken.log

@@ -103,107 +103,89 @@ func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, string, 
 
 // Struct for managing EC2 operations
 type Ec2Manger struct {
-    ami              string
-    client           *ec2.Client
-    count            int
-    instanceType     string
-    name             string
-    roleName         string
-    runResult        *ec2.RunInstancesOutput
-    securityGroupIds []string
-    securityGroups   []string
-    subnetId         string
-    userData         []byte
+    client      *ec2.Client
+    runResult   *ec2.RunInstancesOutput
 }
 
 // Establishes connection to EC2 service and generates EC2 manager struct
 //
 // @Parameters
-// - ami:  The Amazon Machine Image that the EC2 instances will be using
 // - awsConfig:  The AWS credential configuration for connecting to service
-// - count:  The number of instances to be spawned
-// - instanceType:  The type of instance to be used
-// - name:  The name of the service to be tagged for easy reference
-// - roleName:  The name of the IAM role to be utilized
-// - securityGroupIds:  List of security group IDs to apply
-// - securityGroups:  List of security group names to apply
-// - subnetId:  The subnet ID to apply
-// - userData:   The user data to be fed into each EC2 and executed
 //
 // @Returns
 // - The initialized EC2 manager with populated data
 //
-func NewEc2Manager(ami string, awsConfig aws.Config, count int, instanceType string,
-                   name string, roleName string, securityGroupIds []string,
-                   securityGroups []string, subnetId string, userData []byte) *Ec2Manger {
+func NewEc2Manager(awsConfig aws.Config) *Ec2Manger {
     // Setup a new EC2 client
     ec2Client := ec2.NewFromConfig(awsConfig)
 
     return &Ec2Manger{
-        ami:              ami,
-        client:           ec2Client,
-        count:            count,
-        instanceType:     instanceType,
-        name:             name,
-        roleName:         roleName,
-        securityGroupIds: securityGroupIds,
-        securityGroups:   securityGroups,
-        subnetId:         subnetId,
-        userData:         userData,
+        client:     ec2Client,
     }
 }
 
-// Launches EC2 instances based on passed in count, pausing between each based on
-// based in delay.
+// Launches EC2 instances based on passed in config args.
 //
 // @Parameters
 // - callTime:  The length of time the API call is allowed to execute
+// - userData:   The user data to be fed into each EC2 and executed
+// - ami:  The Amazon Machine Image that the EC2 instances will be using
+// - instanceType:  The type of instance to be used
+// - count:  The number of instances to be spawned
+// - roleName:  The name of the IAM role to be utilized
+// - name:  The name of the service to be tagged for easy reference
+// - securityGroupIds:  List of security group IDs to apply
+// - securityGroups:  List of security group names to apply
+// - subnetId:  The subnet ID to apply
 //
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration) (error) {
+func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration, userData []byte, ami string,
+                                            instanceType string, count int, roleName string,
+                                            name string, securityGroupIds []string,
+                                            securityGroups []string, subnetId string) (error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // Base64 encode the user data script
-    encodedUserData := base64.StdEncoding.EncodeToString(Ec2Man.userData)
+    encodedUserData := base64.StdEncoding.EncodeToString(userData)
 
     // Prepare the RunInstances input
     input := &ec2.RunInstancesInput{
-        ImageId:      aws.String(Ec2Man.ami),
-        InstanceType: ec2types.InstanceType(Ec2Man.instanceType),
-        MinCount:     aws.Int32(int32(Ec2Man.count)),
-        MaxCount:     aws.Int32(int32(Ec2Man.count)),
+        ImageId:      aws.String(ami),
+        InstanceType: ec2types.InstanceType(instanceType),
+        MinCount:     aws.Int32(int32(count)),
+        MaxCount:     aws.Int32(int32(count)),
         UserData:     aws.String(encodedUserData),
         IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
-            Name: aws.String(Ec2Man.roleName),
+            Name: aws.String(roleName),
         },
         // Tag instances on creation
         TagSpecifications: []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInstance,
                 Tags: []ec2types.Tag{
-                    {Key: aws.String("Service"), Value: aws.String(Ec2Man.name)},
+                    {Key: aws.String("Service"), Value: aws.String(name)},
                 },
             },
         },
     }
 
     // If there security groups IDs to apply
-    if len(Ec2Man.securityGroupIds) > 0 {
-        input.SecurityGroupIds = Ec2Man.securityGroupIds
+    if len(securityGroupIds) > 0 {
+        input.SecurityGroupIds = securityGroupIds
     }
 
     // If there are security group names to apply
-    if len(Ec2Man.securityGroups) > 0 {
-        input.SecurityGroups = Ec2Man.securityGroups
+    if len(securityGroups) > 0 {
+        input.SecurityGroups = securityGroups
     }
 
     // If there is specified subnet to apply
-    if Ec2Man.subnetId != "" {
-        input.SubnetId = &Ec2Man.subnetId
+    if subnetId != "" {
+        input.SubnetId = &subnetId
     }
 
     // Execute call to run the EC2 instance
@@ -256,11 +238,113 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
     return termOutput, nil
 }
 
+// Returns VPC ID if it exists, or creates it using supplied CIDR.
+//
+// @Parameters
+// - callTime:  The length of time the API call is allowed to execute
+// - vpcID:  The ID of the VPC to ensure exists
+// - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//
+// @Returns
+// - The ID of VPC if created, otherwise nil
+// - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcID string,
+                                      cidrBlock string) (string, error) {
+    // If the user passed in a VPC ID
+    if vpcID != "" {
+        // Set context timeout for API call
+        ctx, cancel := context.WithTimeout(context.Background(), callTime)
+
+        // Check to see if the VPC exists
+        out, err := Ec2Man.client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
+            VpcIds: []string{vpcID},
+        })
+        cancel()
+
+        // If the ID was identified, exit early
+        if err == nil && len(out.Vpcs) == 1 {
+            return "", nil
+        }
+
+        var apiErr smithy.APIError
+        // If the error is not API related
+        // OR the API error suggests the VPC exists
+        if !errors.As(err, &apiErr) ||
+        apiErr.ErrorCode() != "InvalidVpcID.NotFound" {
+            return "", err
+        }
+    }
+
+    // Format input for CreateVpc call
+    createCallInput := &ec2.CreateVpcInput{
+        CidrBlock: aws.String(cidrBlock),
+        TagSpecifications: []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeVpc,
+                Tags: []ec2types.Tag{
+                {
+                    Key: aws.String("Name"), Value: aws.String("Kloud-Kraken-VPC"),
+                },
+            },
+        }},
+    }
+
+    // Set context timeout for API call
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+
+    // Create a new VPC since no valid ID was provided
+    createOut, err := Ec2Man.client.CreateVpc(ctx, createCallInput)
+    cancel()
+    if err != nil {
+        return "", err
+    }
+
+    // Format input for NewVpcExistsWaiter call
+    waiterCallInput := &ec2.DescribeVpcsInput{
+        VpcIds: []string{*createOut.Vpc.VpcId},
+    }
+
+    // Set context timeout for API call
+    ctx, cancel = context.WithTimeout(context.Background(), callTime)
+
+    // Allocate waiter and wait until the VPC is available
+    waiter := ec2.NewVpcExistsWaiter(Ec2Man.client)
+    err = waiter.Wait(ctx, waiterCallInput, 5 * time.Minute)
+    cancel()
+    if err != nil {
+        return "", err
+    }
+
+    return *createOut.Vpc.VpcId, nil
+}
+
+
+// Struct for managing S3 bucket operations
+type IamManager struct {
+    client  *iam.Client
+}
+
+// Establishes connection to IAM service and generates IAM manager struct
+//
+// @Parameters
+// - awsConfig:  The AWS credential configuration for connecting to service
+//
+// @Returns
+// - The initialized IAM manager with populated data
+//
+func NewIamManager(awsConfig aws.Config) *IamManager {
+    // Setup a new EC2 client
+    iamClient := iam.NewFromConfig(awsConfig)
+
+    return &IamManager{
+        client:     iamClient,
+    }
+}
 
 // Creates an IAM role with the passed in JSON policy data applied.
 //
 // @Parameters
-// - iamClient:  The client to the IAM service
 // - callTime:  The length of time the API call is allowed to execute
 // - roleName:  The IAM Role to attach to
 // - trustPolicyJson:  The JSON trust policy
@@ -272,16 +356,17 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
 // - The ARN of the existing or created role
 // - Error if it occurs, otherwise nil on success
 //
-func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName string,
-                     trustPolicyJson string, permPolicyName string,
-                     permPolicyJson string, createProfile bool) (string, error) {
+func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName string,
+                                         trustPolicyJson string, permPolicyName string,
+                                         permPolicyJson string, createProfile bool) (
+                                         string, error) {
     var roleArn string
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // Check if the IAM role exists
-    getOut, err := iamClient.GetRole(ctx, &iam.GetRoleInput{
+    getOut, err := IamMan.client.GetRole(ctx, &iam.GetRoleInput{
         RoleName: aws.String(roleName),
     })
     if err != nil {
@@ -290,7 +375,7 @@ func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName str
         // If the IAM role does not exist
         if ok := errors.As(err, &notFound); ok {
             // Create the IAM role
-            createOut, err := iamClient.CreateRole(ctx, &iam.CreateRoleInput{
+            createOut, err := IamMan.client.CreateRole(ctx, &iam.CreateRoleInput{
                 RoleName:                 aws.String(roleName),
                 AssumeRolePolicyDocument: aws.String(trustPolicyJson),
             })
@@ -309,7 +394,7 @@ func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName str
     }
 
     // Attach or overwrite the inline permissions policy
-    _, err = iamClient.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
+    _, err = IamMan.client.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
         RoleName:       aws.String(roleName),
         PolicyName:     aws.String(permPolicyName),
         PolicyDocument: aws.String(permPolicyJson),
@@ -320,7 +405,7 @@ func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName str
 
     if createProfile {
         // Create the instance profile
-        _, err = iamClient.CreateInstanceProfile(ctx, &iam.CreateInstanceProfileInput{
+        _, err = IamMan.client.CreateInstanceProfile(ctx, &iam.CreateInstanceProfileInput{
             InstanceProfileName: aws.String(roleName),
         })
         if err != nil {
@@ -333,7 +418,7 @@ func IamRoleCreation(iamClient *iam.Client, callTime time.Duration, roleName str
         }
 
         // Add role to the instance profile
-        _, err = iamClient.AddRoleToInstanceProfile(ctx, &iam.AddRoleToInstanceProfileInput{
+        _, err = IamMan.client.AddRoleToInstanceProfile(ctx, &iam.AddRoleToInstanceProfileInput{
             InstanceProfileName: aws.String(roleName),
             RoleName:            aws.String(roleName),
         })

@@ -19,11 +19,24 @@ import (
 // Package level variables
 var ReAccountId = regexp.MustCompile(`^\d{12}$`)
 var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
+var RePrivateCidr = regexp.MustCompile(
+    `^(?:` +
+      // 10.0.0.0/16 - 10.255.255.255/28
+      `10\.(?:[0-9]{1,3}\.){2}[0-9]{1,3}` +
+    `|` +
+      // 172.16.0.0/16 - 172.31.255.255/28
+      `172\.(?:1[6-9]|2[0-9]|3[0-1])\.(?:[0-9]{1,3}\.)[0-9]{1,3}` +
+    `|` +
+      // 192.168.0.0/16 - 192.168.255.255/28
+      `192\.168\.(?:[0-9]{1,3}\.)[0-9]{1,3}` +
+    `)\/(?:1[6-9]|2[0-8])$`,
+)
 var ReSecurityGroupId = regexp.MustCompile(`^sg-[0-9a-f]{8,}$`)
 var ReSecurityGroupName = regexp.MustCompile(
     `^[A-Za-z0-9\s\.\_\-\:\/\(\)\#\,\@\[\]\+\=\&\;\{\}\!\$\*]{1,255}$`,
 )
 var ReSubnetId = regexp.MustCompile(`^subnet-[0-9a-f]{8,}$`)
+var ReVpcId = regexp.MustCompile(`^vpc-[0-9a-f]{8}(?:[0-9a-f]{9})?$`)
 
 
 // Ensure the AWS account ID is of proper format.
@@ -77,6 +90,28 @@ func ValidateBucketName(name string) error {
     if ip := net.ParseIP(name); ip != nil {
         return errors.New("bucket name must not be formatted as an IP address")
     }
+
+    return nil
+}
+
+
+// Ensures the CIDR block is of proper format.
+//
+// @Parameters
+// -name:  The name of the CIDR block to be validated
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateCidrBlock(cidrBlock string) error {
+    if cidrBlock == "" {
+        return nil
+    }
+
+    // Ensure the AWS subnet ID is of proper format
+	if !RePrivateCidr.MatchString(cidrBlock) {
+		return fmt.Errorf("invalid CIDR block - %q", cidrBlock)
+	}
 
     return nil
 }
@@ -662,10 +697,31 @@ func ValidateSubnetId(subnetId string) error {
 
     // Ensure the AWS subnet ID is of proper format
 	if !ReSubnetId.MatchString(subnetId) {
-		return fmt.Errorf("invalid subnet ID - %q", subnetId)
+		return fmt.Errorf("invalid Subnet ID - %q", subnetId)
 	}
 
 	return nil
+}
+
+
+// Ensures the AWS VPC ID is of proper format.
+//
+// @Parameters
+// - vpcId:  VPC ID to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateVpcId(vpcId string) error {
+    if vpcId == "" {
+        return nil
+    }
+
+    if !ReVpcId.MatchString(vpcId) {
+        return fmt.Errorf("invalid VPC ID")
+    }
+
+    return nil
 }
 
 

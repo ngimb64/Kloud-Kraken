@@ -2,6 +2,8 @@
 
 # Kloud Kraken
 
+**NOTE:** This project is still a work in progress but at least 90-95% finished so expect it to be completed around late summer or early fall 2025
+
 > A cloud based hash cracking beast that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenTextLogo.jpeg?raw=true)
@@ -24,9 +26,14 @@
 - Built-in wordlist merging with flexibility to skip larger files
   - Merging process using `cat` -> `deduplicut`
   - If the file goes over max file size, excess data is shaved with `cut` or `dd` depending on its size
+<br>
+
 - Custom TLS based file transfer service using SSM Parameter Store to transfer certificates
   - Service continually transfers data requested by clients based on allowed max file size until the load directory has been completely processed
-  - Files are transfered directly to the local EC2 instance-store which features multiple drives combined in a RAID 0 configuration for performance
+  - Files are transferred directly to the local EC2 instance-store which features multiple drives combined in a RAID 0 configuration for performance
+  - Facilitates multiple file transfers per EC2 client simultaneously
+<br>
+
 - Supports hash cracking distributed workloads among multiple EC2
 - CLI features colorized TUI interface
 <br>

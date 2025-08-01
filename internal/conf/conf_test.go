@@ -18,13 +18,11 @@ func TestLoadConfig(t *testing.T) {
 
     // Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
-    testDir := fmt.Sprintf("%s/testdir", path)
+    testDir := path + "/testdir"
     // Create the test directory for the data loaded by the config file
     err = os.Mkdir(testDir, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testFiles := []string{filepath.Join(testDir, "hashes"),
@@ -34,7 +32,6 @@ func TestLoadConfig(t *testing.T) {
     for _, fileName := range testFiles {
         // Create the current file
         file, err := os.Create(fileName)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Make a byte buffer based off iteration index
@@ -43,23 +40,21 @@ func TestLoadConfig(t *testing.T) {
         data.GenerateRandomBytes(buffer, 64)
         // Write the test strings to current file
         bytesWrote, err := file.Write(buffer)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
+
         // Ensure the buffer of random data matches bytes wrote
         assert.Equal(len(buffer), bytesWrote)
         // Close the file after data is written
-        file.Close()
+        err = file.Close()
+        assert.Equal(nil, err)
     }
-
-
-    // TODO:  add security_group_ids, security_groups, and subnet_id
-
 
     yamlPath := "testdata.yml"
     testData := fmt.Sprintf(`
 local_config:
   account_id: "123456789123"
   bucket_name: "test-bucket"
+  cidr_block: "10.0.0.1/24"
   hash_file_path: "%s"
   iam_username: "doug"
   instance_type: "p4d.24xlarge"
@@ -80,6 +75,7 @@ local_config:
     - "my-security-group"
     - "web.server@frontend"
   subnet_id: "subnet-0a1b2c3d4e5f6a7b8"
+  vpc_id: "vpc-23a3239c203e0230b0a"
 
 
 client_config:
@@ -100,15 +96,16 @@ client_config:
 `, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
     err = os.WriteFile(yamlPath, []byte(testData), 0644)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Load the config into AppConfig struct
-    config := conf.LoadConfig(yamlPath)
+    config, err := conf.LoadConfig(yamlPath)
+    assert.Equal(nil, err)
 
     // Validate local config fields to original data
     assert.Equal("123456789123", config.LocalConfig.AccountId)
     assert.Equal("test-bucket", config.LocalConfig.BucketName)
+    assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
     assert.Equal("doug", config.LocalConfig.IamUsername)
     assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
@@ -125,6 +122,7 @@ client_config:
     assert.Equal(3, len(config.LocalConfig.SecurityGroupIds))
     assert.Equal(2, len(config.LocalConfig.SecurityGroups))
     assert.Equal("subnet-0a1b2c3d4e5f6a7b8", config.LocalConfig.SubnetId)
+    assert.Equal("vpc-23a3239c203e0230b0a", config.LocalConfig.VpcId)
 
     // Validate client config fields to original data
     assert.True(config.ClientConfig.ApplyOptimization)
@@ -150,12 +148,10 @@ client_config:
     for _, file := range testFiles {
         // Delete the current file
         err = os.Remove(file)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 
     // Delete the test dir where test files reside
     err = os.Remove(testDir)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }

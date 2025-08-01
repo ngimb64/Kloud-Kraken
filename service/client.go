@@ -688,7 +688,7 @@ func main() {
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
                   "The max size for file to be transmitted at once")
     flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
-    flag.IntVar(&port, "port", 6969, "TCP port to connect to on brain server")
+    flag.IntVar(&port, "port", 7003, "TCP port to connect to on brain server")
     flag.StringVar(&testPemCert, "testPemCert", "", "Path to TLS PEM certificate file for local testing")
     flag.StringVar(&HashcatArgs.Workload, "workload", "3", "Workload profile number to apply")
 

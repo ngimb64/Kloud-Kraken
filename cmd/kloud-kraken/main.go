@@ -19,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
@@ -473,7 +472,7 @@ grep -q '/mnt/instance-store' /etc/fstab || \
     echo "/dev/md0  /mnt/instance-store  ext4  defaults,nofail  0 2" >> /etc/fstab
 mountpoint -q /mnt/instance-store || mount /mnt/instance-store
 
-echo "✓ Instance-store ready at /mnt/instance-store"
+echo "[!] Instance-store ready at /mnt/instance-store"
 
 # === Application bootstrap ===
 apt update && apt upgrade -y && apt install -y hashcat
@@ -670,10 +669,12 @@ func clientTrustPolicyGen() string {
 }
 
 
-// Sets up AWS credentials, uses IAM permissions in the credentials to set up
-// client and server roles in IAM. Then assumes created server role via STS
-// service. Puts generated TLS certificate in SSM parameter store and client
-// binary in S3 bucket for later retrieval. Concludes by launching EC2 instances.
+// Sets up AWS credentials, then the VPC and all its inner workings are provisioned
+// where it checks if the resource exists and creates it if it does not. Uses IAM
+// permissions in the credentials to set up client and server roles in IAM. Then
+// assumes created server role via STS service. Puts generated TLS certificate in
+// SSM parameter store and client binary in S3 bucket for later retrieval.
+// Concludes by launching EC2 instances and ensure proper termination via defer.
 //
 // @Parameters
 // - appConfig:  The configuration instance with program YAML data
@@ -686,16 +687,54 @@ func clientTrustPolicyGen() string {
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               aws.Config, *awsutils.Ec2Manger, error) {
-    var ec2Man *awsutils.Ec2Manger
+    var ec2Client *awsutils.Ec2Manger
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
                                                     1 * time.Minute)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
+    // Establish client to EC2 service
+    ec2Client = awsutils.NewEc2Manager(awsConfig)
+
+
+    // TODO:  make sure README IAM profile permissions are updated for VPC description and creation before proceeding
+
+
+    // Check to see if the VPC exists, otherwise create one
+    vpcId, err := ec2Client.VpcProvision(5 * time.Minute,
+                                         appConfig.LocalConfig.VpcId,
+                                         appConfig.LocalConfig.CidrBlock)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If a new VPC was created
+    if vpcId != "" {
+        // TODO:  create function that insert the VPC ID the YAML config for further uses
+    }
+
+
+    // TODO:  VPC network setup
+    //     X Create VPC with CIDR block
+    //     - Create public and private subnets within the VPC
+    //     - Create and attach Internet Gateway (IGW) to the VPC
+    //     - Create NAT Gateway in public subnet (requires Elastic IP)
+    //     - Create route table for public subnet: 0.0.0.0/0 → IGW
+    //     - Create route table for private subnet: 0.0.0.0/0 → NAT Gateway
+    //     - Associate route tables with respective subnets
+    //     - Create security groups for EC2 and other services
+    //     - (Optional) Configure Network ACLs for granular subnet-level rules
+    //     - Create VPC endpoints (e.g., S3, SSM) for private access without NAT
+    //     - Enable VPC Flow Logs for traffic monitoring and auditing
+
+    // TODO:  add function for checking to see if all the needed resources exist,
+    //        and create them if they dont while adjusting permissions policy in README
+
+
     // Setup client to IAM service
-    iamClient := iam.NewFromConfig(awsConfig)
+    iamClient := awsutils.NewIamManager(awsConfig)
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := clientTrustPolicyGen()
@@ -704,11 +743,11 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                              appConfig.LocalConfig.AccountId,
                                              "/kloud-kraken/tls/cert", "Kloud-Kraken")
     // Create and apply the EC2 client role
-    _, err = awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ClientRole",
-                                      trustPolicy, "ClientPermissions",
-                                      permissionsPolicy, true)
+    _, err = iamClient.IamRoleCreation(2 * time.Minute, "ClientRole",
+                                       trustPolicy, "ClientPermissions",
+                                       permissionsPolicy, true)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     // Generate the servers trust and permissions policy templates
@@ -720,11 +759,11 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                             appConfig.LocalConfig.BucketName,
                                             "ClientRole")
     // Create and apply role for local server permissions
-    serverArn, err := awsutils.IamRoleCreation(iamClient, 2 * time.Minute, "ServerRole",
-                                               trustPolicy, "ServerPermissions",
-                                               permissionsPolicy, false)
+    serverArn, err := iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
+                                                trustPolicy, "ServerPermissions",
+                                                permissionsPolicy, false)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -745,17 +784,17 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
     )
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
-    // Establish client to SSM
-    ssmMan := awsutils.NewSsmManager(awsConfig)
+    // Setup client to SSM
+    ssmClient := awsutils.NewSsmManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
-    param, err := ssmMan.PutSsmParameter("/kloud-kraken/tls/cert",
-                                         string(TlsMan.CertPemBlock),
-                                         1 * time.Minute)
+    param, err := ssmClient.PutSsmParameter("/kloud-kraken/tls/cert",
+                                            string(TlsMan.CertPemBlock),
+                                            1 * time.Minute)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -763,19 +802,19 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                    color.NeonAzure, "TLS certificate uploaded to " +
                                    "SSM Parameter Store for client retrieval"))
 
-    // Establish client to S3
-    s3Man := awsutils.NewS3Manager(awsConfig)
+    // Setup client to S3
+    s3Client := awsutils.NewS3Manager(awsConfig)
     // Check to see if S3 bucket exists
-    exists, err := s3Man.BucketExists(appConfig.LocalConfig.BucketName, 1 * time.Minute)
+    exists, err := s3Client.BucketExists(appConfig.LocalConfig.BucketName, 1 * time.Minute)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     // If S3 bucket does not exist create one
     if !exists {
-        err = s3Man.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
+        err = s3Client.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
         if err != nil {
-            return awsConfig, ec2Man, err
+            return awsConfig, ec2Client, err
         }
 
         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -785,16 +824,16 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Read the client binary into memory
-    binData, err := os.ReadFile("./client")
+    binData, err := os.ReadFile("./kloud-kraken-client")
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Man.PutS3Object(appConfig.LocalConfig.BucketName, "client",
-                                      binData, 1 * time.Minute)
+    keyName, err := s3Client.PutS3Object(appConfig.LocalConfig.BucketName, "client",
+                                         binData, 1 * time.Minute)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -805,29 +844,29 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
-    // Setup EC2 creation instance with populated args
-    ec2Man = awsutils.NewEc2Manager("ami-0eb94e3d16a6eea5f", awsConfig,
-                                    appConfig.LocalConfig.NumberInstances,
-                                    appConfig.LocalConfig.InstanceType,
-                                    "Kloud-Kraken", "ClientRole",
-                                    appConfig.LocalConfig.SecurityGroupIds,
-                                    appConfig.LocalConfig.SecurityGroups,
-                                    appConfig.LocalConfig.SubnetId,
-                                    []byte(userData))
+    // Re-setup new client to EC2 service with newly assumed role
+    ec2Client = awsutils.NewEc2Manager(awsConfig)
     // Create number of EC2 instances based on passed in data
-    err = ec2Man.CreateEc2Instances(20 * time.Minute)
+    err = ec2Client.CreateEc2Instances(20 * time.Minute, []byte(userData),
+                                       "ami-0eb94e3d16a6eea5f",
+                                       appConfig.LocalConfig.InstanceType,
+                                       appConfig.LocalConfig.NumberInstances,
+                                       "ClientRole", "Kloud-Kraken-Client",
+                                       appConfig.LocalConfig.SecurityGroupIds,
+                                       appConfig.LocalConfig.SecurityGroups,
+                                       appConfig.LocalConfig.SubnetId)
     if err != nil {
-        return awsConfig, ec2Man, err
+        return awsConfig, ec2Client, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 instance creation completed"))
 
-    return awsConfig, ec2Man, nil
+    return awsConfig, ec2Client, nil
 }
 
 
@@ -902,8 +941,14 @@ func parseArgs() *conf.AppConfig {
         }
     }
 
+    // Load the YAML data into AppConfig struct
+    appConfig, err := conf.LoadConfig(configFilePath)
+    if err != nil {
+        log.Fatal("Error loading YAML data: ", err)
+    }
+
     // Load the configuration from the YAML file
-    return conf.LoadConfig(configFilePath)
+    return appConfig
 }
 
 
@@ -941,7 +986,7 @@ func main() {
         log.Fatalf("Error deleting load dir subdirs:  %v", err)
     }
 
-    fmt.Println(display.CtextMulti(color.FoamWhite, "\\-->",
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
                                    display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Wordlist merging process completed"))
