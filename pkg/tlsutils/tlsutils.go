@@ -461,6 +461,14 @@ func (TlsMan *TlsManager) createPemCertFile(certBytes []byte) error {
         return err
     }
 
+    defer func() {
+        // Close the generated PEM for certificate
+        cerr := certFile.Close()
+        if err != nil {
+            err = errors.Join(err, fmt.Errorf("closing client connection:  %w", cerr))
+        }
+    }()
+
     // Write the certificate to PEM file
     bytesWrote, err := certFile.Write(certBytes)
     if err != nil {
@@ -470,12 +478,6 @@ func (TlsMan *TlsManager) createPemCertFile(certBytes []byte) error {
     // If no bytes were written to PEM file
     if bytesWrote < 1 {
         return errors.New("no bytes were written to TLS cert PEM file")
-    }
-
-    // Close the generated PEM for certificate
-    err = certFile.Close()
-    if err != nil {
-        return err
     }
 
     return nil

@@ -699,7 +699,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     ec2Client = awsutils.NewEc2Manager(awsConfig)
 
 
-    // TODO:  make sure README IAM profile permissions are updated for VPC description and creation before proceeding
+    // TODO:  make sure README IAM profile permissions are updated after AWS dev is finished
 
 
     // Check to see if the VPC exists, otherwise create one
@@ -716,18 +716,21 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
 
-    // TODO:  VPC network setup
+    // TODO: VPC network setup
     //     X Create VPC with CIDR block
-    //     - Create public and private subnets within the VPC
     //     - Create and attach Internet Gateway (IGW) to the VPC
-    //     - Create NAT Gateway in public subnet (requires Elastic IP)
-    //     - Create route table for public subnet: 0.0.0.0/0 → IGW
-    //     - Create route table for private subnet: 0.0.0.0/0 → NAT Gateway
-    //     - Associate route tables with respective subnets
+    //     - Allocate Elastic IP for NAT Gateway
+    //     - Create public and private subnets within the VPC
+    //     - Create NAT Gateway in public subnet (uses Elastic IP)
+    //     - Create route table for public subnets: 0.0.0.0/0 → IGW
+    //     - Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
+    //     - Associate **public** subnets to public route table
+    //     - Associate **private** subnets to private route tables
     //     - Create security groups for EC2 and other services
     //     - (Optional) Configure Network ACLs for granular subnet-level rules
-    //     - Create VPC endpoints (e.g., S3, SSM) for private access without NAT
-    //     - Enable VPC Flow Logs for traffic monitoring and auditing
+    //     - (Optional) Create VPC endpoints (e.g., S3, SSM) for private access
+    //     - (Optional) Enable VPC Flow Logs for traffic monitoring and auditing
+
 
     // TODO:  add function for checking to see if all the needed resources exist,
     //        and create them if they dont while adjusting permissions policy in README
@@ -741,7 +744,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     permissionsPolicy := clientPermPolicyGen(appConfig.LocalConfig.BucketName,
                                              appConfig.ClientConfig.Region,
                                              appConfig.LocalConfig.AccountId,
-                                             "/kloud-kraken/tls/cert", "Kloud-Kraken")
+                                             "/kloud-kraken/tls-cert", "Kloud-Kraken")
     // Create and apply the EC2 client role
     _, err = iamClient.IamRoleCreation(2 * time.Minute, "ClientRole",
                                        trustPolicy, "ClientPermissions",
@@ -755,7 +758,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        appConfig.LocalConfig.IamUsername)
     permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region,
                                             appConfig.LocalConfig.AccountId,
-                                            "/kloud-kraken/tls/cert",
+                                            "/kloud-kraken/tls-cert",
                                             appConfig.LocalConfig.BucketName,
                                             "ClientRole")
     // Create and apply role for local server permissions
@@ -790,7 +793,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Setup client to SSM
     ssmClient := awsutils.NewSsmManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
-    param, err := ssmClient.PutSsmParameter("/kloud-kraken/tls/cert",
+    param, err := ssmClient.PutSsmParameter("/kloud-kraken/tls-cert",
                                             string(TlsMan.CertPemBlock),
                                             1 * time.Minute)
     if err != nil {

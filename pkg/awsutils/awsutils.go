@@ -70,7 +70,8 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 // - The AWS secret access key
 // - Error if it occurs, otherwise nil on success
 //
-func AwsConfigSetup(region string, callTime time.Duration) (aws.Config, string, string, error) {
+func AwsConfigSetup(region string, callTime time.Duration) (
+                    aws.Config, string, string, error) {
     // Attempt to load credentials from default credential chain
     awsConfig, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(region, callTime)
     if exists {
@@ -238,43 +239,21 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
     return termOutput, nil
 }
 
-// Returns VPC ID if it exists, or creates it using supplied CIDR.
+// Creates and waits for the VPC to be created.
 //
 // @Parameters
 // - callTime:  The length of time the API call is allowed to execute
-// - vpcID:  The ID of the VPC to ensure exists
 // - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
 //
 // @Returns
-// - The ID of VPC if created, otherwise nil
+// - The ID of the created VPC
 // - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcID string,
-                                      cidrBlock string) (string, error) {
-    // If the user passed in a VPC ID
-    if vpcID != "" {
-        // Set context timeout for API call
-        ctx, cancel := context.WithTimeout(context.Background(), callTime)
-
-        // Check to see if the VPC exists
-        out, err := Ec2Man.client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
-            VpcIds: []string{vpcID},
-        })
-        cancel()
-
-        // If the ID was identified, exit early
-        if err == nil && len(out.Vpcs) == 1 {
-            return "", nil
-        }
-
-        var apiErr smithy.APIError
-        // If the error is not API related
-        // OR the API error suggests the VPC exists
-        if !errors.As(err, &apiErr) ||
-        apiErr.ErrorCode() != "InvalidVpcID.NotFound" {
-            return "", err
-        }
-    }
+func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
+                                   cidrBlock string) (
+                                   string, error) {
+    // Set context timeout for API call
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
     // Format input for CreateVpc call
     createCallInput := &ec2.CreateVpcInput{
@@ -290,9 +269,6 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcID string,
         }},
     }
 
-    // Set context timeout for API call
-    ctx, cancel := context.WithTimeout(context.Background(), callTime)
-
     // Create a new VPC since no valid ID was provided
     createOut, err := Ec2Man.client.CreateVpc(ctx, createCallInput)
     cancel()
@@ -300,23 +276,97 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcID string,
         return "", err
     }
 
+    vpcId := *createOut.Vpc.VpcId
+
     // Format input for NewVpcExistsWaiter call
     waiterCallInput := &ec2.DescribeVpcsInput{
-        VpcIds: []string{*createOut.Vpc.VpcId},
+        VpcIds: []string{vpcId},
     }
 
     // Set context timeout for API call
     ctx, cancel = context.WithTimeout(context.Background(), callTime)
+    defer cancel()
 
     // Allocate waiter and wait until the VPC is available
     waiter := ec2.NewVpcExistsWaiter(Ec2Man.client)
     err = waiter.Wait(ctx, waiterCallInput, 5 * time.Minute)
-    cancel()
     if err != nil {
-        return "", err
+        return vpcId, err
     }
 
-    return *createOut.Vpc.VpcId, nil
+    return vpcId, nil
+}
+
+// Checks to see if the VPC exists.
+//
+// @Parameters
+// - callTime:  The length of time the API call is allowed to execute
+// - vpcID:  The ID of the VPC to ensure exists
+//
+// @Returns
+// - Boolean to notify whether bucket exists or not
+// - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) vpcExists(callTime time.Duration, vpcId string) (bool, error) {
+    // Set context timeout for API call
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Check to see if the VPC exists
+    out, err := Ec2Man.client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
+        VpcIds: []string{vpcId},
+    })
+
+    // If the ID was identified, exit early
+    if err == nil && len(out.Vpcs) == 1 {
+        return true, nil
+    }
+
+    var apiErr smithy.APIError
+    // If the error is not API related
+    // OR the API error suggests the VPC exists
+    if !errors.As(err, &apiErr) ||
+    apiErr.ErrorCode() != "InvalidVpcID.NotFound" {
+        return true, err
+    }
+
+    // The VPC was not found
+    return false, nil
+}
+
+// Returns VPC ID if it exists, or creates it using supplied CIDR.
+//
+// @Parameters
+// - callTime:  The length of time the API call is allowed to execute
+// - vpcID:  The ID of the VPC to ensure exists
+// - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//
+// @Returns
+// - The ID of VPC if created, otherwise nil
+// - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
+                                      cidrBlock string) (string, error) {
+    // If the user passed in a VPC ID
+    if vpcId != "" {
+        vpcExists, err := Ec2Man.vpcExists(callTime, vpcId)
+        if err != nil {
+            return "", err
+        }
+
+        // If the VPC already exists, exit early
+        if vpcExists {
+            return "", nil
+        }
+    }
+
+    // Create and wait until VPC is created
+    vpcId, err := Ec2Man.vpcCreate(callTime, cidrBlock)
+    if err != nil {
+        return vpcId, err
+    }
+
+    return vpcId, nil
 }
 
 
@@ -342,33 +392,78 @@ func NewIamManager(awsConfig aws.Config) *IamManager {
     }
 }
 
+
+// Creates an instance profile with passed and attaches role to it.
+//
+// @Parameters
+// - callTime:  The length of time the API call is allowed to execute
+// - roleName:  The IAM Role used for operations
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
+                                                roleName string) error {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    // Create the instance profile
+    _, err := IamMan.client.CreateInstanceProfile(ctx, &iam.CreateInstanceProfileInput{
+        InstanceProfileName: aws.String(roleName),
+    })
+    cancel()
+    if err != nil {
+        var entityExists *iamtypes.EntityAlreadyExistsException
+
+        // If the error is not that the instance profile already exists
+        if !errors.As(err, &entityExists) {
+            return fmt.Errorf("instance profile already exists:  %w", err)
+        }
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel = context.WithTimeout(context.Background(), callTime)
+
+    // Add role to the instance profile
+    _, err = IamMan.client.AddRoleToInstanceProfile(ctx, &iam.AddRoleToInstanceProfileInput{
+        InstanceProfileName: aws.String(roleName),
+        RoleName:            aws.String(roleName),
+    })
+    cancel()
+    if err != nil {
+        return fmt.Errorf("attaching role to instance:  %w", err)
+    }
+
+    return nil
+}
+
+
 // Creates an IAM role with the passed in JSON policy data applied.
 //
 // @Parameters
 // - callTime:  The length of time the API call is allowed to execute
-// - roleName:  The IAM Role to attach to
+// - roleName:  The IAM Role used for operations
 // - trustPolicyJson:  The JSON trust policy
 // - permPolicyName:  An identifier name for permissions policy
 // - permPolicyJSON:  The JSON permissions policy
-// - createProfile:  Toggle to set whether instance profiles are created or not
+// - createProfile:  Toggle whether an instance profile is created or not
 //
 // @Returns
 // - The ARN of the existing or created role
 // - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName string,
-                                         trustPolicyJson string, permPolicyName string,
-                                         permPolicyJson string, createProfile bool) (
-                                         string, error) {
+                                          trustPolicyJson string, permPolicyName string,
+                                          permPolicyJson string, createProfile bool) (
+                                          string, error) {
     var roleArn string
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
-    defer cancel()
 
     // Check if the IAM role exists
     getOut, err := IamMan.client.GetRole(ctx, &iam.GetRoleInput{
         RoleName: aws.String(roleName),
     })
+    cancel()
     if err != nil {
         var notFound *iamtypes.NoSuchEntityException
 
@@ -393,37 +488,25 @@ func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName strin
         roleArn = aws.ToString(getOut.Role.Arn)
     }
 
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel = context.WithTimeout(context.Background(), callTime)
+
     // Attach or overwrite the inline permissions policy
     _, err = IamMan.client.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
         RoleName:       aws.String(roleName),
         PolicyName:     aws.String(permPolicyName),
         PolicyDocument: aws.String(permPolicyJson),
     })
+    cancel()
     if err != nil {
-        return "", fmt.Errorf("PutRolePolicy failed: %w", err)
+        return "", fmt.Errorf("PutRolePolicy failed:  %w", err)
     }
 
+    // If specified, create instance profile and attach role to it
     if createProfile {
-        // Create the instance profile
-        _, err = IamMan.client.CreateInstanceProfile(ctx, &iam.CreateInstanceProfileInput{
-            InstanceProfileName: aws.String(roleName),
-        })
+        err = IamMan.createInstanceProfile(callTime, roleName)
         if err != nil {
-            var entityExists *iamtypes.EntityAlreadyExistsException
-
-            // If the error is not that the instance profile already exists
-            if !errors.As(err, &entityExists) {
-                return "", fmt.Errorf("CreateInstanceProfile failed: %w", err)
-            }
-        }
-
-        // Add role to the instance profile
-        _, err = IamMan.client.AddRoleToInstanceProfile(ctx, &iam.AddRoleToInstanceProfileInput{
-            InstanceProfileName: aws.String(roleName),
-            RoleName:            aws.String(roleName),
-        })
-        if err != nil {
-            return "", fmt.Errorf("AddRoleToInstanceProfile failed: %w", err)
+            return "", fmt.Errorf("creating EC2 instace profile:  %w", err)
         }
     }
 
