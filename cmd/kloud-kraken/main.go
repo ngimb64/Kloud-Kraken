@@ -716,11 +716,15 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
 
+
+
+    // TODO:  ask AI about where to add S3 bucket provisioning on below list
+
     // TODO: VPC network setup
     //     X Create VPC with CIDR block
     //     - Create and attach Internet Gateway (IGW) to the VPC
     //     - Allocate Elastic IP for NAT Gateway
-    //     - Create public and private subnets within the VPC
+    //     X Create public and private subnets within the VPC
     //     - Create NAT Gateway in public subnet (uses Elastic IP)
     //     - Create route table for public subnets: 0.0.0.0/0 → IGW
     //     - Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
@@ -732,8 +736,42 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     - (Optional) Enable VPC Flow Logs for traffic monitoring and auditing
 
 
-    // TODO:  add function for checking to see if all the needed resources exist,
-    //        and create them if they dont while adjusting permissions policy in README
+
+
+    // Get the slice of availability zones based on region
+    azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Pick random AZ from slice of AZ names
+    az := awsutils.PickAzRandom(azs)
+
+
+    // TODO:  figure out how public/private CIDR address ranges will be implemented
+    //        as both subnets are currently using the same range which is wrong
+
+
+    // Create public subnet if it does not exist
+    pubSubet, err := ec2Client.SubnetProvision(1 * time.Minute, vpcId,
+                                               appConfig.LocalConfig.CidrBlock,
+                                               az, true)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Create private subnet if it does not exist
+    privSubnet, err := ec2Client.SubnetProvision(1 * time.Minute, vpcId,
+                                                 appConfig.LocalConfig.CidrBlock,
+                                                 az, false)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+
+
+
+
 
 
     // Setup client to IAM service

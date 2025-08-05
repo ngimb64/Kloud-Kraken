@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"strconv"
 	"time"
@@ -24,6 +25,10 @@ import (
 	"github.com/aws/smithy-go"
 )
 
+// Package level varaibles
+var AzIndex = 0
+
+
 // Attempts to load AWS access and secret keys from the default keychain.
 //
 // @Parameters
@@ -39,9 +44,9 @@ import (
 func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
                                  aws.Config, string, string, bool) {
     // Load the local credential chain (env, ~/.aws, etc.)
-    config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+    cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
     if err != nil {
-        return config, "", "", false
+        return cfg, "", "", false
     }
 
     // Retrieve credentials with a deadline
@@ -49,12 +54,12 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
     defer cancel()
 
     // Retreive the credentials from the credentials provider
-    creds, err := config.Credentials.Retrieve(ctx)
+    creds, err := cfg.Credentials.Retrieve(ctx)
     if err != nil {
-        return config, "", "", false
+        return cfg, "", "", false
     }
 
-    return config, creds.AccessKeyID, creds.SecretAccessKey, true
+    return cfg, creds.AccessKeyID, creds.SecretAccessKey, true
 }
 
 
@@ -73,9 +78,9 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 func AwsConfigSetup(region string, callTime time.Duration) (
                     aws.Config, string, string, error) {
     // Attempt to load credentials from default credential chain
-    awsConfig, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(region, callTime)
+    cfg, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(region, callTime)
     if exists {
-        return awsConfig, accessKey, secretKey, nil
+        return cfg, accessKey, secretKey, nil
     }
 
     // Get AWS access and secret key environment variables
@@ -92,13 +97,13 @@ func AwsConfigSetup(region string, callTime time.Duration) (
     awsCreds := credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")
 
     // Load default config and override with custom credentials and region
-    awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region),
-                                               config.WithCredentialsProvider(awsCreds))
+    cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region),
+                                         config.WithCredentialsProvider(awsCreds))
     if err != nil {
-        return awsConfig, "", "", err
+        return cfg, "", "", err
     }
 
-    return awsConfig, accessKey, secretKey, nil
+    return cfg, accessKey, secretKey, nil
 }
 
 
@@ -199,6 +204,164 @@ func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration, userData []b
     Ec2Man.runResult = runOutput
     return nil
 }
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
+                                           []string, error) {
+    // Set context timeout for API call
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.DescribeAvailabilityZonesInput{
+        Filters: []ec2types.Filter{
+            {
+                Name:   aws.String("state"),
+                Values: []string{"available"},
+            },
+        },
+    }
+
+    // Retrieve the list of avail
+    output, err := Ec2Man.client.DescribeAvailabilityZones(ctx, callInput)
+    if err != nil {
+        return nil, fmt.Errorf("failed to describe AZs:  %w", err)
+    }
+
+    azs := []string{}
+
+    // Iterate through AZs and add their names to the slice
+    for _, az := range output.AvailabilityZones {
+        azs = append(azs, *az.ZoneName)
+    }
+
+    // If no az names were parsed, something is wrong
+    if len(azs) == 0 {
+        return nil, fmt.Errorf("no available AZs found")
+    }
+
+    return azs, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId, cidrBlock,
+                                      az string, isPublic bool) (string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+
+    // Create the subnet
+    createOut, err := Ec2Man.client.CreateSubnet(ctx, &ec2.CreateSubnetInput{
+        VpcId:            aws.String(vpcId),
+        CidrBlock:        aws.String(cidrBlock),
+        AvailabilityZone: aws.String(az),
+    })
+    cancel()
+    if err != nil {
+        return "", fmt.Errorf("unable to create subnet:  %w", err)
+    }
+
+    subnetID := aws.ToString(createOut.Subnet.SubnetId)
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel = context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Configure to map to public IP address on launch
+    _, err = Ec2Man.client.ModifySubnetAttribute(ctx, &ec2.ModifySubnetAttributeInput{
+        SubnetId: aws.String(subnetID),
+        MapPublicIpOnLaunch: &ec2types.AttributeBooleanValue{
+            Value: aws.Bool(isPublic),
+        },
+    })
+    if err != nil {
+        return "", fmt.Errorf("unable map subnet to public IP on launch:  %w", err)
+    }
+
+    return subnetID, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) subnetExists(callTime time.Duration, vpcId string,
+                                      cidrBlock string, az string) (string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Format the input for the subnet description call
+    describeInput := &ec2.DescribeSubnetsInput{
+        Filters: []ec2types.Filter{
+            {Name: aws.String("vpc-id"), Values: []string{vpcId}},
+            {Name: aws.String("cidr-block"), Values: []string{cidrBlock}},
+            {Name: aws.String("availability-zone"), Values: []string{az}},
+        },
+    }
+
+    // Get description of input subnet to see if it exists
+    out, err := Ec2Man.client.DescribeSubnets(ctx, describeInput)
+    if err != nil {
+        return "", fmt.Errorf("DescribeSubnets failed: %w", err)
+    }
+
+    // If there was a result, return the subnet ID
+    if len(out.Subnets) > 0 {
+        return aws.ToString(out.Subnets[0].SubnetId), nil
+    }
+
+    return "", nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, vpcID string,
+                                         cidrBlock string, az string,
+                                         isPublic bool) (string, error) {
+    // Check for existing subnet
+    sid, err := Ec2Man.subnetExists(callTime, vpcID, cidrBlock, az)
+    if err != nil {
+        return "", err
+    }
+
+    // If the subnet already exists
+    if sid != "" {
+        return sid, nil
+    }
+
+    // Create new subnet
+    subnetID, err := Ec2Man.subnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
+    if err != nil {
+        return "", err
+    }
+
+    return subnetID, nil
+}
+
+
 
 // Terminates the EC2 instances by ID's collected from creation method result.
 //
@@ -511,6 +674,37 @@ func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName strin
     }
 
     return roleArn, nil
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func PickAzRoundRobin(azs []string) string {
+    chosen := azs[AzIndex%len(azs)]
+    // Increment package level variable
+    AzIndex++
+    return chosen
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func PickAzRandom(azs []string) string {
+    // Seed the random number generator to ensure unique results
+    rand.New(rand.NewSource(time.Now().UnixNano()))
+    return azs[rand.Intn(len(azs))]
 }
 
 
