@@ -257,7 +257,139 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId, cidrBlock,
+func (Ec2Man *Ec2Manger) InternetGatewayCreateAndAttach(callTime time.Duration,
+                                                        vpcId string,
+                                                        nameTag string) (string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+
+    createCallInput := &ec2.CreateInternetGatewayInput{
+		TagSpecifications: []ec2types.TagSpecification{
+			{
+				ResourceType: ec2types.ResourceTypeInternetGateway,
+				Tags: []ec2types.Tag{
+					{Key: aws.String("Name"), Value: aws.String(nameTag)},
+				},
+			},
+		},
+	}
+
+    // Create the internet gateway
+	createOut, err := Ec2Man.client.CreateInternetGateway(ctx, createCallInput)
+    cancel()
+	if err != nil {
+		return "", fmt.Errorf("create internet gateway:  %w", err)
+	}
+
+    // If the create internet gateway call failed to return an ID
+	if createOut.InternetGateway == nil || createOut.InternetGateway.InternetGatewayId == nil {
+		return "", fmt.Errorf("create internet gateway returned empty id")
+	}
+
+	igwId := *createOut.InternetGateway.InternetGatewayId
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel = context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    attachCallInput := &ec2.AttachInternetGatewayInput{
+		InternetGatewayId: aws.String(igwId),
+		VpcId:             aws.String(vpcId),
+    }
+
+    // Attach the created internet gateway to the associated VPC
+	_, err = Ec2Man.client.AttachInternetGateway(ctx, attachCallInput)
+    if err != nil {
+		return "", fmt.Errorf("attach internet gateway %s to vpc %s:  %w", igwId, vpcId, err)
+	}
+
+	return igwId, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
+                                               vpcId string, igwId string) (
+                                               bool, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.DescribeInternetGatewaysInput{
+		Filters: []ec2types.Filter{
+			{
+				Name:   aws.String("attachment.vpc-id"),
+				Values: []string{vpcId},
+			},
+		},
+	}
+
+    // Get informations on any internet gateways in the VPC
+	out, err := Ec2Man.client.DescribeInternetGateways(ctx, callInput)
+	if err != nil {
+		return false, fmt.Errorf("describe internet gateways:  %w", err)
+	}
+
+    // Iterate through retrieved IGW IDs
+	for _, igw := range out.InternetGateways {
+        // If the current IGW ID is equal to arg passed in
+		if igw.InternetGatewayId == &igwId {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) InternetGatewayProvisioner(callTime time.Duration, igwId string,
+                                                    vpcId string) (string, error) {
+    // If IGW ID is present in YAML
+    if igwId != "" {
+        // Check to see if it exists in AWS enviroment
+        igwExists, err := Ec2Man.InternetGatewayExists(callTime, vpcId, igwId)
+        if err != nil {
+            return "", err
+        }
+
+        // If the IGW exists, exit early
+        if igwExists {
+            return "", nil
+        }
+    }
+
+    // Create new internet gateway
+    subnetId, err := Ec2Man.InternetGatewayCreateAndAttach(callTime, vpcId,
+                                                           "Kloud-Kraken-IGW")
+    if err != nil {
+        return "", err
+    }
+
+    return subnetId, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) SubnetCreate(callTime time.Duration, vpcId, cidrBlock,
                                       az string, isPublic bool) (string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -301,8 +433,9 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId, cidrBlock,
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) subnetExists(callTime time.Duration, vpcId string,
-                                      cidrBlock string, az string) (string, error) {
+func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration, vpcId string,
+                                      cidrBlock string, subnetId string,
+                                      az string) (bool, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -319,15 +452,15 @@ func (Ec2Man *Ec2Manger) subnetExists(callTime time.Duration, vpcId string,
     // Get description of input subnet to see if it exists
     out, err := Ec2Man.client.DescribeSubnets(ctx, describeInput)
     if err != nil {
-        return "", fmt.Errorf("DescribeSubnets failed: %w", err)
+        return false, fmt.Errorf("DescribeSubnets failed: %w", err)
     }
 
-    // If there was a result, return the subnet ID
-    if len(out.Subnets) > 0 {
-        return aws.ToString(out.Subnets[0].SubnetId), nil
+    // If there was a result and it matches the intended subnet ID
+    if len(out.Subnets) > 0 && out.Subnets[0].SubnetId == &subnetId {
+        return true, nil
     }
 
-    return "", nil
+    return false, nil
 }
 
 //
@@ -338,27 +471,31 @@ func (Ec2Man *Ec2Manger) subnetExists(callTime time.Duration, vpcId string,
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, vpcID string,
-                                         cidrBlock string, az string,
-                                         isPublic bool) (string, error) {
-    // Check for existing subnet
-    sid, err := Ec2Man.subnetExists(callTime, vpcID, cidrBlock, az)
-    if err != nil {
-        return "", err
-    }
+func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string,
+                                         vpcID string, cidrBlock string,
+                                         az string, isPublic bool) (
+                                         string, error) {
+    // If subnet ID is present in YAML
+    if subnetId != "" {
+        // Check to see if it exists in AWS enviroment
+        subnetExists, err := Ec2Man.SubnetExists(callTime, vpcID, cidrBlock, subnetId, az)
+        if err != nil {
+            return "", err
+        }
 
-    // If the subnet already exists
-    if sid != "" {
-        return sid, nil
+        // If the subnet exists, exit early
+        if subnetExists {
+            return "", nil
+        }
     }
 
     // Create new subnet
-    subnetID, err := Ec2Man.subnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
+    subnetId, err := Ec2Man.SubnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
     if err != nil {
         return "", err
     }
 
-    return subnetID, nil
+    return subnetId, nil
 }
 
 
@@ -412,7 +549,7 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
 // - The ID of the created VPC
 // - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
+func (Ec2Man *Ec2Manger) VpcCreate(callTime time.Duration,
                                    cidrBlock string) (
                                    string, error) {
     // Set context timeout for API call
@@ -470,7 +607,7 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
 // - Boolean to notify whether bucket exists or not
 // - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) vpcExists(callTime time.Duration, vpcId string) (bool, error) {
+func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (bool, error) {
     // Set context timeout for API call
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -510,9 +647,10 @@ func (Ec2Man *Ec2Manger) vpcExists(callTime time.Duration, vpcId string) (bool, 
 //
 func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
                                       cidrBlock string) (string, error) {
-    // If the user passed in a VPC ID
+    // If VPC ID is present in YAML
     if vpcId != "" {
-        vpcExists, err := Ec2Man.vpcExists(callTime, vpcId)
+        // Check to see if it exists in AWS enviroment
+        vpcExists, err := Ec2Man.VpcExists(callTime, vpcId)
         if err != nil {
             return "", err
         }
@@ -524,7 +662,7 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
     }
 
     // Create and wait until VPC is created
-    vpcId, err := Ec2Man.vpcCreate(callTime, cidrBlock)
+    vpcId, err := Ec2Man.VpcCreate(callTime, cidrBlock)
     if err != nil {
         return vpcId, err
     }

@@ -715,6 +715,20 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         // TODO:  create function that insert the VPC ID the YAML config for further uses
     }
 
+    // Check to see if IGW exists, otherwise create & attach one
+    igwId, err := ec2Client.InternetGatewayProvisioner(5 * time.Minute,
+                                                       appConfig.LocalConfig.IgwGateway,
+                                                       vpcId)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If a new VPC was created
+    if igwId != "" {
+        // TODO:  create function that insert the IGW ID the YAML config for further uses
+    }
+
+
 
 
 
@@ -722,7 +736,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // TODO: VPC network setup
     //     X Create VPC with CIDR block
-    //     - Create and attach Internet Gateway (IGW) to the VPC
+    //     X Create and attach Internet Gateway (IGW) to the VPC
     //     - Allocate Elastic IP for NAT Gateway
     //     X Create public and private subnets within the VPC
     //     - Create NAT Gateway in public subnet (uses Elastic IP)
@@ -753,7 +767,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
 
     // Create public subnet if it does not exist
-    pubSubet, err := ec2Client.SubnetProvision(1 * time.Minute, vpcId,
+    pubSubet, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                               appConfig.LocalConfig.SubnetId, vpcId,
                                                appConfig.LocalConfig.CidrBlock,
                                                az, true)
     if err != nil {
@@ -761,7 +776,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create private subnet if it does not exist
-    privSubnet, err := ec2Client.SubnetProvision(1 * time.Minute, vpcId,
+    privSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                                 appConfig.LocalConfig.SubnetId, vpcId,
                                                  appConfig.LocalConfig.CidrBlock,
                                                  az, false)
     if err != nil {

@@ -19,6 +19,7 @@ import (
 // Package level variables
 var ReAccountId = regexp.MustCompile(`^\d{12}$`)
 var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
+var ReIgwId = regexp.MustCompile(`^igw-[0-9a-f]{8,17}$`)
 var RePrivateCidr = regexp.MustCompile(
     `^(?:` +
       // 10.0.0.0/16 - 10.255.255.255/28
@@ -356,6 +357,28 @@ func ValidateIamUsername(iamUsername string) error {
     }
 
     return nil
+}
+
+
+// Ensure the AWS internet gateway ID is of proper format.
+//
+// @Parameters
+// - igwId:  The internet gateway ID to validate
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateIgwGatewayId(igwId string) error {
+	if igwId == "" {
+		return nil
+	}
+
+    // Return error if IGW ID fails regex validation
+	if !ReIgwId.MatchString(igwId) {
+		return fmt.Errorf("invalid IGW id format:  %q", igwId)
+	}
+
+	return nil
 }
 
 

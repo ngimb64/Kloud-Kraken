@@ -57,6 +57,7 @@ local_config:
   cidr_block: "10.0.0.1/24"
   hash_file_path: "%s"
   iam_username: "doug"
+  igw_id: "igw-823748aef"
   instance_type: "p4d.24xlarge"
   listener_port: 6969
   load_dir: "%s"
@@ -108,6 +109,7 @@ client_config:
     assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
     assert.Equal("doug", config.LocalConfig.IamUsername)
+    assert.Equal("igw-823748aef", config.LocalConfig.IgwGateway)
     assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
     assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(testDir, config.LocalConfig.LoadDir)

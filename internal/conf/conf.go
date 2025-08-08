@@ -22,6 +22,7 @@ type LocalConfig struct {
     CidrBlock           string   `yaml:"cidr_block"`
     HashFilePath        string   `yaml:"hash_file_path"`
     IamUsername         string   `yaml:"iam_username"`
+    IgwGateway          string   `yaml:"igw_gateway"`
     InstanceType        string   `yaml:"instance_type"`
     ListenerPort        int      `yaml:"listener_port"`
     LoadDir	   	        string   `yaml:"load_dir"`
@@ -143,6 +144,12 @@ func validateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure the IAM username is valid
     err = validate.ValidateIamUsername(localConfig.IamUsername)
+    if err != nil {
+        return err
+    }
+
+    // Ensure the IGW gateway is valid
+    err = validate.ValidateIgwGatewayId(localConfig.IgwGateway)
     if err != nil {
         return err
     }

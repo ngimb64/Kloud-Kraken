@@ -275,6 +275,21 @@ func TestValidateIamUsername(t *testing.T) {
 }
 
 
+func TestValidateIgwGatewayId(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateIgwGatewayId("igw-823748aef")
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateIgwGatewayId("dkv@#$@gjjoejwf")
+    // Ensure the error is not nil meaning failed operation
+    assert.NotEqual(nil, err)
+}
+
+
 func TestValidateInstanceType(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
