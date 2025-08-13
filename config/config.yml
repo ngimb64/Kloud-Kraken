@@ -1,3 +1,19 @@
+client_config:
+  apply_optimization: true
+  char_set1: ""
+  char_set2: ""
+  char_set3: ""
+  char_set4: ""
+  cracking_mode: "0"
+  hash_mask: ""
+  hash_type: "1700"
+  log_mode: "both"
+  log_path: "KloudKraken.log"
+  max_file_size: "2GB"
+  max_transfers: 3
+  region: "us-east-1"
+  workload: "4"
+
 local_config:
   account_id: "123456789123"
   bucket_name: "test-bucket"
@@ -19,19 +35,3 @@ local_config:
   security_groups: []
   subnet_id: ""
   vpc_id: ""
-
-client_config:
-  apply_optimization: true
-  char_set1: ""
-  char_set2: ""
-  char_set3: ""
-  char_set4: ""
-  cracking_mode: "0"
-  hash_mask: ""
-  hash_type: "1700"
-  log_mode: "both"
-  log_path: "KloudKraken.log"
-  max_file_size: "2GB"
-  max_transfers: 3
-  region: "us-east-1"
-  workload: "4"

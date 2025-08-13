@@ -88,7 +88,8 @@ func ValidateBucketName(name string) error {
     }
 
     // Ensure there are no IP addresses in the name
-    if ip := net.ParseIP(name); ip != nil {
+    ip := net.ParseIP(name)
+    if ip != nil {
         return errors.New("bucket name must not be formatted as an IP address")
     }
 

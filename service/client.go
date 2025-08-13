@@ -66,7 +66,12 @@ func createFailureResult(lootPath string) error {
     }
 
     // Close the opened cracked hashes file on local exit
-    defer hashesHandle.Close()
+    defer func() {
+        cerr := hashesHandle.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing final hashes file:  %w", cerr))
+        }
+    }()
 
     // Write a message letting user know that no hashes were cracked
     _, err = hashesHandle.Write([]byte("No available cracked hashses after processing"))
@@ -699,7 +704,7 @@ func main() {
     // Ensure the max transfers is proper data type
     MaxTransfersInt32 = int32(maxTransfers)
 
-    // If the program is being run in full mode (not testing)
+    // If the program is being run in full mode
     if !isTesting {
         DataPath = "/mnt/instance-store"
     // If the program is being run in testing mode

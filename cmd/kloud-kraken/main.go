@@ -33,6 +33,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/tlsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/tui"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
+	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"go.uber.org/zap"
 )
 
@@ -444,7 +445,7 @@ exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&
 mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE |
     awk '$2=="disk" && $1 ~ /^nvme[0-9]+n1$/ {print "/dev/" $1}')
 if (( ${#DEVICES[@]} == 0 )); then
-    echo "ERROR: no NVMe instance‐store devices found"
+    echo "ERROR: no NVMe instance-store devices found"
     shutdown -h now
     exit 1
 fi
@@ -688,6 +689,8 @@ func clientTrustPolicyGen() string {
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               aws.Config, *awsutils.Ec2Manger, error) {
     var ec2Client *awsutils.Ec2Manger
+    var yamlUpdates map[string]string
+
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
                                                     1 * time.Minute)
@@ -699,7 +702,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     ec2Client = awsutils.NewEc2Manager(awsConfig)
 
 
+
     // TODO:  make sure README IAM profile permissions are updated after AWS dev is finished
+
 
 
     // Check to see if the VPC exists, otherwise create one
@@ -710,29 +715,26 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-    // If a new VPC was created
+    // If a VPC was created, add the ID to the yaml updates map
     if vpcId != "" {
-        // TODO:  create function that insert the VPC ID the YAML config for further uses
+        yamlUpdates["local_config.vpc_id"] = vpcId
     }
 
     // Check to see if IGW exists, otherwise create & attach one
-    igwId, err := ec2Client.InternetGatewayProvisioner(5 * time.Minute,
-                                                       appConfig.LocalConfig.IgwGateway,
-                                                       vpcId)
+    igwId, err := ec2Client.InternetGatewayProvision(5 * time.Minute,
+                                                     appConfig.LocalConfig.IgwGateway,
+                                                     vpcId)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // If a new VPC was created
+    // If a internet gateway was created, add the ID to the yaml updates map
     if igwId != "" {
-        // TODO:  create function that insert the IGW ID the YAML config for further uses
+        yamlUpdates["local_config.igw_id"] = igwId
     }
 
 
 
-
-
-    // TODO:  ask AI about where to add S3 bucket provisioning on below list
 
     // TODO: VPC network setup
     //     X Create VPC with CIDR block
@@ -745,9 +747,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     - Associate **public** subnets to public route table
     //     - Associate **private** subnets to private route tables
     //     - Create security groups for EC2 and other services
-    //     - (Optional) Configure Network ACLs for granular subnet-level rules
-    //     - (Optional) Create VPC endpoints (e.g., S3, SSM) for private access
-    //     - (Optional) Enable VPC Flow Logs for traffic monitoring and auditing
+    //     - Configure Network ACLs for granular subnet-level rules
+    //     - Create VPC endpoints (e.g., S3, SSM) for private access
+    //     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
+    //     - Enable VPC Flow Logs for traffic monitoring and auditing
 
 
 
@@ -767,10 +770,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
 
     // Create public subnet if it does not exist
-    pubSubet, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                               appConfig.LocalConfig.SubnetId, vpcId,
-                                               appConfig.LocalConfig.CidrBlock,
-                                               az, true)
+    pubSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                                appConfig.LocalConfig.SubnetId, vpcId,
+                                                appConfig.LocalConfig.CidrBlock,
+                                                az, true)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -788,7 +791,20 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
 
 
+    // If there are values in YAML file to be updated
+    if len(yamlUpdates) > 0 {
+        // Update the yaml values with values from passed in map
+        newYaml, err := yamlutils.UpdateYAMLBytes(appConfig.RawYaml, yamlUpdates)
+        if err != nil {
+            return awsConfig, ec2Client, err
+        }
 
+        // Overwrite the original yaml with the updated data
+        err = os.WriteFile(appConfig.YamlPath, newYaml, 0644)
+        if err != nil {
+            return awsConfig, ec2Client, err
+        }
+    }
 
     // Setup client to IAM service
     iamClient := awsutils.NewIamManager(awsConfig)
