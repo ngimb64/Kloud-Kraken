@@ -18,6 +18,7 @@ import (
 
 // Package level variables
 var ReAccountId = regexp.MustCompile(`^\d{12}$`)
+var ReEipAlloc = regexp.MustCompile(`^eipalloc-[0-9a-f]{8,17}$`)
 var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
 var ReIgwId = regexp.MustCompile(`^igw-[0-9a-f]{8,17}$`)
 var RePrivateCidr = regexp.MustCompile(
@@ -49,7 +50,7 @@ var ReVpcId = regexp.MustCompile(`^vpc-[0-9a-f]{8}(?:[0-9a-f]{9})?$`)
 // - Error if it occurs, otherwise nil on success
 //
 func ValidateAccountId(accountId string) error {
-    // If the account ID is not 12 digits
+    // Validate format with regular expression
     if !ReAccountId.MatchString(accountId) {
         return errors.New("invalid AWS account ID, must be exactly 12 digits")
     }
@@ -241,6 +242,28 @@ func ValidateDir(dirPath string) error {
 }
 
 
+// Ensures Elastic IP Allocation ID is of proper format.
+//
+// @Parameters
+// - The Elastic IP Allocation ID to be validated
+//
+// @Returns
+// - Error if it occurs, otherwise nil on success
+//
+func ValidateEipAllocationId(eipId string) error {
+	if eipId == "" {
+		return nil
+	}
+
+    // Validate format with regular expression
+	if !ReEipAlloc.MatchString(eipId) {
+		return fmt.Errorf("invalid Elastic IP allocation id format - %q", eipId)
+	}
+
+	return nil
+}
+
+
 // Ensure the passed in file path exists and is a file that has data.
 //
 // @Parameters
@@ -369,14 +392,14 @@ func ValidateIamUsername(iamUsername string) error {
 // @Returns
 // - Error if it occurs, otherwise nil on success
 //
-func ValidateIgwGatewayId(igwId string) error {
+func ValidateIgwId(igwId string) error {
 	if igwId == "" {
 		return nil
 	}
 
-    // Return error if IGW ID fails regex validation
+    // Validate format with regular expression
 	if !ReIgwId.MatchString(igwId) {
-		return fmt.Errorf("invalid IGW id format:  %q", igwId)
+		return fmt.Errorf("invalid IGW id format - %q", igwId)
 	}
 
 	return nil
@@ -550,6 +573,7 @@ func ValidateMaxSizeRange(percentage float64) bool {
 // @Returns
 // - true/false boolean depending on whether the max transfers
 //   is greater than 0 or not
+//
 func ValidateMaxTransfers(maxTransfers int32) bool {
     return maxTransfers > 0
 }
@@ -563,6 +587,7 @@ func ValidateMaxTransfers(maxTransfers int32) bool {
 // @Returns
 // - true/false boolean depending on whether the number instances
 //   is greater than 0 or not
+//
 func ValidateNumberInstances(numberInstances int) bool {
     return numberInstances > 0
 }
@@ -647,7 +672,8 @@ func ValidateRulesetFile(filePath string) error {
     // Validate the ruleset file
     err = ValidateFile(validPath)
     if err != nil {
-        return fmt.Errorf("error validating ruleset file based on %s path - %w", validPath, err)
+        return fmt.Errorf("error validating ruleset file based on %s path - %w",
+                          validPath, err)
     }
 
     return nil
@@ -719,7 +745,7 @@ func ValidateSubnetId(subnetId string) error {
         return nil
     }
 
-    // Ensure the AWS subnet ID is of proper format
+    // Validate format with regular expression
 	if !ReSubnetId.MatchString(subnetId) {
 		return fmt.Errorf("invalid Subnet ID - %q", subnetId)
 	}
@@ -741,8 +767,9 @@ func ValidateVpcId(vpcId string) error {
         return nil
     }
 
+    // Validate format with regular expression
     if !ReVpcId.MatchString(vpcId) {
-        return fmt.Errorf("invalid VPC ID")
+        return fmt.Errorf("invalid VPC ID - %q", vpcId)
     }
 
     return nil

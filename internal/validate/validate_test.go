@@ -140,6 +140,20 @@ func TestValidateDir(t *testing.T) {
 }
 
 
+func TestValidateEipAllocationId(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    // Try test with proper value
+    err := validate.ValidateEipAllocationId("eipalloc-09ad461b0d03f6aaf")
+    assert.Equal(nil, err)
+
+    // Try test with bad value
+    err = validate.ValidateEipAllocationId("kdnsdv#$%#Djodv,.2fddvp")
+    assert.NotEqual(nil, err)
+}
+
+
 func TestValidateFile(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -280,11 +294,11 @@ func TestValidateIgwGatewayId(t *testing.T) {
     assert := assert.New(t)
 
     // Try test with proper value
-    err := validate.ValidateIgwGatewayId("igw-823748aef")
+    err := validate.ValidateIgwId("igw-823748aef")
     assert.Equal(nil, err)
 
     // Try test with bad value
-    err = validate.ValidateIgwGatewayId("dkv@#$@gjjoejwf")
+    err = validate.ValidateIgwId("dkv@#$@gjjoejwf")
     // Ensure the error is not nil meaning failed operation
     assert.NotEqual(nil, err)
 }

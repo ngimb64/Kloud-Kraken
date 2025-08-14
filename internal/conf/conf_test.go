@@ -51,10 +51,27 @@ func TestLoadConfig(t *testing.T) {
 
     yamlPath := "testdata.yml"
     testData := fmt.Sprintf(`
+client_config:
+  apply_optimization: true
+  char_set1: "charset1"
+  char_set2: "charset2"
+  char_set3: "charset3"
+  char_set4: "charset4"
+  cracking_mode: "3"
+  hash_mask: "?u?l?l?l?l?l?l?l?d"
+  hash_type: "1000"
+  log_mode: "local"
+  log_path: "KloudKraken.log"
+  max_file_size: "100MB"
+  max_transfers: 2
+  region: "us-west-1"
+  workload: "4"
+
 local_config:
   account_id: "123456789123"
   bucket_name: "test-bucket"
   cidr_block: "10.0.0.1/24"
+  eip_id: "eipalloc-09ad461b0d03f6aaf"
   hash_file_path: "%s"
   iam_username: "doug"
   igw_id: "igw-823748aef"
@@ -77,23 +94,6 @@ local_config:
     - "web.server@frontend"
   subnet_id: "subnet-0a1b2c3d4e5f6a7b8"
   vpc_id: "vpc-23a3239c203e0230b0a"
-
-
-client_config:
-  apply_optimization: true
-  char_set1: "charset1"
-  char_set2: "charset2"
-  char_set3: "charset3"
-  char_set4: "charset4"
-  cracking_mode: "3"
-  hash_mask: "?u?l?l?l?l?l?l?l?d"
-  hash_type: "1000"
-  log_mode: "local"
-  log_path: "KloudKraken.log"
-  max_file_size: "100MB"
-  max_transfers: 2
-  region: "us-west-1"
-  workload: "4"
 `, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
     err = os.WriteFile(yamlPath, []byte(testData), 0644)
@@ -102,29 +102,6 @@ client_config:
     // Load the config into AppConfig struct
     config, err := conf.LoadConfig(yamlPath)
     assert.Equal(nil, err)
-
-    // Validate local config fields to original data
-    assert.Equal("123456789123", config.LocalConfig.AccountId)
-    assert.Equal("test-bucket", config.LocalConfig.BucketName)
-    assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
-    assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
-    assert.Equal("doug", config.LocalConfig.IamUsername)
-    assert.Equal("igw-823748aef", config.LocalConfig.IgwGateway)
-    assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
-    assert.Equal(6969, config.LocalConfig.ListenerPort)
-    assert.Equal(testDir, config.LocalConfig.LoadDir)
-    assert.True(config.LocalConfig.LocalTesting)
-    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
-    assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
-    assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
-    assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
-    assert.Equal(3, config.LocalConfig.NumberInstances)
-    assert.Equal("us-east-1", config.LocalConfig.Region)
-    assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
-    assert.Equal(3, len(config.LocalConfig.SecurityGroupIds))
-    assert.Equal(2, len(config.LocalConfig.SecurityGroups))
-    assert.Equal("subnet-0a1b2c3d4e5f6a7b8", config.LocalConfig.SubnetId)
-    assert.Equal("vpc-23a3239c203e0230b0a", config.LocalConfig.VpcId)
 
     // Validate client config fields to original data
     assert.True(config.ClientConfig.ApplyOptimization)
@@ -142,6 +119,30 @@ client_config:
     assert.Equal(int32(2), config.ClientConfig.MaxTransfers)
     assert.Equal("us-west-1", config.ClientConfig.Region)
     assert.Equal("4", config.ClientConfig.Workload)
+
+    // Validate local config fields to original data
+    assert.Equal("123456789123", config.LocalConfig.AccountId)
+    assert.Equal("test-bucket", config.LocalConfig.BucketName)
+    assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
+    assert.Equal("eipalloc-09ad461b0d03f6aaf", config.LocalConfig.EipId)
+    assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
+    assert.Equal("doug", config.LocalConfig.IamUsername)
+    assert.Equal("igw-823748aef", config.LocalConfig.IgwId)
+    assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
+    assert.Equal(6969, config.LocalConfig.ListenerPort)
+    assert.Equal(testDir, config.LocalConfig.LoadDir)
+    assert.True(config.LocalConfig.LocalTesting)
+    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
+    assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
+    assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
+    assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
+    assert.Equal(3, config.LocalConfig.NumberInstances)
+    assert.Equal("us-east-1", config.LocalConfig.Region)
+    assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
+    assert.Equal(3, len(config.LocalConfig.SecurityGroupIds))
+    assert.Equal(2, len(config.LocalConfig.SecurityGroups))
+    assert.Equal("subnet-0a1b2c3d4e5f6a7b8", config.LocalConfig.SubnetId)
+    assert.Equal("vpc-23a3239c203e0230b0a", config.LocalConfig.VpcId)
 
     // Append the yaml data file to test file for deletion
     testFiles = append(testFiles, yamlPath)

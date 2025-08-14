@@ -25,14 +25,14 @@ func setNodeValue(node *yaml.Node, path []string, value string) error {
         return errors.New("empty path")
     }
 
-    // If current node is a DocumentNode, descend into Content[0]
+    // If current node is a DocumentNode, descend into root node content
     if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
         node = node.Content[0]
     }
 
-    // If at mapping level, we search keys
+    // If at mapping level, then search keys
     if node.Kind != yaml.MappingNode {
-        // convert to mapping node (will lose previous non-mapping content at this branch)
+        // Convert to mapping node
         node.Kind = yaml.MappingNode
         node.Tag = "!!map"
         node.Content = []*yaml.Node{}
@@ -103,9 +103,9 @@ func setNodeValue(node *yaml.Node, path []string, value string) error {
             return nil
         }
 
-        // not last: descend. If the value node is not a mapping, convert it to mapping.
+        // If the value node is not a mapping, convert it to mapping.
         if valNode.Kind != yaml.MappingNode {
-            // replace the node with an empty mapping to allow nested keys
+            // Replace the node with an empty mapping to allow nested keys
             *valNode = yaml.Node{
                 Kind:    yaml.MappingNode,
                 Tag:     "!!map",

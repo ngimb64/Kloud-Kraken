@@ -25,6 +25,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/cidrutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
@@ -108,7 +109,7 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
     // Format remote address with parsed IP and received port for transfer
     remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
 
-    // Make a connection to the remote brain server
+    // Make a connection to the client for file transfer
     transferConn, err := tls.Dial("tcp", remoteAddr,
                                   tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
@@ -438,46 +439,52 @@ func ec2UserDataGen(appConf *conf.AppConfig, keyName string, ipAddrs []string,
     }
 
     data := fmt.Sprintf(`#!/bin/bash
+# Exit on any failure, error on undefined variables, echo each command, and
+# catch failures in any part of a pipeline
 set -euxo pipefail
+# Captures both STDOUT & STDERR, sending everything to user data log file
 exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
-# === NVMe RAID0 instance-store setup ===
+# Get the NVMe instance store device names
 mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE |
     awk '$2=="disk" && $1 ~ /^nvme[0-9]+n1$/ {print "/dev/" $1}')
+
+# If no NVMe instance store drives are found, log error and exit
 if (( ${#DEVICES[@]} == 0 )); then
     echo "ERROR: no NVMe instance-store devices found"
-    shutdown -h now
     exit 1
 fi
 
 retries=0
-until DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y mdadm; do
-    ((retries++))
-    (( retries>=3 )) && { echo "ERROR: apt-get install failed"; shutdown -h now; exit 1; }
+# Update, upgrade, and install needed packages for hash cracking & RAID configuration
+until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade && apt install -y hashcat mdadm; do
+    (( retries++ ))
+    # If the updates process fails 3 times due to network issues, log error and exit
+    (( retries >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
     sleep 5
 done
 
+# Create RAID 0 setup with idenified drives if it does not already exist
 if ! mdadm --detail /dev/md0 &>/dev/null; then
     yes | mdadm --create /dev/md0 --level=0 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
 fi
 
-mdadm --detail --scan | tee /etc/mdadm/mdadm.conf
-update-initramfs -u
-
+# If filesystem for RAID drive does not exist, make it
 if ! blkid /dev/md0 &>/dev/null; then
     mkfs.ext4 -F /dev/md0
 fi
 
+# Create mount point for instances store
 mkdir -p /mnt/instance-store
+# Add mount point to fstab if it is not already in there
 grep -q '/mnt/instance-store' /etc/fstab || \
     echo "/dev/md0  /mnt/instance-store  ext4  defaults,nofail  0 2" >> /etc/fstab
+# Mount the mount point if it is not already mounted
 mountpoint -q /mnt/instance-store || mount /mnt/instance-store
 
 echo "[!] Instance-store ready at /mnt/instance-store"
 
-# === Application bootstrap ===
-apt update && apt upgrade -y && apt install -y hashcat
-
+# Application bootstrap
 CWD=$(pwd)
 aws s3 cp s3://%s/%s $CWD/client --region %s --no-progress
 chmod +x $CWD/client
@@ -701,12 +708,6 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Establish client to EC2 service
     ec2Client = awsutils.NewEc2Manager(awsConfig)
 
-
-
-    // TODO:  make sure README IAM profile permissions are updated after AWS dev is finished
-
-
-
     // Check to see if the VPC exists, otherwise create one
     vpcId, err := ec2Client.VpcProvision(5 * time.Minute,
                                          appConfig.LocalConfig.VpcId,
@@ -721,25 +722,84 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Check to see if IGW exists, otherwise create & attach one
-    igwId, err := ec2Client.InternetGatewayProvision(5 * time.Minute,
-                                                     appConfig.LocalConfig.IgwGateway,
+    igwId, err := ec2Client.InternetGatewayProvision(1 * time.Minute,
+                                                     appConfig.LocalConfig.IgwId,
                                                      vpcId)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // If a internet gateway was created, add the ID to the yaml updates map
+    // If a Internet Gateway was created, add the ID to the yaml updates map
     if igwId != "" {
         yamlUpdates["local_config.igw_id"] = igwId
     }
 
+    // Check to see if Elastic IP exists, otherwise create one
+    eipId, err := ec2Client.ElasticIpProvision(1 * time.Minute,
+                                                appConfig.LocalConfig.EipId)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If a Elastic IP was created, add the ID to the yaml updates map
+    if eipId != "" {
+        yamlUpdates["local_config.eip_id"] = eipId
+    }
+
+    // Get the slice of availability zones based on region
+    azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Pick random AZ from slice of AZ names
+    az := awsutils.PickAzRandom(azs)
+
+    // Set up map for ensuring unique subnet allocation
+    alloc := map[string]struct{}{}
+
+    // Parse the prefix length from CIDR
+    prefixLength, err := cidrutils.PrefixFromCidr(appConfig.LocalConfig.CidrBlock)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Allocate first available subnet in CIDR block for public subnet
+    pubCidr, err := cidrutils.AllocateNextSubnet(appConfig.LocalConfig.CidrBlock,
+                                                 alloc, prefixLength + 1)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Create public subnet if it does not exist
+    pubSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                                appConfig.LocalConfig.SubnetId,
+                                                vpcId, pubCidr, az, true)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Allocate next available subnet in CIDR block for private subnet
+    privCidr, err := cidrutils.AllocateNextSubnet(appConfig.LocalConfig.CidrBlock,
+                                                  alloc, prefixLength + 1)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Create private subnet if it does not exist
+    privSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                                 appConfig.LocalConfig.SubnetId,
+                                                 vpcId, privCidr, az, false)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
 
 
 
     // TODO: VPC network setup
     //     X Create VPC with CIDR block
     //     X Create and attach Internet Gateway (IGW) to the VPC
-    //     - Allocate Elastic IP for NAT Gateway
+    //     X Allocate Elastic IP for NAT Gateway
     //     X Create public and private subnets within the VPC
     //     - Create NAT Gateway in public subnet (uses Elastic IP)
     //     - Create route table for public subnets: 0.0.0.0/0 → IGW
@@ -751,43 +811,6 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     - Create VPC endpoints (e.g., S3, SSM) for private access
     //     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
     //     - Enable VPC Flow Logs for traffic monitoring and auditing
-
-
-
-
-    // Get the slice of availability zones based on region
-    azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    // Pick random AZ from slice of AZ names
-    az := awsutils.PickAzRandom(azs)
-
-
-    // TODO:  figure out how public/private CIDR address ranges will be implemented
-    //        as both subnets are currently using the same range which is wrong
-
-
-    // Create public subnet if it does not exist
-    pubSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                                appConfig.LocalConfig.SubnetId, vpcId,
-                                                appConfig.LocalConfig.CidrBlock,
-                                                az, true)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    // Create private subnet if it does not exist
-    privSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                                 appConfig.LocalConfig.SubnetId, vpcId,
-                                                 appConfig.LocalConfig.CidrBlock,
-                                                 az, false)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-
 
 
 
@@ -875,32 +898,14 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                    color.NeonAzure, "TLS certificate uploaded to " +
                                    "SSM Parameter Store for client retrieval"))
 
-    // Setup client to S3
-    s3Client := awsutils.NewS3Manager(awsConfig)
-    // Check to see if S3 bucket exists
-    exists, err := s3Client.BucketExists(appConfig.LocalConfig.BucketName, 1 * time.Minute)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    // If S3 bucket does not exist create one
-    if !exists {
-        err = s3Client.CreateBucket(appConfig.LocalConfig.BucketName, 1 * time.Minute)
-        if err != nil {
-            return awsConfig, ec2Client, err
-        }
-
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                           color.LightCyan, "$"), "",
-                                       color.NeonAzure, "Created S3 bucket ",
-                                       color.RadiantAmethyst, appConfig.LocalConfig.BucketName))
-    }
-
     // Read the client binary into memory
     binData, err := os.ReadFile("./kloud-kraken-client")
     if err != nil {
         return awsConfig, ec2Client, err
     }
+
+    // Setup client to S3
+    s3Client := awsutils.NewS3Manager(awsConfig)
 
     // Upload the client binary to S3 Bucket
     keyName, err := s3Client.PutS3Object(appConfig.LocalConfig.BucketName, "client",

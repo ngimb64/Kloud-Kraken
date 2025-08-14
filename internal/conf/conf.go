@@ -40,9 +40,10 @@ type LocalConfig struct {
     AccountId           string   `yaml:"account_id"`
     BucketName          string   `yaml:"bucket_name"`
     CidrBlock           string   `yaml:"cidr_block"`
+    EipId               string   `yaml:"eip_id"`
     HashFilePath        string   `yaml:"hash_file_path"`
     IamUsername         string   `yaml:"iam_username"`
-    IgwGateway          string   `yaml:"igw_gateway"`
+    IgwId               string   `yaml:"igw_id"`
     InstanceType        string   `yaml:"instance_type"`
     ListenerPort        int      `yaml:"listener_port"`
     LoadDir	   	        string   `yaml:"load_dir"`
@@ -78,6 +79,8 @@ func LoadConfig(filePath string) (*AppConfig, error) {
         return nil, fmt.Errorf("reading config file:  %w", err)
     }
 
+    // Store raw yaml bytes in struct
+    config.RawYaml = yamlBytes
     // Store the yaml file path after successful operation
     config.YamlPath = filePath
 
@@ -86,9 +89,6 @@ func LoadConfig(filePath string) (*AppConfig, error) {
     if err != nil {
         return nil, fmt.Errorf("parsing YAML:  %w", err)
     }
-
-    // Store raw yaml bytes in struct
-    config.RawYaml = yamlBytes
 
     // Validate client config section of YAML data
     err = validateClientConfig(&config.ClientConfig)
@@ -205,6 +205,12 @@ func validateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
+    // Ensure the Elastic IP Allocation ID is valid
+    err = validate.ValidateEipAllocationId(localConfig.EipId)
+    if err != nil {
+        return err
+    }
+
     // Ensure the hash file path exists
     err = validate.ValidateHashFile(localConfig.HashFilePath)
     if err != nil {
@@ -217,8 +223,8 @@ func validateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
-    // Ensure the IGW gateway is valid
-    err = validate.ValidateIgwGatewayId(localConfig.IgwGateway)
+    // Ensure the Internet Gateway is valid
+    err = validate.ValidateIgwId(localConfig.IgwId)
     if err != nil {
         return err
     }
