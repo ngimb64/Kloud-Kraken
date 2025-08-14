@@ -23,7 +23,6 @@ func TestAppendFile(t *testing.T) {
     for index, fileName := range testFiles {
         // Create the current file
         file, err := os.Create(fileName)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Write the test strings to current file
         file.Write([]byte(testData[index]))
@@ -33,19 +32,16 @@ func TestAppendFile(t *testing.T) {
 
     // Append the data in the source file to the destination
     err := disk.AppendFile(testFiles[0], testFiles[1])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Open the resulting file to read the data
     resultFile, err := os.Open(testFiles[1])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     readBuffer := make([]byte, 64)
 
     // Read the data from the resulting file
     bytesRead, err := resultFile.Read(readBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the resulting file
     resultFile.Close()
@@ -55,7 +51,6 @@ func TestAppendFile(t *testing.T) {
 
     // Delete the resulting file
     err = os.Remove(testFiles[1])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -66,13 +61,11 @@ func TestCheckDirFiles(t *testing.T) {
 
     // Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testPath := fmt.Sprintf("%s/../data", path)
     // Get the first file name and size if there are files
     fileName, fileSize, err := disk.CheckDirFiles(testPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the file has a name
     assert.NotEqual("", fileName)
@@ -87,17 +80,14 @@ func TestCreateRandFile(t *testing.T) {
 
     // Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Create a random file and return the path
     filePath, _, err := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
                                             "kloudkraken-data", "", false)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Check to see if the file exists
     exists, isDir, hasData, err := disk.PathExists(filePath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the file path exists
     assert.True(exists)
@@ -108,7 +98,6 @@ func TestCreateRandFile(t *testing.T) {
 
     // Delete the file after testing
     err = os.Remove(filePath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -119,7 +108,6 @@ func TestGetDiskSpace(t *testing.T) {
 
     // Get the total and free disk space
     total, free, err := disk.GetDiskSpace("/", 20 * (1024 * 1024 * 1024))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the total size is greater than 0
     assert.Less(int64(0), total)
@@ -134,7 +122,6 @@ func TestMakeDirs(t *testing.T) {
 
     // Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testDirs := []string{fmt.Sprintf("%s/%s", path, "testdir1"),
@@ -155,7 +142,6 @@ func TestMakeDirs(t *testing.T) {
         assert.False(hasData)
         // Delete the dir after testing
         err = os.Remove(dir)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
@@ -168,7 +154,6 @@ func TestPathExists(t *testing.T) {
     existentFile := "../data/data.go"
     // Check to see if the path exists, dir or file, and if it has data
     exists, isDir, hasData, err := disk.PathExists(existentFile)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the file exists
     assert.True(exists)
@@ -206,14 +191,12 @@ func TestSelectFile(t *testing.T) {
 
     // Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Format test dir in current work dir path
     realDirPath := fmt.Sprintf("%s/testdir", path)
     // Create the test dir where test files will be made
     err = os.Mkdir(realDirPath, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testFiles := []string{"test1.txt", "test2.txt", "test3.txt",
@@ -226,7 +209,6 @@ func TestSelectFile(t *testing.T) {
         filePath := fmt.Sprintf("%s/%s", realDirPath, testFile)
         // Open the file with write permissions
         file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Make a byte buffer based off iteration index
@@ -235,7 +217,6 @@ func TestSelectFile(t *testing.T) {
         data.GenerateRandomBytes(buffer, bufferSizes[index])
         // Write the random data to the output file
         bytesWrote, err := file.Write(buffer)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close the file after data has been written
         file.Close()
@@ -245,7 +226,6 @@ func TestSelectFile(t *testing.T) {
 
     // Attempt to select a file with proper max size
     filePath, fileSize, err := disk.SelectFile(realDirPath, int64(100 * globals.MB))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure a file path was selected
     assert.NotEqual("", filePath)
@@ -254,6 +234,5 @@ func TestSelectFile(t *testing.T) {
 
     // Delete the testdir and its contents
     err = os.RemoveAll(realDirPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }

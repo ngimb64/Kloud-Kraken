@@ -22,16 +22,13 @@ func TestGenerateRandomBytes(t *testing.T) {
 
     //Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Create a random file for testing
     testFile, file, err := disk.CreateRandFile(path, globals.RAND_STRING_SIZE,
                                                "kloudkraken-data", "", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Write the random bytes to file
     bytesWrote, err := file.Write(buffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the bytes wrote equals random generated in buffer
     assert.Equal(128, len(buffer[:bytesWrote]))
@@ -40,13 +37,11 @@ func TestGenerateRandomBytes(t *testing.T) {
 
     // Get the size of the file
     fileInfo, err := os.Stat(testFile)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the file size equals random generate in buffer
     assert.Equal(int64(128), fileInfo.Size())
     // Delete the file
     err = os.Remove(testFile)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -122,7 +117,6 @@ func TestSliceToCsv(t *testing.T) {
     assert := assert.New(t)
     // Convert the test data to CSV string
     resultCsv, err := data.SliceToCsv(testSlice)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the resulting CSV string is of proper format
     assert.Equal("foo,bar,shazam,shamar\n", resultCsv)

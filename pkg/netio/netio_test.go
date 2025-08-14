@@ -30,7 +30,6 @@ func TestFileToSocketCopy(t *testing.T) {
         // Create the input file and return handle
         outFilePath, outFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                          "output_test", "txt", true)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close the output file on local exit
         defer outFile.Close()
@@ -40,7 +39,6 @@ func TestFileToSocketCopy(t *testing.T) {
 
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -50,7 +48,6 @@ func TestFileToSocketCopy(t *testing.T) {
 
         // Transfer received data from connection to file
         bytesWrote, err := io.CopyBuffer(outFile, clientConn, receiveBuffer)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Ensure the bytes wrote equals the expected target
         assert.Equal(int64(20 * globals.MB), bytesWrote)
@@ -64,13 +61,11 @@ func TestFileToSocketCopy(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Create the input file and return handle
     inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                    "input_test", "txt", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Add the created file to slice for later removal
     testFiles = append(testFiles, inFilePath)
@@ -80,21 +75,18 @@ func TestFileToSocketCopy(t *testing.T) {
     data.GenerateRandomBytes(writeBuffer, 20 * globals.MB)
     // Write the buffer of random data to file
     bytesWrote, err := inFile.Write(writeBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the number of bytes wrote equals the buffer size
     assert.Equal(20 * globals.MB, bytesWrote)
 
     // Reset the file pointer to begining of file for transfer
     _, err = inFile.Seek(int64(0), 0)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Make 64KB buffer to transfer file
     transferBuffer := make([]byte, 64 * globals.KB)
 
     // Transfer file directly through the socket
     err = netio.FileToSocketCopy(serverConn, inFile, transferBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Close the connection after copying
@@ -105,12 +97,10 @@ func TestFileToSocketCopy(t *testing.T) {
 
     // Get the size of the input file
     inFileInfo, err := os.Stat(testFiles[1])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Get the size of the output file
     outFileInfo, err := os.Stat(testFiles[0])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the input and output files are the same size
@@ -119,7 +109,6 @@ func TestFileToSocketCopy(t *testing.T) {
     // Iterate though create files and delete them
     for _, testFile := range testFiles {
         err = os.Remove(testFile)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
@@ -137,13 +126,11 @@ func TestFormatTransferReply(t *testing.T) {
 
     // Grab the file name from the end of the path
     fileName, err := data.TrimAfterLast(byteFilePath, []byte("/"))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Format the transfer reply in passed in buffer
     sendLength, err := netio.FormatTransferReply(filePath, fileSize, &buffer,
                                                  globals.START_TRANSFER_PREFIX)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure message in buffer begins with the start transfer prefix
@@ -175,7 +162,6 @@ func TestGetAvailableListener(t *testing.T) {
 
     // Close the established listener on random port
     err := testListener.Close()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -192,7 +178,6 @@ func TestGetFileInfo(t *testing.T) {
     // Format the transfer reply in passed in buffer
     sendLength, err := netio.FormatTransferReply(filePath, fileSize, &buffer,
                                                  globals.START_TRANSFER_PREFIX)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the send length adds up to its intended components
@@ -200,7 +185,6 @@ func TestGetFileInfo(t *testing.T) {
 
     // Parse the file name and size from the transfer reply message in buffer
     resFileName, resFileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX, sendLength)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the parsed file name is correct
     assert.Equal([]byte("path.txt"), resFileName)
@@ -223,7 +207,6 @@ func TestGetIpPort(t *testing.T) {
     go func() {
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -237,14 +220,12 @@ func TestGetIpPort(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close connection on local exit
     defer serverConn.Close()
 
     // Get the IP address and port from established connection
     ipAddr, port, err := netio.GetIpPort(serverConn)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the IP address is the local host
@@ -297,7 +278,6 @@ func TestHandleTransferRecv(t *testing.T) {
     go func() {
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -305,7 +285,6 @@ func TestHandleTransferRecv(t *testing.T) {
         // Read data from the socket and write to the file path
         outFilePath, err := netio.HandleTransferRecv(clientConn, "./", "output_test.txt",
                                                      int64(20 * globals.MB))
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Add the created file to slice for later removal
         testFiles = append(testFiles, outFilePath)
@@ -319,7 +298,6 @@ func TestHandleTransferRecv(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close connection on local exit
     defer serverConn.Close()
@@ -327,7 +305,6 @@ func TestHandleTransferRecv(t *testing.T) {
     // Create the input file and return handle
     inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                    "input_test", "txt", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Add the created file to slice for later removal
     testFiles = append(testFiles, inFilePath)
@@ -337,21 +314,18 @@ func TestHandleTransferRecv(t *testing.T) {
     data.GenerateRandomBytes(writeBuffer, 20 * globals.MB)
     // Write the buffer of random data to file
     bytesWrote, err := inFile.Write(writeBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the number of bytes wrote equals the buffer size
     assert.Equal(20 * globals.MB, bytesWrote)
 
     // Reset the file pointer to begining of file for transfer
     _, err = inFile.Seek(int64(0), 0)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Create buffer for file transfer
     transferBuffer := make([]byte, 64 * globals.KB)
 
     // Transfer the file to the client
     err = netio.FileToSocketCopy(serverConn, inFile, transferBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Wait for the channel to send complete signal
@@ -359,12 +333,10 @@ func TestHandleTransferRecv(t *testing.T) {
 
     // Get the size of the input file
     inFileInfo, err := os.Stat(testFiles[1])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Get the size of the output file
     outFileInfo, err := os.Stat(testFiles[0])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the input and output files are the same size
@@ -373,7 +345,6 @@ func TestHandleTransferRecv(t *testing.T) {
     // Iterate though create files and delete them
     for _, testFile := range testFiles {
         err = os.Remove(testFile)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
@@ -395,7 +366,6 @@ func TestReadHandler(t *testing.T) {
     go func() {
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -404,7 +374,6 @@ func TestReadHandler(t *testing.T) {
         receiveBuffer := make([]byte, 64)
         // Read the message from server and store into buffer
         bytesRead, err := netio.ReadHandler(clientConn, &receiveBuffer)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Ensure bytes read equals the expected message
@@ -414,7 +383,6 @@ func TestReadHandler(t *testing.T) {
 
         // Perform write operation via passed in connection
         bytesWrote, err := clientConn.Write(testMessage2)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Ensure bytes wrote equals the expected message
         assert.Equal(len(testMessage2), bytesWrote)
@@ -428,14 +396,12 @@ func TestReadHandler(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close connection on local exit
     defer serverConn.Close()
 
     // Perform write operation via passed in connection
     bytesWrote, err := serverConn.Write(testMessage)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure bytes wrote equals the expected message
     assert.Equal(len(testMessage), bytesWrote)
@@ -444,7 +410,6 @@ func TestReadHandler(t *testing.T) {
     buffer := make([]byte, 64)
     // Read the message from server and store into buffer
     bytesRead, err := netio.ReadHandler(serverConn, &buffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure bytes read equals the expected message length
@@ -473,14 +438,12 @@ func TestSocketToFileCopy(t *testing.T) {
         // Create the input file and return handle
         outFilePath, outFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                          "output_test", "txt", true)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Add the created file to slice for later removal
         testFiles = append(testFiles, outFilePath)
 
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Make 64KB buffer for receiving file transfer
@@ -489,12 +452,10 @@ func TestSocketToFileCopy(t *testing.T) {
         // Transfer received data from connection to file
         err = netio.SocketToFileCopy(outFile, clientConn, receiveBuffer,
                                      int64(20 * globals.MB))
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Get the size of the output file
         outFileInfo, err := os.Stat(outFile.Name())
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Ensure the bytes wrote equals the expected target
@@ -509,13 +470,11 @@ func TestSocketToFileCopy(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Create the input file and return handle
     inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                    "input_test", "txt", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure file hanle closes on local exit
     defer inFile.Close()
@@ -527,21 +486,18 @@ func TestSocketToFileCopy(t *testing.T) {
     data.GenerateRandomBytes(writeBuffer, 20 * globals.MB)
     // Write the buffer of random data to file
     bytesWrote, err := inFile.Write(writeBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the number of bytes wrote equals the buffer size
     assert.Equal(20 * globals.MB, bytesWrote)
 
     // Reset the file pointer to begining of file for transfer
     _, err = inFile.Seek(int64(0), 0)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Make 64KB buffer to transfer file
     transferBuffer := make([]byte, 64 * globals.KB)
 
     // Transfer file directly through the socket
     _, err = io.CopyBuffer(serverConn, inFile, transferBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Wait for the channel to send complete signal
@@ -552,12 +508,10 @@ func TestSocketToFileCopy(t *testing.T) {
 
     // Get the size of the input file
     inFileInfo, err := os.Stat(testFiles[1])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Get the size of the output file
     outFileInfo, err := os.Stat(testFiles[0])
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the input and output files are the same size
@@ -566,7 +520,6 @@ func TestSocketToFileCopy(t *testing.T) {
     // Iterate though create files and delete them
     for _, testFile := range testFiles {
         err = os.Remove(testFile)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
@@ -585,13 +538,11 @@ func TestTransferFile(t *testing.T) {
     // Create the input file and return handle
     outFilePath, outFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                      "output_test", "txt", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     go func() {
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -602,7 +553,6 @@ func TestTransferFile(t *testing.T) {
         // Read data from the socket and write to the file path
         err = netio.SocketToFileCopy(outFile, clientConn, transferBuffer,
                                      20 * globals.MB)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Send complete signal via channel
@@ -614,7 +564,6 @@ func TestTransferFile(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close connection on local exit
     defer serverConn.Close()
@@ -622,7 +571,6 @@ func TestTransferFile(t *testing.T) {
     // Create the input file and return handle
     inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                    "input_test", "txt", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Make buffer to hold random data and write random data to it
@@ -630,7 +578,6 @@ func TestTransferFile(t *testing.T) {
     data.GenerateRandomBytes(writeBuffer, 20 * globals.MB)
     // Write the buffer of random data to file
     bytesWrote, err := inFile.Write(writeBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the number of bytes wrote equals the buffer size
     assert.Equal(20 * globals.MB, bytesWrote)
@@ -639,7 +586,6 @@ func TestTransferFile(t *testing.T) {
 
     // Transfer the file to the client
     err = netio.TransferFile(serverConn, inFilePath, int64(bytesWrote))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Wait for the channel to send complete signal
@@ -647,7 +593,6 @@ func TestTransferFile(t *testing.T) {
 
     // Get the size of the output file
     outFileInfo, err := os.Stat(outFilePath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the input and output files are the same size
@@ -658,7 +603,6 @@ func TestTransferFile(t *testing.T) {
     // Iterate through list of test files and delete them
     for _, file := range deleteFiles {
         err = os.Remove(file)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
@@ -680,7 +624,6 @@ func TestWriteHandler(t *testing.T) {
     go func() {
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -689,7 +632,6 @@ func TestWriteHandler(t *testing.T) {
         receiveBuffer := make([]byte, 64)
         // Read the message from server and store into buffer
         bytesRead, err := clientConn.Read(receiveBuffer)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Ensure bytes read equals the expected message
@@ -700,7 +642,6 @@ func TestWriteHandler(t *testing.T) {
         // Perform write operation via passed in connection
         bytesWrote, err := netio.WriteHandler(clientConn, testMessage2,
                                               len(testMessage2))
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Ensure bytes wrote equals the expected message
         assert.Equal(len(testMessage2), bytesWrote)
@@ -714,7 +655,6 @@ func TestWriteHandler(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close connection on local exit
     defer serverConn.Close()
@@ -722,7 +662,6 @@ func TestWriteHandler(t *testing.T) {
     // Perform write operation via passed in connection
     bytesWrote, err := netio.WriteHandler(serverConn, testMessage,
                                           len(testMessage))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure bytes wrote equals the expected message
     assert.Equal(len(testMessage), bytesWrote)
@@ -731,7 +670,6 @@ func TestWriteHandler(t *testing.T) {
     buffer := make([]byte, 64)
     // Read the message from server and store into buffer
     bytesRead, err := serverConn.Read(buffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure bytes read equals the expected message length
@@ -760,7 +698,6 @@ func TestFileTransfer(t *testing.T) {
     go func() {
         // Wait for an incoming connection
         clientConn, err := listener.Accept()
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
         // Close connection on local exit
         defer clientConn.Close()
@@ -769,7 +706,6 @@ func TestFileTransfer(t *testing.T) {
         // Read data from the socket and write to the file path
         receivedPath, err = netio.ReceiveFile(clientConn, messageBuffer, ".",
                                               globals.LOG_TRANSFER_PREFIX)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Send complete signal via channel
@@ -781,7 +717,6 @@ func TestFileTransfer(t *testing.T) {
 
     // Make a connection to the remote brain server
     serverConn, err := net.Dial("tcp", connectAddr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close connection on local exit
     defer serverConn.Close()
@@ -789,7 +724,6 @@ func TestFileTransfer(t *testing.T) {
     // Create the input file and return handle
     inFilePath, inFile, err := disk.CreateRandFile(".", globals.RAND_STRING_SIZE,
                                                    "input_test", "txt", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Make buffer to hold random data and write random data to it
@@ -797,7 +731,6 @@ func TestFileTransfer(t *testing.T) {
     data.GenerateRandomBytes(writeBuffer, 20 * globals.MB)
     // Write the buffer of random data to file
     bytesWrote, err := inFile.Write(writeBuffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the number of bytes wrote equals the buffer size
     assert.Equal(20 * globals.MB, bytesWrote)
@@ -808,7 +741,6 @@ func TestFileTransfer(t *testing.T) {
     // Transfer the file to the client
     err = netio.UploadFile(serverConn, messageBuffer, inFilePath,
                            globals.LOG_TRANSFER_PREFIX)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Wait for the channel to send complete signal
@@ -816,7 +748,6 @@ func TestFileTransfer(t *testing.T) {
 
     // Get the size of the output file
     outFileInfo, err := os.Stat(receivedPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the input and output files are the same size
@@ -827,7 +758,6 @@ func TestFileTransfer(t *testing.T) {
     // Iterate through list of test files and delete them
     for _, file := range deleteFiles {
         err = os.Remove(file)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
