@@ -2,7 +2,7 @@ package hashcat
 
 import (
 	"bytes"
-	"log"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -15,7 +15,8 @@ import (
 // until an empty charset is met.
 //
 // @Parameters
-// - cmdOptions:  The string slice of command args to be passed into hashcat
+//  - cmdOptions:  The string slice of command args to be passed into hashcat
+//  - charsets:  The slice of charsets to be appended to command options
 //
 func AppendCharsets(cmdOptions *[]string, charsets []string) {
     var counter int = 1
@@ -55,9 +56,13 @@ type HashcatArgs struct {
 // output in order established by the keys.
 //
 // @Parameters
-// - output:  Buffer where hashcat output is stored and to be parsed
+//  - output:  Buffer where hashcat output is stored and to be parsed
+//  - delimiter:  Delimiter used to parse out execution statistics
 //
-func ParseHashcatOutput(output []byte, delimiter []byte) []any {
+// @Returns
+//  - Slice of the parsed statistic outputs
+//
+func ParseHashcatOutput(output []byte, delimiter []byte) ([]any, error) {
     var keys []string
     var logArgs []any
     // Make a map to store parsed data
@@ -66,7 +71,7 @@ func ParseHashcatOutput(output []byte, delimiter []byte) []any {
     // Trim up to the end section with result data
     parsedOutput, err := data.TrimAfterLast(output, delimiter)
     if err != nil {
-        log.Fatalf("Error pre-trimming:  %v", err)
+        return logArgs, fmt.Errorf("pre-trimming output - %v", err)
     }
 
     // Split the byte slice into lines base on newlines
@@ -113,5 +118,5 @@ func ParseHashcatOutput(output []byte, delimiter []byte) []any {
         logArgs = append(logArgs, zap.String(key, outputMap[key]))
     }
 
-    return logArgs
+    return logArgs, nil
 }

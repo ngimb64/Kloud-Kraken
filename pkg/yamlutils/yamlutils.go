@@ -13,12 +13,12 @@ import (
 // sets the final value as a scalar node.
 //
 // @Parameters
-// - The node to modifiy
-// - The node path how it is mapped in yaml
-// - The value to set in the node content
+//  - The node to modifiy
+//  - The node path how it is mapped in yaml
+//  - The value to set in the node content
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func setNodeValue(node *yaml.Node, path []string, value string) error {
     if len(path) == 0 {
@@ -124,10 +124,10 @@ func setNodeValue(node *yaml.Node, path []string, value string) error {
 // e.g. "a.b\.c.d" -> ["a","b.c","d"]
 //
 // @Parameters
-// - The yaml path to split
+//  - The yaml path to split
 //
 // @Returns
-// - A slice of the split yaml path content
+//  - A slice of the split yaml path content
 //
 func splitPath(yamlPath string) []string {
     parts := []string{}
@@ -163,12 +163,12 @@ func splitPath(yamlPath string) []string {
 // Updates all the key-value mapping in passed in map to passed in yaml data.
 //
 // @Parameters
-// - yamlBytes:  Slice of raw yaml bytes to be modified
-// - updates:  Map containing yaml data to be updated
+//  - yamlBytes:  Slice of raw yaml bytes to be modified
+//  - updates:  Map containing yaml data to be updated
 //
 // @Returns
-// - The resulting modified yaml data
-// - Error if it occurs, otherwise nil on success
+//  - The resulting modified yaml data
+//  - Error if it occurs, otherwise nil on success
 //
 func UpdateYAMLBytes(yamlBytes []byte,
                      updates map[string]string) (
@@ -178,7 +178,7 @@ func UpdateYAMLBytes(yamlBytes []byte,
     // Decode the data in yaml node for modification
     err = yaml.Unmarshal(yamlBytes, &doc)
     if err != nil {
-        return nil, fmt.Errorf("unmarshal yaml:  %w", err)
+        return nil, fmt.Errorf("unmarshal yaml - %w", err)
     }
 
     // Ensure a DocumentNode with content is present
@@ -197,7 +197,7 @@ func UpdateYAMLBytes(yamlBytes []byte,
         // Set the node value with one parsed from map
         err = setNodeValue(root, path, newVal)
         if err != nil {
-            return nil, fmt.Errorf("set %s:  %w", rawPath, err)
+            return nil, fmt.Errorf("set %s - %w", rawPath, err)
         }
     }
 
@@ -209,7 +209,7 @@ func UpdateYAMLBytes(yamlBytes []byte,
         // Close the encoder
         cerr := enc.Close()
         if cerr != nil {
-            err = errors.Join(err, fmt.Errorf("closing encoder:  %w", cerr))
+            err = errors.Join(err, fmt.Errorf("closing encoder - %w", cerr))
         }
     }()
 
@@ -218,7 +218,7 @@ func UpdateYAMLBytes(yamlBytes []byte,
     // Encode the resulting data back to yaml
     err = enc.Encode(&doc)
     if err != nil {
-        return nil, fmt.Errorf("encode yaml:  %w", err)
+        return nil, fmt.Errorf("encode yaml - %w", err)
     }
 
     return buffer.Bytes(), nil

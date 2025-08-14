@@ -50,16 +50,18 @@ var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, e
 // connection for file transfer. Finally pass the connection with other args into TransferFile().
 //
 // @Parameters
-// - connection:  Network socket connection for handling messaging
-// - buffer:  The buffer storing network messaging
-// - waitGroup:  Used to synchronize the Goroutines running
-// - appConfig:  The configuration struct with loaded yaml program data
-// - logMan:  The kloudlogs logger manager for local logging
-// - ipAddr:  The IP address of the remote client connected to the server
-// - t:  The tui interface for displaying output
+//  - connection:  Network socket connection for handling messaging
+//  - buffer:  The buffer storing network messaging
+//  - waitGroup:  Used to synchronize the Goroutines running
+//  - appConfig:  The configuration struct with loaded yaml program data
+//  - logMan:  The kloudlogs logger manager for local logging
+//  - ipAddr:  The IP address of the remote client connected to the server
+//  - t:  The tui interface for displaying output
 //
-func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGroup,
-                    appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
+func handleTransfer(connection net.Conn, buffer []byte,
+                    waitGroup *sync.WaitGroup,
+                    appConfig *conf.AppConfig,
+                    logMan *kloudlogs.LoggerManager,
                     ipAddr string, t *tui.TUI) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
@@ -172,15 +174,17 @@ func handleTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGrou
 // message which signals exiting the loop, finally after the loop received cracked hash and log file.
 //
 // @Parameters
-// - connection:  Network socket connection for handling messaging
-// - waitGroup:  Used to synchronize the Goroutines running
-// - appConfig:  The configuration struct with loaded yaml program data
-// - logMan:  The kloudlogs logger manager for local logging
-// - remoteAddr:  IP address to remote client that has connected
-// - t:  The tui interface for displaying output
+//  - connection:  Network socket connection for handling messaging
+//  - waitGroup:  Used to synchronize the Goroutines running
+//  - appConfig:  The configuration struct with loaded yaml program data
+//  - logMan:  The kloudlogs logger manager for local logging
+//  - remoteAddr:  IP address to remote client that has connected
+//  - t:  The tui interface for displaying output
 //
-func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
-                      appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
+func handleConnection(connection net.Conn,
+                      waitGroup *sync.WaitGroup,
+                      appConfig *conf.AppConfig,
+                      logMan *kloudlogs.LoggerManager,
                       remoteAddr string, t *tui.TUI) {
     var buffer []byte
     var err error
@@ -327,10 +331,11 @@ func handleConnection(connection net.Conn, waitGroup *sync.WaitGroup,
 // counter and waitgroup, and pass the connection with other args into handler goroutine.
 //
 // @Parameters
-// - appConfig:  The configuration struct with loaded yaml program data
-// - logMan:  The kloudlogs logger manager for local logging
+//  - appConfig:  The configuration struct with loaded yaml program data
+//  - logMan:  The kloudlogs logger manager for local logging
 //
-func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
+func startServer(appConfig *conf.AppConfig,
+                 logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
 
@@ -413,17 +418,18 @@ func startServer(appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager) {
 // Takes passed in args and formats into user data generated for EC2 creation.
 //
 // @Parameters
-// - appConf:  The configuration instance that stores program YAML data
-// - keyName:  The name of the key of the S3 bucket
-// - ipAddrs:  Slice of IP addresses to be formatted into CSV string
-// - ssmParam:  The path where the certificate is stored in SSM param store
+//  - appConf:  The configuration instance that stores program YAML data
+//  - keyName:  The name of the key of the S3 bucket
+//  - ipAddrs:  Slice of IP addresses to be formatted into CSV string
+//  - ssmParam:  The path where the certificate is stored in SSM param store
 //
 // @Returns
-// - The generated EC2 user data with args formatted into it
-// - Error if it occurs, otherwise nil on success
+//  - The generated EC2 user data with args formatted into it
+//  - Error if it occurs, otherwise nil on success
 //
-func ec2UserDataGen(appConf *conf.AppConfig, keyName string, ipAddrs []string,
-                    ssmParam string) (string, error) {
+func ec2UserDataGen(appConf *conf.AppConfig, keyName string,
+                    ipAddrs []string, ssmParam string) (
+                    string, error) {
     var hasRuleset bool
     // Convert the slice of IP addresses to CSV string
     ipAddrsCsv, err := data.SliceToCsv(ipAddrs)
@@ -525,17 +531,18 @@ $CWD/client -applyOptimization=%t \
 // Generates permission policy for the server.
 //
 // @Parameters
-// - region:  The AWS region where actions will be performed
-// - accountId:  The AWS account ID where actions will be performed
-// - ssmParam:  The path where the certificate is stored in SSM param store
-// - bucketName:  The name of the S3 bucket where actions will be performed
-// - clientRoleName:  The name of IAM role the client will be using
+//  - region:  The AWS region where actions will be performed
+//  - accountId:  The AWS account ID where actions will be performed
+//  - ssmParam:  The path where the certificate is stored in SSM param store
+//  - bucketName:  The name of the S3 bucket where actions will be performed
+//  - clientRoleName:  The name of IAM role the client will be using
 //
 // @Returns
-// - The generated permissions policy with args formatted into it
+//  - The generated permissions policy with args formatted into it
 //
-func serverPermPolicyGen(region string, accountId string, ssmParam string,
-                         bucketName string, clientRoleName string) string {
+func serverPermPolicyGen(region string, accountId string,
+                         ssmParam string, bucketName string,
+                         clientRoleName string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -588,11 +595,11 @@ func serverPermPolicyGen(region string, accountId string, ssmParam string,
 // Generates trust policy for the server.
 //
 // @Parameters
-// - accountId:  The AWS account ID where actions will be performed
-// - iamUser:  The IAM user that the policy will apply to
+//  - accountId:  The AWS account ID where actions will be performed
+//  - iamUser:  The IAM user that the policy will apply to
 //
 // @Returns
-// - The generated trust policy with args formatted into it
+//  - The generated trust policy with args formatted into it
 //
 func serverTrustPolicyGen(accountId string, iamUser string) string {
     return fmt.Sprintf(`{
@@ -611,17 +618,18 @@ func serverTrustPolicyGen(accountId string, iamUser string) string {
 // Generates permission policy for the client.
 //
 // @Parameters
-// - bucketName:  The name of the S3 bucket where actions will be performed
-// - region:  The AWS region where actions will be performed
-// - accountId:  The AWS account ID where actions will be performed
-// - paramPath:  The path where the certificate is stored in SSM param store
-// - logGroup:  The name of the CloudWatch group being utilized
+//  - bucketName:  The name of the S3 bucket where actions will be performed
+//  - region:  The AWS region where actions will be performed
+//  - accountId:  The AWS account ID where actions will be performed
+//  - paramPath:  The path where the certificate is stored in SSM param store
+//  - logGroup:  The name of the CloudWatch group being utilized
 //
 // @Returns
-// - The generated permissions policy with args formatted into it
+//  - The generated permissions policy with args formatted into it
 //
-func clientPermPolicyGen(bucketName string, region string, accountId string,
-                         paramPath string, logGroup string) string {
+func clientPermPolicyGen(bucketName string, region string,
+                         accountId string, paramPath string,
+                         logGroup string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -663,7 +671,7 @@ func clientPermPolicyGen(bucketName string, region string, accountId string,
 // Generates trust policy for the client.
 //
 // @Returns
-// - The generated trust policy with args formatted into it
+//  - The generated trust policy with args formatted into it
 //
 func clientTrustPolicyGen() string {
     return `{
@@ -685,13 +693,13 @@ func clientTrustPolicyGen() string {
 // Concludes by launching EC2 instances and ensure proper termination via defer.
 //
 // @Parameters
-// - appConfig:  The configuration instance with program YAML data
-// - publicIps:  List of public IPs to format into user data template
+//  - appConfig:  The configuration instance with program YAML data
+//  - publicIps:  List of public IPs to format into user data template
 //
 // @Returns
-// - The initialized AWS configuration instance
-// - The EC2 manager instance to utilize for later operations
-// - Error if it occurs, otherwise nil on success
+//  - The initialized AWS configuration instance
+//  - The EC2 manager instance to utilize for later operations
+//  - Error if it occurs, otherwise nil on success
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               aws.Config, *awsutils.Ec2Manger, error) {
@@ -981,7 +989,10 @@ func makeServerDirs() {
     // Set the program directories
     programDirs := []string{ReceivedDir}
     // Create needed directories
-    disk.MakeDirs(programDirs)
+    err := disk.MakeDirs(programDirs)
+    if err != nil {
+        log.Fatalf("Error creating server dirs:  %v", err)
+    }
 }
 
 
@@ -989,7 +1000,7 @@ func makeServerDirs() {
 // or invalid then proceeds to user input until valid yaml file is specified.
 //
 // @Returns
-// - Pointer to AppConfig struct populated from yaml data
+//  - Pointer to AppConfig struct populated from yaml data
 //
 func parseArgs() *conf.AppConfig {
     var configFilePath string

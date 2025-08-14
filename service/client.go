@@ -53,10 +53,10 @@ var WordlistPath string                // Path where wordlists are stored
 // the user no hashes were cracked.
 //
 // @Parmeters
-// - lootFile:  The file path where final cracked hashes are stored
+//  - lootFile:  The file path where final cracked hashes are stored
 //
 // @ Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func createFailureResult(lootPath string) error {
     // Open the final cracked hashes file or create if it does not exist
@@ -86,10 +86,11 @@ func createFailureResult(lootPath string) error {
 // Lock mutux for messaging connection and related buffer, send the processing complete message.
 //
 // @Parameters
-// - connection:  network socket connection where procesing complete message is sent
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//  - connection:  network socket connection where procesing complete message is sent
+//  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager) {
+func sendProcessingComplete(connection net.Conn,
+                            logMan *kloudlogs.LoggerManager) {
     // Lock the mutex and ensure it unlocks on local exit
     BufferMutex.Lock()
     defer BufferMutex.Unlock()
@@ -109,12 +110,12 @@ func sendProcessingComplete(connection net.Conn, logMan *kloudlogs.LoggerManager
 // the result is parse and logged via kloudlogs.
 //
 // @Parameters
-// - connection:  Active socket connection for reading data to be stored and processed
-// - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
-// - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
-// - waitGroup:  Acts as a barrier for the Goroutines running
-// - transferManager:  Manages calculating the amount of data being transferred locally
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//  - connection:  Active socket connection for reading data to be stored and processed
+//  - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
+//  - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
+//  - waitGroup:  Acts as a barrier for the Goroutines running
+//  - transferManager:  Manages calculating the amount of data being transferred locally
+//  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                        transferChannel chan struct{}, waitGroup *sync.WaitGroup,
@@ -275,7 +276,11 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         }
 
         // Parse the hashcat output
-        logArgs := hashcat.ParseHashcatOutput(output, []byte("=>"))
+        logArgs, err := hashcat.ParseHashcatOutput(output, []byte("=>"))
+        if err != nil {
+            logMan.LogMessage("error", "Error parsing hashcat output:  %v", err)
+        }
+
         // Log the hashcat output with kloudlogs
         logMan.LogMessage("info", "Hashcat processing results", logArgs...)
 
@@ -323,15 +328,17 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 // initiate file transfer routine.
 //
 // @Parameters
-// - connection:  Active socket connection for reading data to be stored and processed
-// - buffer:  The buffer used for processing socket messaging
-// - waitGroup:  Used to synchronize the Goroutines running
-// - transferManager:  Manages calculating the amount of data being transferred locally
-// - transferComplete:  boolean toggle that is to signify when all files have been transfered
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//  - connection:  Active socket connection for reading data to be stored and processed
+//  - buffer:  The buffer used for processing socket messaging
+//  - waitGroup:  Used to synchronize the Goroutines running
+//  - transferManager:  Manages calculating the amount of data being transferred locally
+//  - transferComplete:  boolean toggle that is to signify when all files have been transfered
+//  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGroup,
-                     transferManager *data.TransferManager, transferComplete *bool,
+func processTransfer(connection net.Conn, buffer []byte,
+                     waitGroup *sync.WaitGroup,
+                     transferManager *data.TransferManager,
+                     transferComplete *bool,
                      logMan *kloudlogs.LoggerManager) {
     // Lock the mutex and ensure it unlocks on local exit
     BufferMutex.Lock()
@@ -462,13 +469,13 @@ func processTransfer(connection net.Conn, buffer []byte, waitGroup *sync.WaitGro
 // the loop concludes the cracked hashes and log files are sent back to the server.
 //
 // @Parameters
-// - connection:  Active socket connection for reading data to be stored and processed
-// - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
-// - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
-// - waitGroup:  Used to synchronize the Goroutines running
-// - transferManager:  Manages calculating the amount of data being transferred locally
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-// - maxFileSize:  The maximum allowed size for a file to be transferred
+//  - connection:  Active socket connection for reading data to be stored and processed
+//  - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
+//  - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
+//  - waitGroup:  Used to synchronize the Goroutines running
+//  - transferManager:  Manages calculating the amount of data being transferred locally
+//  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
 func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                       transferChannel chan struct{}, waitGroup *sync.WaitGroup,
@@ -564,11 +571,12 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 // connecting routines to pass messages to signal data to process.
 //
 // @Parameters
-// - connection:  The network socket connection for handling messaging
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-// - maxFileSize:  The maximum allowed size for a file to be transferred
+//  - connection:  The network socket connection for handling messaging
+//  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
+func handleConnection(connection net.Conn,
+                      logMan *kloudlogs.LoggerManager,
                       maxFileSizeInt64 int64) {
     // Initialize a transfer mananager used to track the size of active file transfers
     transferManager := data.NewTransferManager()
@@ -597,14 +605,14 @@ func handleConnection(connection net.Conn, logMan *kloudlogs.LoggerManager,
 // remote brain server, then pass the connection to Goroutine handler.
 //
 // @Parameters
-// - ipAddr:  The ip address of the remote server
-// - port:  The port of the remote server
-// - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
-// - maxFileSize:  The maximum allowed size for a file to be transferred
+//  - ipAddr:  The ip address of the remote server
+//  - port:  The port of the remote server
+//  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
+//  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
-func connectRemote(ipAddrs string, port int, logMan *kloudlogs.LoggerManager,
+func connectRemote(ipAddrs string, port int,
+                   logMan *kloudlogs.LoggerManager,
                    maxFileSizeInt64 int64) error {
-
     // Split the comma separated string into slice of addresses
     addresses := strings.Split(ipAddrs, ",")
 
@@ -653,7 +661,10 @@ func makeClientDirs() {
     }
 
     // Create needed directories
-    disk.MakeDirs(programDirs)
+    err := disk.MakeDirs(programDirs)
+    if err != nil {
+        log.Fatalf("Error creating client dirs:  %v", err)
+    }
 }
 
 

@@ -20,8 +20,8 @@ const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 // Populate passed in buffer with random bytes of data.
 //
 // @Parameters
-// - buffer:  The buffer where the random bytes of data will be written
-// - maxBytes:  The max amount of bytes of data to store in buffer
+//  - buffer:  The buffer where the random bytes of data will be written
+//  - maxBytes:  The max amount of bytes of data to store in buffer
 //
 func GenerateRandomBytes(buffer []byte, maxBytes int) {
     // Seed the random number generator to ensure unique results
@@ -36,12 +36,12 @@ func GenerateRandomBytes(buffer []byte, maxBytes int) {
 // Check if the size is within the percentage range of the max size.
 //
 // @Parameters
-// - maxSize:  The max allowed file size
-// - currentSize:  The current size to compare to max range
-// - percent:  The upper allowed percentange within max size
+//  - maxSize:  The max allowed file size
+//  - currentSize:  The current size to compare to max range
+//  - percent:  The upper allowed percentange within max size
 //
 // @Returns
-// - true/false boolean whether the size is within upper max range
+//  - true/false boolean whether the size is within upper max range
 //
 func IsInPercentRange(maxSize float64, currentSize float64,
                       percent float64) bool {
@@ -60,12 +60,12 @@ func IsInPercentRange(maxSize float64, currentSize float64,
 // Split the file size from its unit and return to different variables
 //
 // @Parameters
-// - unitFileSize:  The file size and unit as one string
+//  - unitFileSize:  The file size and unit as one string
 //
 // @Returns
-// - The parsed file size converted to float type
-// - The parsed file size unit
-// - Error if it occurs, otherwise nil on success
+//  - The parsed file size converted to float type
+//  - The parsed file size unit
+//  - Error if it occurs, otherwise nil on success
 //
 func ParseFileSizeType(unitFileSize string) (float64, string, error) {
     // Iterate through the string slice of file types
@@ -94,10 +94,10 @@ func ParseFileSizeType(unitFileSize string) (float64, string, error) {
 // Creates buffer and populates it with random bytes and returns as string.
 //
 // @Parameters
-// - numberChars:  The number of random character to create and set buffer size
+//  - numberChars:  The number of random character to create and set buffer size
 //
 // @Returns
-// - The string of random characters converted from bytes
+//  - The string of random characters converted from bytes
 //
 func RandStringBytes(numberChars int) string {
     byteSlice := make([]byte, numberChars)
@@ -116,24 +116,26 @@ func RandStringBytes(numberChars int) string {
 // string value like "foo,bar,string"
 //
 // @Parameters
-// - fields:  The slice of string fields to format into CSV
+//  - fields:  The slice of string fields to format into CSV
 //
 // @Returns
-// - The CSV formatted string
-// - Error if it occurs, otherwise nil on success
+//  - The CSV formatted string
+//  - Error if it occurs, otherwise nil on success
 //
 func SliceToCsv(fields []string) (string, error) {
     var buf bytes.Buffer
 
     // Set up CSV writer and write string slice to it
-    w := csv.NewWriter(&buf)
-    if err := w.Write(fields); err != nil {
+    writer := csv.NewWriter(&buf)
+    err := writer.Write(fields)
+    if err != nil {
         return "", err
     }
 
     // Flush buffer data to ensure it is written
-    w.Flush()
-    if err := w.Error(); err != nil {
+    writer.Flush()
+    err = writer.Error()
+    if err != nil {
         return "", err
     }
 
@@ -144,11 +146,11 @@ func SliceToCsv(fields []string) (string, error) {
 // Checks to see if element in slice contains the target string.
 //
 // @Parameters
-// - slice:  String slice to check if value is contained in an entry
-// - target:  Target string to check if contained in slice items
+//  - slice:  String slice to check if value is contained in an entry
+//  - target:  Target string to check if contained in slice items
 //
 // @Returns
-// - true/false boolean depnding on whether target is in slice or not
+//  - true/false boolean depnding on whether target is in slice or not
 //
 func StringSliceContains(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
@@ -166,11 +168,11 @@ func StringSliceContains(slice []string, target string) bool {
 // Checks to see if element in slice is equal to the target string.
 //
 // @Parameters
-// - slice:  String slice to check if value is equal to an entry
-// - target:  Target string to check if equal to slice items
+//  - slice:  String slice to check if value is equal to an entry
+//  - target:  Target string to check if equal to slice items
 //
 // @Returns
-// - true/false boolean depnding on whether target is in slice or not
+//  - true/false boolean depnding on whether target is in slice or not
 //
 func StringSliceHasItem(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
@@ -188,11 +190,11 @@ func StringSliceHasItem(slice []string, target string) bool {
 // Function to convert different size units to bytes and return as int64.
 //
 // @Parameters
-// - size:  The size of unit to be converted
-// - unit:  The unit to be converted to raw bytes
+//  - size:  The size of unit to be converted
+//  - unit:  The unit to be converted to raw bytes
 //
 // @Returns
-// - The converted file size as raw bytes
+//  - The converted file size as raw bytes
 //
 func ToBytes(size float64, unit string) int64 {
     var byteSize float64
@@ -247,12 +249,12 @@ func (tm *TransferManager) RemoveTransferSize(size int64) {
 // Trims after the last occurance of specified delimiter.
 //
 // @Parameters
-// - input:  Input to parsed based on last delimiter
-// - delimiter:  The delimiter to specify where input should be parsed
+//  - input:  Input to parsed based on last delimiter
+//  - delimiter:  The delimiter to specify where input should be parsed
 //
 // @Returns
-// - The parsed byte slice output
-// - Error if it occurs, otherwise nil on success
+//  - The parsed byte slice output
+//  - Error if it occurs, otherwise nil on success
 //
 func TrimAfterLast(input []byte, delimiter []byte) ([]byte, error) {
     // Find the last occurance of the delimiter
@@ -267,11 +269,11 @@ func TrimAfterLast(input []byte, delimiter []byte) ([]byte, error) {
 // Trims any number of specified byte char from the end of the byte slice.
 //
 // @Parameters
-// - buffer:  The buffer storing the data to end trim
-// - char:  The character to shave off the end of the buffer
+//  - buffer:  The buffer storing the data to end trim
+//  - char:  The character to shave off the end of the buffer
 //
 // @Returns
-// - The parsed byte slice without any chars on the end
+//  - The parsed byte slice without any chars on the end
 //
 func TrimEndChars(buffer []byte, char byte) []byte {
     // Get the index of the last element

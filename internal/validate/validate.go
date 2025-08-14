@@ -44,10 +44,10 @@ var ReVpcId = regexp.MustCompile(`^vpc-[0-9a-f]{8}(?:[0-9a-f]{9})?$`)
 // Ensure the AWS account ID is of proper format.
 //
 // @Parameters
-// - accountId:  The ID number for the AWS account
+//  - accountId:  The ID number for the AWS account
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateAccountId(accountId string) error {
     // Validate format with regular expression
@@ -62,10 +62,10 @@ func ValidateAccountId(accountId string) error {
 // Ensures the S3 bucket name is of proper format.
 //
 // @Parameters
-// -name:  The name of the S3 bucket to be validated
+//  - name:  The name of the S3 bucket to be validated
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateBucketName(name string) error {
     if name == "" {
@@ -101,10 +101,10 @@ func ValidateBucketName(name string) error {
 // Ensures the CIDR block is of proper format.
 //
 // @Parameters
-// -name:  The name of the CIDR block to be validated
+//  - name:  The name of the CIDR block to be validated
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateCidrBlock(cidrBlock string) error {
     if cidrBlock == "" {
@@ -124,12 +124,12 @@ func ValidateCidrBlock(cidrBlock string) error {
 // mode that supports a hash mask with custom charsets is present.
 //
 // @Parameters
-// - crackingMode:  The hashcat cracking mode
-// - hashMask:  The hashcat hash mask
-// - args:  A iterator of 4 custom character sets
+//  - crackingMode:  The hashcat cracking mode
+//  - hashMask:  The hashcat hash mask
+//  - args:  A iterator of 4 custom character sets
 //
 // @Returns
-// - true/false boolean depending on if valid hashmask and charsets are present
+//  - true/false boolean depending on if valid hashmask and charsets are present
 //
 func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool {
     if hashMask == "" {
@@ -156,7 +156,7 @@ func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool
 // exists that is a yaml file with data inside it.
 //
 // @Parameters
-// - configFilePath:  The path to the configuration to attempt to load
+//  - configFilePath:  The path to the configuration to attempt to load
 //
 func ValidateConfigPath(configFilePath *string) {
     for {
@@ -204,10 +204,10 @@ func ValidateConfigPath(configFilePath *string) {
 // Validate the hashcat cracking mode to ensure it is supported.
 //
 // @Parameters
-// - hashMode:  The hashcat mode to validate
+//  - hashMode:  The hashcat mode to validate
 //
 // @Returns
-// - A true/false boolean depending on whether the mode is supported or not
+//  - A true/false boolean depending on whether the mode is supported or not
 //
 func ValidateCrackingMode(hashMode string) bool {
     hashModes := []string{"0", "3", "6", "7"}
@@ -220,10 +220,10 @@ func ValidateCrackingMode(hashMode string) bool {
 // Ensure the passed in directory path exists and is a dir that has data.
 //
 // @Parameters
-// - dirPath:  The path to the directory to validate
+//  - dirPath:  The path to the directory to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateDir(dirPath string) error {
     // Check to see if the load directory exists and has files in it
@@ -245,10 +245,10 @@ func ValidateDir(dirPath string) error {
 // Ensures Elastic IP Allocation ID is of proper format.
 //
 // @Parameters
-// - The Elastic IP Allocation ID to be validated
+//  - The Elastic IP Allocation ID to be validated
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateEipAllocationId(eipId string) error {
 	if eipId == "" {
@@ -267,10 +267,10 @@ func ValidateEipAllocationId(eipId string) error {
 // Ensure the passed in file path exists and is a file that has data.
 //
 // @Parameters
-// - filePath:  The path to the file to validate
+//  - filePath:  The path to the file to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateFile(filePath string) error {
     // Check to see if the hash file exists
@@ -292,10 +292,10 @@ func ValidateFile(filePath string) error {
 // Validate the path to the hash file and the file itself via ValidateFile().
 //
 // @Parameters
-// - filePath:  The path to the hash file to validate
+//  - filePath:  The path to the hash file to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateHashFile(filePath string) error {
     // Validate the hash file path
@@ -317,12 +317,12 @@ func ValidateHashFile(filePath string) error {
 // Ensure the hash mask is present while a supported cracking mode is selcted.
 //
 // @Parameters
-// - crackingMode:  The hashcat cracking mode
-// - hashMask:  The hashcat mask to validate
+//  - crackingMode:  The hashcat cracking mode
+//  - hashMask:  The hashcat mask to validate
 //
 // @Returns
-// - true/false value depending on whether the hash mask is present
-//   with a supported cracking mode
+//  - true/false value depending on whether the hash mask is present
+//    with a supported cracking mode
 //
 func ValidateHashMask(crackingMode string, hashMask string) bool {
     if hashMask == "" {
@@ -338,10 +338,10 @@ func ValidateHashMask(crackingMode string, hashMask string) bool {
 // Ensure the passed in hash type is a supported hashcat hash type.
 //
 // @Parameters
-// - hashType:  the hash type to validate
+//  - hashType:  the hash type to validate
 //
 // @Returns
-// - true/false boolean depending on whether hash type is valid or not
+//  - true/false boolean depending on whether hash type is valid or not
 //
 func ValidateHashType(hashType string) bool {
     hashTypes := []string{"0", "10", "11", "12", "20", "21", "23", "30", "40", "50",
@@ -368,10 +368,10 @@ func ValidateHashType(hashType string) bool {
 // Ensures the AWS IAM username is of proper format.
 //
 // @Parameters
-// - iamUsername:  The username of the IAM to be validated
+//  - iamUsername:  The username of the IAM to be validated
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateIamUsername(iamUsername string) error {
     // If the IAM username is not of proper format
@@ -387,10 +387,10 @@ func ValidateIamUsername(iamUsername string) error {
 // Ensure the AWS internet gateway ID is of proper format.
 //
 // @Parameters
-// - igwId:  The internet gateway ID to validate
+//  - igwId:  The internet gateway ID to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateIgwId(igwId string) error {
 	if igwId == "" {
@@ -409,10 +409,10 @@ func ValidateIgwId(igwId string) error {
 // Ensures the passed in instance type is in the supported slice.
 //
 // @Parameters
-// -instanceType:  The EC2 instance type to be used
+//  - instanceType:  The EC2 instance type to be used
 //
 // @Returns
-// - true/false boolean depending on whether instance type is valid or not
+//  - true/false boolean depending on whether instance type is valid or not
 //
 func ValidateInstanceType(instanceType string) bool {
     var supportedInstances = []string{
@@ -452,10 +452,10 @@ func ValidateInstanceType(instanceType string) bool {
 // Ensure the listener is above a non-privileged TCP port (over 1000).
 //
 // @Parameters
-// - listenerPort:  The port to be validated
+//  - listenerPort:  The port to be validated
 //
 // @Returns
-// - true/false boolean depending on whether the port is above 1000 or not
+//  - true/false boolean depending on whether the port is above 1000 or not
 //
 func ValidateListenerPort(listenerPort int) bool {
     return listenerPort > 1000
@@ -465,10 +465,10 @@ func ValidateListenerPort(listenerPort int) bool {
 // Ensure the load dir path is valid and validate the load dir.
 //
 // @Paramters
-// - dirPath:  Path to the load directory to be validated
+//  - dirPath:  Path to the load directory to be validated
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateLoadDir(dirPath string) error {
     // Validate the load directory path
@@ -490,10 +490,10 @@ func ValidateLoadDir(dirPath string) error {
 // Ensure the passed in log mode is supported.
 //
 // @Parameters
-// - logMode:  The log mode to be validated
+//  - logMode:  The log mode to be validated
 //
 // @Returns
-// - true/false depending on whether log mode is supported or not
+//  - true/false depending on whether log mode is supported or not
 //
 func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
@@ -508,11 +508,11 @@ func ValidateLogMode(logMode string) bool {
 // int64, but for unit format a conversion to raw bytes then int64.
 //
 // @Parameters
-// - maxFileSize:  The max file size prior to parse and calculation/conversion
+//  - maxFileSize:  The max file size prior to parse and calculation/conversion
 //
 // @Returns
-// - The converted int64 max file size as raw bytes
-// - Error if it occurs, otherwise nil on success
+//  - The converted int64 max file size as raw bytes
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateFileSize(maxFileSize string) (int64, error) {
     var byteSize int64
@@ -554,10 +554,10 @@ func ValidateFileSize(maxFileSize string) (int64, error) {
 // Ensure the passed in max size range is 50 percent or below.
 //
 // @Parameters
-// - percentage:  The float percentage to validate
+//  - percentage:  The float percentage to validate
 //
 // @Returns
-// - true/false boolean depending on whether the percentage
+//  - true/false boolean depending on whether the percentage
 //   less than or equal to 50 or not
 //
 func ValidateMaxSizeRange(percentage float64) bool {
@@ -568,10 +568,10 @@ func ValidateMaxSizeRange(percentage float64) bool {
 // Ensure the passed in max transfers is greater than zero.
 //
 // @Parameters
-// - maxTransfers:  The number of allowed file transfer simultaniously
+//  - maxTransfers:  The number of allowed file transfer simultaniously
 //
 // @Returns
-// - true/false boolean depending on whether the max transfers
+//  - true/false boolean depending on whether the max transfers
 //   is greater than 0 or not
 //
 func ValidateMaxTransfers(maxTransfers int32) bool {
@@ -582,10 +582,10 @@ func ValidateMaxTransfers(maxTransfers int32) bool {
 // Ensure the passed in number instances is greater than zero.
 //
 // @Parameters
-// - maxTransfers:  The number instances to allocate
+//  - maxTransfers:  The number instances to allocate
 //
 // @Returns
-// - true/false boolean depending on whether the number instances
+//  - true/false boolean depending on whether the number instances
 //   is greater than 0 or not
 //
 func ValidateNumberInstances(numberInstances int) bool {
@@ -596,11 +596,11 @@ func ValidateNumberInstances(numberInstances int) bool {
 // Cleans the passed in path and ensures it is of proper format.
 //
 // @Parameters
-// - path:  The path to be validated
+//  - path:  The path to be validated
 //
 // @Returns
-// - The validated path
-// - Error if it occurs, otherwise nil on success
+//  - The validated path
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidatePath(path string) (string, error) {
     // Ensure the path is not empty
@@ -628,10 +628,10 @@ func ValidatePath(path string) (string, error) {
 // Ensure the passed in region is a valid AWS region.
 //
 // @Parameters
-// - region:  The AWS region to be validated
+//  - region:  The AWS region to be validated
 //
 // @Returns
-// - true/false boolean depending on whether the AWS region is valid or not
+//  - true/false boolean depending on whether the AWS region is valid or not
 //
 func ValidateRegion(region string) bool {
     // Iterate through the endpoint partitions
@@ -652,10 +652,10 @@ func ValidateRegion(region string) bool {
 // Validate the path to the ruleset file and the file itself via ValidateFile().
 //
 // @Parameters
-// - filePath:  The path to the ruleset file to validate
+//  - filePath:  The path to the ruleset file to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateRulesetFile(filePath string) error {
     // If the ruleset path is empty return early
@@ -683,10 +683,10 @@ func ValidateRulesetFile(filePath string) error {
 // Ensures any security group IDs are of proper format.
 //
 // @Parameters
-// - securityGroupIds:  Slice of security group IDs to validate
+//  - securityGroupIds:  Slice of security group IDs to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateSecurityGroupIds(securityGroupIds []string) error {
     // Iterate through passed in list of security group IDs
@@ -704,10 +704,10 @@ func ValidateSecurityGroupIds(securityGroupIds []string) error {
 // Ensures any security group names are of proper format.
 //
 // @Parameters
-// - securityGroups:  Slice of security group names to validate
+//  - securityGroups:  Slice of security group names to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateSecurityGroups(securityGroups []string) error {
     // Iterate through passed in list of security group names
@@ -735,10 +735,10 @@ func ValidateSecurityGroups(securityGroups []string) error {
 // Ensures the AWS subnet ID is of proper format.
 //
 // @Parameters
-// - subnetId:  Subnet ID to validate
+//  - subnetId:  Subnet ID to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateSubnetId(subnetId string) error {
     if subnetId == "" {
@@ -757,10 +757,10 @@ func ValidateSubnetId(subnetId string) error {
 // Ensures the AWS VPC ID is of proper format.
 //
 // @Parameters
-// - vpcId:  VPC ID to validate
+//  - vpcId:  VPC ID to validate
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func ValidateVpcId(vpcId string) error {
     if vpcId == "" {
@@ -779,10 +779,10 @@ func ValidateVpcId(vpcId string) error {
 // Ensure the passed in workload is suppported by hashcat.
 //
 // @Parameters
-// - workload:  The hashcat workload to be validated
+//  - workload:  The hashcat workload to be validated
 //
 // @Returns
-// - true/false boolean depending on whether the workload is supported or not
+//  - true/false boolean depending on whether the workload is supported or not
 //
 func ValidateWorkload(workload string) bool {
     workloads := []string{"1", "2", "3", "4"}

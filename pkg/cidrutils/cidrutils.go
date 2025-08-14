@@ -46,6 +46,8 @@ func AllocateNextSubnet(vpcCidr string, allocated map[string]struct{},
 
     // Convert existing allocations into parsed nets for overlap checks
     allocatedNets := make([]*net.IPNet, 0, len(allocated))
+
+    // Iterate through already allocated subnets
     for k := range allocated {
         // Parse the network CIDR
         _, anet, perr := net.ParseCIDR(k)
@@ -53,6 +55,7 @@ func AllocateNextSubnet(vpcCidr string, allocated map[string]struct{},
             // Skip malformed entries so they do not block allocation
             continue
         }
+
         allocatedNets = append(allocatedNets, anet)
     }
 
@@ -77,6 +80,7 @@ func AllocateNextSubnet(vpcCidr string, allocated map[string]struct{},
                 break
             }
         }
+
         if overlap {
             continue
         }

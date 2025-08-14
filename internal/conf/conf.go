@@ -65,9 +65,12 @@ type LocalConfig struct {
 // LoadConfig reads the YAML file and unmarshals it into AppConfig struct in
 // memory, then validates the parsed data from local and client sections of yaml.
 //
+// @Parameters
+//  - filePath:  The path to the YAML file to load
+//
 // @Returns
-// - The initialized AppConfig struct loaded with validated data
-// - Error if it occurs, otherwise nil on success
+//  - The initialized AppConfig struct loaded with validated data
+//  - Error if it occurs, otherwise nil on success
 //
 func LoadConfig(filePath string) (*AppConfig, error) {
     // Create a new AppConfig instance
@@ -110,10 +113,10 @@ func LoadConfig(filePath string) (*AppConfig, error) {
 // struct member into its corresponding validation routine.
 //
 // @Parameters
-// - clientConfig:  The ClientConfig section of the parsed yaml data
+//  - clientConfig:  The ClientConfig section of the parsed yaml data
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func validateClientConfig(clientConfig *ClientConfig) error {
     var err error
@@ -181,10 +184,10 @@ func validateClientConfig(clientConfig *ClientConfig) error {
 // struct member into its corresponding validation routine.
 //
 // @Parameters
-// - localConfig:  The LocalConfig section of the parsed yaml data
+//  - localConfig:  The LocalConfig section of the parsed yaml data
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func validateLocalConfig(localConfig *LocalConfig) error {
     // Ensure the account id is of proper format

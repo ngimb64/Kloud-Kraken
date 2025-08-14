@@ -17,12 +17,12 @@ import (
 // the socket to client.
 //
 // @Parameters
-// - connection:  The active TCP socket connection to transmit data
-// - file:  A pointer to the open file descriptor
-// - transferBuffer:  The buffer used to store file data that is transferred
+//  - connection:  The active TCP socket connection to transmit data
+//  - file:  A pointer to the open file descriptor
+//  - transferBuffer:  The buffer used to store file data that is transferred
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func FileToSocketCopy(connection net.Conn, file *os.File,
                       transferBuffer []byte) error {
@@ -42,17 +42,18 @@ func FileToSocketCopy(connection net.Conn, file *os.File,
 // Format the transfer reply in buffer the file path and size sent to the client.
 //
 // @Parameters
-// - filePath:  The path to the file to be transfered
-// - fileSize:  The size of the file to be transfered
-// - buffer:  The buffer where the transfer reply is formatted
-// - prefix:  The prefix used on the message
+//  - filePath:  The path to the file to be transfered
+//  - fileSize:  The size of the file to be transfered
+//  - buffer:  The buffer where the transfer reply is formatted
+//  - prefix:  The prefix used on the message
 //
 // @Returns
-// - Return the length of the formatted transfer reply
-// - Error if it occurs, otherwise nil on success
+//  - Return the length of the formatted transfer reply
+//  - Error if it occurs, otherwise nil on success
 //
-func FormatTransferReply(filePath string, fileSize int64, buffer *[]byte,
-                         prefix []byte) (int, error) {
+func FormatTransferReply(filePath string, fileSize int64,
+                         buffer *[]byte, prefix []byte) (
+                         int, error) {
     byteFilePath := []byte(filePath)
     byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
     // Grab the file name from the end of the path
@@ -80,8 +81,8 @@ func FormatTransferReply(filePath string, fileSize int64, buffer *[]byte,
 // returned with its corresponding port number.
 //
 // @Returns
-// - The established listener
-// - The port number the listener is established on
+//  - The established listener
+//  - The port number the listener is established on
 //
 func GetAvailableListener() (net.Listener, int) {
     var minPort int = 1001
@@ -106,14 +107,14 @@ func GetAvailableListener() (net.Listener, int) {
 // Parse file name:size from buffer data based on colon separator.
 //
 // @Parameters
-// - buffer:  The data read from socket buffer to be parsed
-// - prefix:  The message prefix format
-// - bytesRead:  The number of bytes read into the buffer
+//  - buffer:  The data read from socket buffer to be parsed
+//  - prefix:  The message prefix format
+//  - bytesRead:  The number of bytes read into the buffer
 //
 // @Returns
-// - The byte slice with the file name
-// - A integer file size
-// - Error if it occurs, otherwise nil on success
+//  - The byte slice with the file name
+//  - A integer file size
+//  - Error if it occurs, otherwise nil on success
 //
 func GetFileInfo(buffer []byte, prefix []byte, bytesRead int) ([]byte, int64, error) {
     // Trim the delimiters around the file info
@@ -143,12 +144,12 @@ func GetFileInfo(buffer []byte, prefix []byte, bytesRead int) ([]byte, int64, er
 // Get the IP address and port of the passed in connection.
 //
 // @Parameters
-// - connection:  The connection to get the IP and port
+//  - connection:  The connection to get the IP and port
 //
 // @Returns
-// - The parsed IP address
-// - The parsed port
-// - Error if it occurs, otherwise nil on success
+//  - The parsed IP address
+//  - The parsed port
+//  - Error if it occurs, otherwise nil on success
 //
 func GetIpPort(connection net.Conn) (string, int, error) {
     // Get the ip:port adress of the connected client
@@ -176,10 +177,10 @@ func GetIpPort(connection net.Conn) (string, int, error) {
 // Adjust buffer to optimal size based on file size to be received.
 //
 // @Parameters
-// - fileSize:  The size of the file to be received
+//  - fileSize:  The size of the file to be received
 //
 // @Returns
-// - An optimal integer buffer size
+//  - An optimal integer buffer size
 //
 func GetOptimalBufferSize(fileSize int64) int {
     switch {
@@ -207,13 +208,13 @@ func GetOptimalBufferSize(fileSize int64) int {
 // file size and creating an empty file before proceeding to the file to socket handler.
 //
 // @Parameters
-// - connection:  Active socket connection for reading data to be stored and processed
-// - storePath:  The directory where read socket data will be stored as files
-// - fileName:  The name of the file to store
-// - fileSize:  The size of the to be stored on disk from read socket data
+//  - connection:  Active socket connection for reading data to be stored and processed
+//  - storePath:  The directory where read socket data will be stored as files
+//  - fileName:  The name of the file to store
+//  - fileSize:  The size of the to be stored on disk from read socket data
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
                         fileSize int64) (string, error) {
@@ -252,12 +253,12 @@ func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
 // Handler for network socket read operations.
 //
 // @Parameters
-// - connection:  The network connection where data will be read from
-// - buffer:  The buffer where the read data will be stored
+//  - connection:  The network connection where data will be read from
+//  - buffer:  The buffer where the read data will be stored
 //
 // @Returns
-// - The number of bytes read into the buffer
-// - Error if it occurs, otherwise nil on success
+//  - The number of bytes read into the buffer
+//  - Error if it occurs, otherwise nil on success
 //
 func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
     // Perform read operation via passed in connection
@@ -274,17 +275,18 @@ func ReadHandler(connection net.Conn, buffer *[]byte) (int, error) {
 // The file name is appended to the current path and passed into the receive handler.
 //
 // @Parameters
-// - connection:  Active socket connection for receiving data
-// - buffer:  The buffer used for processing socket messaging
-// - storePath:  The path where the received file will be stored
-// - prefix:  The expected prefix for the transfer reply
+//  - connection:  Active socket connection for receiving data
+//  - buffer:  The buffer used for processing socket messaging
+//  - storePath:  The path where the received file will be stored
+//  - prefix:  The expected prefix for the transfer reply
 //
 // @Returns
-// - The formatted file path with the received file name
-// - Error if it occurs, otherwise nil on success
+//  - The formatted file path with the received file name
+//  - Error if it occurs, otherwise nil on success
 //
-func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
-                 prefix []byte) (string, error) {
+func ReceiveFile(connection net.Conn, buffer []byte,
+                 storePath string, prefix []byte) (
+                 string, error) {
     // Wait for the transfer reply with file name and size
     bytesRead, err := ReadHandler(connection, &buffer)
     if err != nil {
@@ -325,16 +327,16 @@ func ReceiveFile(connection net.Conn, buffer []byte, storePath string,
 // of expected file size has been reached or error occurs with socket operation.
 //
 // @Parameters
-// - file:  The open file descriptor of where the data to be processed will be stored
-// - connection:  Active socket connection for reading data to be stored and processed
-// - transferBuffer:  Buffer allocated for file transfer based on file size
-// - fileSize:  The size of the file to be received
+//  - file:  The open file descriptor of where the data to be processed will be stored
+//  - connection:  Active socket connection for reading data to be stored and processed
+//  - transferBuffer:  Buffer allocated for file transfer based on file size
+//  - fileSize:  The size of the file to be received
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func SocketToFileCopy(file *os.File, connection net.Conn,
-                        transferBuffer []byte, fileSize int64) error {
+                      transferBuffer []byte, fileSize int64) error {
     // Close file on local exit
     defer file.Close()
 
@@ -356,12 +358,12 @@ func SocketToFileCopy(file *os.File, connection net.Conn,
 // complete the file is deleted from disk.
 //
 // @Parameters
-// - connection:  The network connection where the file will be sent
-// - filePath:  The path to the file to be transfered
-// - fileSize:  The size of the file to be transfered
+//  - connection:  The network connection where the file will be sent
+//  - filePath:  The path to the file to be transfered
+//  - fileSize:  The size of the file to be transfered
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func TransferFile(connection net.Conn, filePath string, fileSize int64) error {
     // Create buffer to optimal size based on expected file size
@@ -386,16 +388,16 @@ func TransferFile(connection net.Conn, filePath string, fileSize int64) error {
 // Gets the file size, formats and sends the transfer reply, and calls transfer method.
 //
 // @Parameters
-// - connection:  The network connection where the file will be sent
-// - buffer:  The buffer used for server-client messaging
-// - filePath:  The path to the file to be uploaded
-// - prefix:  The prefix of the transfer reply
+//  - connection:  The network connection where the file will be sent
+//  - buffer:  The buffer used for server-client messaging
+//  - filePath:  The path to the file to be uploaded
+//  - prefix:  The prefix of the transfer reply
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
-func UploadFile(connection net.Conn, buffer []byte, filePath string,
-                prefix []byte) error {
+func UploadFile(connection net.Conn, buffer []byte,
+                filePath string, prefix []byte) error {
     // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
     if err != nil {
@@ -441,13 +443,13 @@ func UploadFile(connection net.Conn, buffer []byte, filePath string,
 // Handler for network socket write operations.
 //
 // @Parameters
-// - connection:  The network connection where data will be wrote to
-// - buffer:  The buffer where the data will be wrote to
-// - writeBytes:  The number of bytes into the buffer to write
+//  - connection:  The network connection where data will be wrote to
+//  - buffer:  The buffer where the data will be wrote to
+//  - writeBytes:  The number of bytes into the buffer to write
 //
 // @Returns
-// - The number of bytes wrote from the buffer
-// - Error if it occurs, otherwise nil on success
+//  - The number of bytes wrote from the buffer
+//  - Error if it occurs, otherwise nil on success
 //
 func WriteHandler(connection net.Conn, buffer []byte,
                   writeBytes int) (int, error) {

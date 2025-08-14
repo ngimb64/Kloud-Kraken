@@ -3,7 +3,6 @@ package disk
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"sync"
 
@@ -19,11 +18,11 @@ var FileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
 // AppendFile appends the contents of srcFile to destFile if the source file has data.
 //
 // @Parameters
-// - sourceFilePath:  The source file whose data will be appended to the dest
-// - destFilePath:  The destination file where the source files data will be appended
+//  - sourceFilePath:  The source file whose data will be appended to the dest
+//  - destFilePath:  The destination file where the source files data will be appended
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func AppendFile(sourceFilePath string, destFilePath string) error {
     // Open the source file for reading
@@ -73,12 +72,12 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
 // returning its name and size.
 //
 // @Parameters
-// - path:  The path to the directory to attempt to read a file
+//  - path:  The path to the directory to attempt to read a file
 //
 // @Returns
-// - The name of the retrieved file
-// - The size of the retrieved file
-// - Error if it occurs, otherwise nil on success
+//  - The name of the retrieved file
+//  - The size of the retrieved file
+//  - Error if it occurs, otherwise nil on success
 //
 func CheckDirFiles(path string) (string, int64, error) {
     var fileName string
@@ -123,15 +122,15 @@ func CheckDirFiles(path string) (string, int64, error) {
 // returned or be closed and not be returned.
 //
 // @Parameters
-// - dirPath:  The path to the directory where the file will be created
-// - nameLen:  The number of random characters for the name
-// - baseName:  The base of file name which random random chars will be appended
-// - externsion:  The file extension to use (ex: "txt" leave out the .)
-// - retHandler:  Boolean used to return the open file descriptor or not
+//  - dirPath:  The path to the directory where the file will be created
+//  - nameLen:  The number of random characters for the name
+//  - baseName:  The base of file name which random random chars will be appended
+//  - externsion:  The file extension to use (ex: "txt" leave out the .)
+//  - retHandler:  Boolean used to return the open file descriptor or not
 //
 // @Returns
-// - The formatted path to the newly create random file
-// - The open file handler of create file is retHandler is true
+//  - The formatted path to the newly create random file
+//  - The open file handler of create file is retHandler is true
 //
 func CreateRandFile(dirPath string, nameLen int, baseName string, extension string,
                     retHandler bool) (string, *os.File, error) {
@@ -158,10 +157,17 @@ func CreateRandFile(dirPath string, nameLen int, baseName string, extension stri
             randoPath = dirPath + "/" + randoString + "." + extension
         }
 
-        // Attempt to open the generated file, skip if it already exists
+        // Attempt to open the generated file path
         file, err := os.OpenFile(randoPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
+        // If the file exists, close it and skip
         if os.IsExist(err) {
+            err = file.Close()
+            if err != nil {
+                return randoPath, nil, err
+            }
+
             continue
+
         } else if err != nil {
             return "", nil, err
         }
@@ -172,7 +178,11 @@ func CreateRandFile(dirPath string, nameLen int, baseName string, extension stri
         }
 
         // Close the file descriptor since not in use
-        file.Close()
+        err = file.Close()
+        if err != nil {
+            return randoPath, nil, err
+        }
+
         return randoPath, nil, nil
     }
 }
@@ -181,13 +191,13 @@ func CreateRandFile(dirPath string, nameLen int, baseName string, extension stri
 // Gets the total and available space on the root disk.
 //
 // @Parameters
-// - path:  path to location on disk where size will be queried
-// - reservedSpace:  The amount of space reserved for the OS
+//  - path:  path to location on disk where size will be queried
+//  - reservedSpace:  The amount of space reserved for the OS
 //
 // @Returns
-// - The total space on disk
-// - the available free space
-// - Error if it occurs, otherwise nil on success
+//  - The total space on disk
+//  - the available free space
+//  - Error if it occurs, otherwise nil on success
 //
 func GetDiskSpace(path string, reservedSpace int) (
                   total int64, free int64, err error) {
@@ -213,17 +223,22 @@ func GetDiskSpace(path string, reservedSpace int) (
 // Creates the slice of directories passed in.
 //
 // @Parameters
-// - programDirs:  The slice of directories to be created
+//  - programDirs:  The slice of directories to be created
 //
-func MakeDirs(programDirs []string) {
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func MakeDirs(programDirs []string) error {
     // Iterate through slice of dirs
     for _, dir := range programDirs {
         // Create the current dir and any missing parent dirs
         err := os.MkdirAll(dir, os.ModePerm)
         if err != nil {
-            log.Fatalf("Error creating directory:  %v", dir)
+            return err
         }
     }
+
+    return nil
 }
 
 
@@ -231,13 +246,13 @@ func MakeDirs(programDirs []string) {
 // have contents in them based on file size or entries in dir.
 //
 // @Parameters
-// - The path to check for existence
+//  - The path to check for existence
 //
 // @Returns
-// - Boolean for the item existing and having content
-// - Boolean for if the item is a directory
-// - Boolean for if the file or dir contains data
-// - Error if it occurs, otherwise nil on success
+//  - Boolean for the item existing and having content
+//  - Boolean for if the item is a directory
+//  - Boolean for if the file or dir contains data
+//  - Error if it occurs, otherwise nil on success
 //
 func PathExists(filePath string) (bool, bool, bool, error) {
     // Get item info on passed in path
@@ -282,13 +297,13 @@ func PathExists(filePath string) (bool, bool, bool, error) {
 // Function for each goroutine to walk the directory and select a unique file.
 //
 // @Parameters
-// - loadDir:  The directory to attempt to select a file
-// - maxFileSizeInt64:  The max file size to ensure any violators are not selected
+//  - loadDir:  The directory to attempt to select a file
+//  - maxFileSizeInt64:  The max file size to ensure any violators are not selected
 //
 // @Returns
-// - Path of the selected file
-// - Size of the selected file
-// - Error if it occurs, otherwise nil on success
+//  - Path of the selected file
+//  - Size of the selected file
+//  - Error if it occurs, otherwise nil on success
 //
 func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
     var returnPath string

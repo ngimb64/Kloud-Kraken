@@ -32,14 +32,14 @@ var AzIndex = 0
 // Attempts to load AWS access and secret keys from the default keychain.
 //
 // @Parameters
-// - region:  The AWS region wherer the API credential are to be utilized
-// - callTime:  The length of time the API call is allowed to execute
+//  - region:  The AWS region wherer the API credential are to be utilized
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - The AWS credentials config
-// - The AWS API access key ID
-// - The AWS API secret access key
-// - Boolean indicating whether the credentials exist or not in default keychain
+//  - The AWS credentials config
+//  - The AWS API access key ID
+//  - The AWS API secret access key
+//  - Boolean indicating whether the credentials exist or not in default keychain
 //
 func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
                                  aws.Config, string, string, bool) {
@@ -66,14 +66,14 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 // Set up the AWS config with credentials and region stored in passed in app config.
 //
 // @Paramters
-// - region:  The AWS region wherer the API credential are to be utilized
-// - callTime:  The length of time the API call is allowed to execute
+//  - region:  The AWS region wherer the API credential are to be utilized
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns:
-// - The initialized AWS credentials config
-// - The AWS access key id
-// - The AWS secret access key
-// - Error if it occurs, otherwise nil on success
+//  - The initialized AWS credentials config
+//  - The AWS access key id
+//  - The AWS secret access key
+//  - Error if it occurs, otherwise nil on success
 //
 func AwsConfigSetup(region string, callTime time.Duration) (
                     aws.Config, string, string, error) {
@@ -116,10 +116,10 @@ type Ec2Manger struct {
 // Establishes connection to EC2 service and generates EC2 manager struct
 //
 // @Parameters
-// - awsConfig:  The AWS credential configuration for connecting to service
+//  - awsConfig:  The AWS credential configuration for connecting to service
 //
 // @Returns
-// - The initialized EC2 manager with populated data
+//  - The initialized EC2 manager with populated data
 //
 func NewEc2Manager(awsConfig aws.Config) *Ec2Manger {
     // Setup a new EC2 client
@@ -133,19 +133,19 @@ func NewEc2Manager(awsConfig aws.Config) *Ec2Manger {
 // Launches EC2 instances based on passed in config args.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
-// - userData:   The user data to be fed into each EC2 and executed
-// - ami:  The Amazon Machine Image that the EC2 instances will be using
-// - instanceType:  The type of instance to be used
-// - count:  The number of instances to be spawned
-// - roleName:  The name of the IAM role to be utilized
-// - name:  The name of the service to be tagged for easy reference
-// - securityGroupIds:  List of security group IDs to apply
-// - securityGroups:  List of security group names to apply
-// - subnetId:  The subnet ID to apply
+//  - callTime:  The length of time the API call is allowed to execute
+//  - userData:   The user data to be fed into each EC2 and executed
+//  - ami:  The Amazon Machine Image that the EC2 instances will be using
+//  - instanceType:  The type of instance to be used
+//  - count:  The number of instances to be spawned
+//  - roleName:  The name of the IAM role to be utilized
+//  - name:  The name of the service to be tagged for easy reference
+//  - securityGroupIds:  List of security group IDs to apply
+//  - securityGroups:  List of security group names to apply
+//  - subnetId:  The subnet ID to apply
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration, userData []byte,
                                             ami string, instanceType string,
@@ -273,7 +273,8 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
         var apiErr smithy.APIError
 
         // If the allocation was not found
-        if errors.As(err, &apiErr) && apiErr.ErrorCode() == "InvalidAllocationID.NotFound" {
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "InvalidAllocationID.NotFound" {
             return false, nil
         }
 
@@ -346,7 +347,7 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
     // Retrieve the list of avail
     output, err := Ec2Man.client.DescribeAvailabilityZones(ctx, callInput)
     if err != nil {
-        return nil, fmt.Errorf("failed to describe AZs:  %w", err)
+        return nil, fmt.Errorf("failed to describe AZs - %w", err)
     }
 
     azs := []string{}
@@ -394,7 +395,7 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     createOut, err := Ec2Man.client.CreateInternetGateway(ctx, createCallInput)
     cancel()
     if err != nil {
-        return "", fmt.Errorf("create internet gateway:  %w", err)
+        return "", fmt.Errorf("create internet gateway - %w", err)
     }
 
     // If the create internet gateway call failed to return an ID
@@ -416,7 +417,7 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     // Attach the created internet gateway to the associated VPC
     _, err = Ec2Man.client.AttachInternetGateway(ctx, attachCallInput)
     if err != nil {
-        return "", fmt.Errorf("attach internet gateway %s to vpc %s:  %w", igwId, vpcId, err)
+        return "", fmt.Errorf("attach internet gateway %s to vpc %s - %w", igwId, vpcId, err)
     }
 
     return igwId, nil
@@ -449,7 +450,7 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
     // Get informations on any internet gateways in the VPC
     out, err := Ec2Man.client.DescribeInternetGateways(ctx, callInput)
     if err != nil {
-        return false, fmt.Errorf("describe internet gateways:  %w", err)
+        return false, fmt.Errorf("describe internet gateways - %w", err)
     }
 
     // Iterate through retrieved IGW IDs
@@ -518,7 +519,7 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId, cidrBlock,
     })
     cancel()
     if err != nil {
-        return "", fmt.Errorf("unable to create subnet:  %w", err)
+        return "", fmt.Errorf("unable to create subnet - %w", err)
     }
 
     subnetID := aws.ToString(createOut.Subnet.SubnetId)
@@ -535,7 +536,7 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId, cidrBlock,
         },
     })
     if err != nil {
-        return "", fmt.Errorf("unable map subnet to public IP on launch:  %w", err)
+        return "", fmt.Errorf("unable map subnet to public IP on launch - %w", err)
     }
 
     return subnetID, nil
@@ -568,7 +569,7 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration, vpcId string,
     // Get description of input subnet to see if it exists
     out, err := Ec2Man.client.DescribeSubnets(ctx, describeInput)
     if err != nil {
-        return false, fmt.Errorf("DescribeSubnets failed: %w", err)
+        return false, fmt.Errorf("DescribeSubnets failed - %w", err)
     }
 
     // If there was a result and it matches the intended subnet ID
@@ -619,11 +620,11 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
 // Terminates the EC2 instances by ID's collected from creation method result.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - The output from the EC2 termination API call
-// - Error if it occurs, otherwise nil on success
+//  - The output from the EC2 termination API call
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
                                                *ec2.TerminateInstancesOutput, error) {
@@ -658,12 +659,12 @@ func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
 // Creates and waits for the VPC to be created.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
-// - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//  - callTime:  The length of time the API call is allowed to execute
+//  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
 //
 // @Returns
-// - The ID of the created VPC
-// - Error if it occurs, otherwise nil on success
+//  - The ID of the created VPC
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
                                    cidrBlock string) (
@@ -716,12 +717,12 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
 // Checks to see if the VPC exists.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
-// - vpcID:  The ID of the VPC to ensure exists
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcID:  The ID of the VPC to ensure exists
 //
 // @Returns
-// - Boolean to notify whether bucket exists or not
-// - Error if it occurs, otherwise nil on success
+//  - Boolean to notify whether bucket exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
                                    bool, error) {
@@ -754,13 +755,13 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
 // Returns VPC ID if it exists, or creates it using supplied CIDR.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
-// - vpcID:  The ID of the VPC to ensure exists
-// - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcID:  The ID of the VPC to ensure exists
+//  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
 //
 // @Returns
-// - The ID of VPC if created, otherwise nil
-// - Error if it occurs, otherwise nil on success
+//  - The ID of VPC if created, otherwise nil
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
                                       cidrBlock string) (string, error) {
@@ -796,10 +797,10 @@ type IamManager struct {
 // Establishes connection to IAM service and generates IAM manager struct
 //
 // @Parameters
-// - awsConfig:  The AWS credential configuration for connecting to service
+//  - awsConfig:  The AWS credential configuration for connecting to service
 //
 // @Returns
-// - The initialized IAM manager with populated data
+//  - The initialized IAM manager with populated data
 //
 func NewIamManager(awsConfig aws.Config) *IamManager {
     // Setup a new EC2 client
@@ -814,11 +815,11 @@ func NewIamManager(awsConfig aws.Config) *IamManager {
 // Creates an instance profile with passed and attaches role to it.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
-// - roleName:  The IAM Role used for operations
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  The IAM Role used for operations
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
                                                 roleName string) error {
@@ -834,7 +835,7 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
 
         // If the error is not that the instance profile already exists
         if !errors.As(err, &entityExists) {
-            return fmt.Errorf("instance profile already exists:  %w", err)
+            return fmt.Errorf("instance profile already exists - %w", err)
         }
     }
 
@@ -848,7 +849,7 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
     })
     cancel()
     if err != nil {
-        return fmt.Errorf("attaching role to instance:  %w", err)
+        return fmt.Errorf("attaching role to instance - %w", err)
     }
 
     return nil
@@ -858,16 +859,16 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
 // Creates an IAM role with the passed in JSON policy data applied.
 //
 // @Parameters
-// - callTime:  The length of time the API call is allowed to execute
-// - roleName:  The IAM Role used for operations
-// - trustPolicyJson:  The JSON trust policy
-// - permPolicyName:  An identifier name for permissions policy
-// - permPolicyJSON:  The JSON permissions policy
-// - createProfile:  Toggle whether an instance profile is created or not
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  The IAM Role used for operations
+//  - trustPolicyJson:  The JSON trust policy
+//  - permPolicyName:  An identifier name for permissions policy
+//  - permPolicyJSON:  The JSON permissions policy
+//  - createProfile:  Toggle whether an instance profile is created or not
 //
 // @Returns
-// - The ARN of the existing or created role
-// - Error if it occurs, otherwise nil on success
+//  - The ARN of the existing or created role
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName string,
                                           trustPolicyJson string, permPolicyName string,
@@ -893,13 +894,13 @@ func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName strin
                 AssumeRolePolicyDocument: aws.String(trustPolicyJson),
             })
             if err != nil {
-                return "", fmt.Errorf("CreateRole failed: %w", err)
+                return "", fmt.Errorf("CreateRole failed - %w", err)
             }
 
             // Set the role ARN from output
             roleArn = aws.ToString(createOut.Role.Arn)
         } else {
-            return "", fmt.Errorf("GetRole failed: %w", err)
+            return "", fmt.Errorf("GetRole failed - %w", err)
         }
     } else {
         // Role existed, grab its ARN
@@ -917,14 +918,14 @@ func (IamMan *IamManager) IamRoleCreation(callTime time.Duration, roleName strin
     })
     cancel()
     if err != nil {
-        return "", fmt.Errorf("PutRolePolicy failed:  %w", err)
+        return "", fmt.Errorf("PutRolePolicy failed -  %w", err)
     }
 
     // If specified, create instance profile and attach role to it
     if createProfile {
         err = IamMan.createInstanceProfile(callTime, roleName)
         if err != nil {
-            return "", fmt.Errorf("creating EC2 instace profile:  %w", err)
+            return "", fmt.Errorf("creating EC2 instace profile - %w", err)
         }
     }
 
@@ -971,10 +972,10 @@ type S3Manager struct {
 // Establishes connection to EC2 service and generates EC2 manager struct
 //
 // @Parameters
-// - awsConfig:  The AWS credential configuration for connecting to service
+//  - awsConfig:  The AWS credential configuration for connecting to service
 //
 // @Returns
-// - The initialized S3 manager with client reference
+//  - The initialized S3 manager with client reference
 //
 func NewS3Manager(config aws.Config) *S3Manager {
     // Set up a new S3 client
@@ -988,12 +989,12 @@ func NewS3Manager(config aws.Config) *S3Manager {
 // Checks to see if an S3 bucket already exists.
 //
 // @Parameters
-// - bucketName:  The name of the S3 bucket to check existence
-// - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the S3 bucket to check existence
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - Boolean toggle whether the bucket exists or not
-// - Error if it occurs, otherwise nil on success
+//  - Boolean toggle whether the bucket exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) (
                                      bool, error) {
@@ -1029,11 +1030,11 @@ func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) 
 // Create an S3 bucket.
 //
 // @Parameters
-// - bucketName:  The name of the bucket to be created
-// - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the bucket to be created
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) error {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -1068,13 +1069,13 @@ func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) 
 // Retrieve object from S3 bucket.
 //
 // @Parameters
-// - bucketName:  The name of the bucket where the object will be retrieved
-// - key:  The key in bucket used to identify the object to retrieve
-// - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the bucket where the object will be retrieved
+//  - key:  The key in bucket used to identify the object to retrieve
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - The retrieved S3 object as a byte slice
-// - Error if it occurs, otherwise nil on success
+//  - The retrieved S3 object as a byte slice
+//  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
                                     callTime time.Duration) (
@@ -1107,14 +1108,14 @@ func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
 // Put an object into a S3 bucket.
 //
 // @Parameters
-// - bucketName:  The name of the S3 bucket where the object will be stored
-// - key:  The key in bucket used to identify where the object will be stored
-// - data:  The data to be stored associated with the key of in the S3 bucket
-// - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the S3 bucket where the object will be stored
+//  - key:  The key in bucket used to identify where the object will be stored
+//  - data:  The data to be stored associated with the key of in the S3 bucket
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - The final key name that is used
-// - Error if it occurs, otherwise nil on success
+//  - The final key name that is used
+//  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) PutS3Object(bucketName string, key string, data []byte,
                                     callTime time.Duration) (string, error) {
@@ -1161,10 +1162,10 @@ type SsmManager struct {
 // Establishes connection to SSM service and generates SSM manager struct
 //
 // @Parameters
-// - awsConfig:  The AWS credential configuration for connecting to service
+//  - awsConfig:  The AWS credential configuration for connecting to service
 //
 // @Returns
-// - The initialized SSM manager with client reference
+//  - The initialized SSM manager with client reference
 //
 func NewSsmManager(config aws.Config) *SsmManager {
     // Set up a new SSM client
@@ -1178,12 +1179,12 @@ func NewSsmManager(config aws.Config) *SsmManager {
 // Retrieve value from AWS SSM Parameter Store.
 //
 // @Parameters
-// - parameter:  name of the parameter to retrieve
-// - callTime:  The length of time the API call is allowed to execute
+//  - parameter:  name of the parameter to retrieve
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - The retrieved parameter from param store
-// - Error if it occurs, otherwise nil on success
+//  - The retrieved parameter from param store
+//  - Error if it occurs, otherwise nil on success
 //
 func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Duration) (
                                           string, error) {
@@ -1206,13 +1207,13 @@ func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Durati
 // Put value into AWS SSM Parameter Store.
 //
 // @Parameters
-// - parameter:  name of the parameter to retrieve
-// - data:  The data to store with associated parameter
-// - callTime:  The length of time the API call is allowed to execute
+//  - parameter:  name of the parameter to retrieve
+//  - data:  The data to store with associated parameter
+//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
-// - The path where the parameter is stored in param store
-// - Error if it occurs, otherwise nil on success
+//  - The path where the parameter is stored in param store
+//  - Error if it occurs, otherwise nil on success
 //
 func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
                                           callTime time.Duration) (
