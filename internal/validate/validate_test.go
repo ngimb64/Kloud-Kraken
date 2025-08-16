@@ -27,26 +27,6 @@ func TestValidateAccountId(t *testing.T) {
 }
 
 
-func TestValidateBucketName(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Test with valid bucket name
-    err := validate.ValidateBucketName("test-bucket")
-    assert.Equal(nil, err)
-
-    // Test with invalid bucket name
-    err = validate.ValidateBucketName("#3$$3dsslmdv.12mvm_#")
-    // Ensure the error occured
-    assert.NotEqual(nil, err)
-
-    // Test with invalid bucket name
-    err = validate.ValidateBucketName("10.10.10.10")
-    // Ensure the error occured
-    assert.NotEqual(nil, err)
-}
-
-
 func TestValidateCidrBlock(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -137,20 +117,6 @@ func TestValidateDir(t *testing.T) {
     // Delete the test dir after it has been validated
     err = os.RemoveAll(testDir)
     assert.Equal(nil, err)
-}
-
-
-func TestValidateEipAllocationId(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateEipAllocationId("eipalloc-09ad461b0d03f6aaf")
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateEipAllocationId("kdnsdv#$%#Djodv,.2fddvp")
-    assert.NotEqual(nil, err)
 }
 
 
@@ -245,21 +211,6 @@ func TestValidateIamUsername(t *testing.T) {
 
     // Try test with bad value
     err = validate.ValidateAccountId("!@)#%* $#)%\\|)!@#>>C<C")
-    // Ensure the error is not nil meaning failed operation
-    assert.NotEqual(nil, err)
-}
-
-
-func TestValidateIgwGatewayId(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateIgwId("igw-823748aef")
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateIgwId("dkv@#$@gjjoejwf")
     // Ensure the error is not nil meaning failed operation
     assert.NotEqual(nil, err)
 }
@@ -535,34 +486,6 @@ func TestValidateSecurityGroups(t *testing.T) {
                                                    "Invalid~Name",
                                                    "Name/With\\Backslash",
                                                    "NameWith%Percent"})
-    assert.NotEqual(nil, err)
-}
-
-
-func TestValidateSubnetId(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateSubnetId("subnet-0a1b2c3d4e5f6a7b8")
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateSubnetId("subnet-01234g78")
-    assert.NotEqual(nil, err)
-}
-
-
-func TestValidateVpcId(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateSubnetId("vpc-38a2e0cb")
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateSubnetId("vpc-knsdvnkeo3jwdv")
     assert.NotEqual(nil, err)
 }
 

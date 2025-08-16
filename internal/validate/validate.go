@@ -3,7 +3,6 @@ package validate
 import (
 	"errors"
 	"fmt"
-	"net"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -18,10 +17,7 @@ import (
 
 // Package level variables
 var ReAccountId = regexp.MustCompile(`^\d{12}$`)
-var ReEipAlloc = regexp.MustCompile(`^eipalloc-[0-9a-f]{8,17}$`)
 var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
-var ReIgwId = regexp.MustCompile(`^igw-[0-9a-f]{8,17}$`)
-var ReNatID = regexp.MustCompile(`^nat-[0-9a-f]{8,17}$`)
 var RePrivateCidr = regexp.MustCompile(
     `^(?:` +
       // 10.0.0.0/16 - 10.255.255.255/28
@@ -34,13 +30,10 @@ var RePrivateCidr = regexp.MustCompile(
       `192\.168\.(?:[0-9]{1,3}\.)[0-9]{1,3}` +
     `)\/(?:1[6-9]|2[0-8])$`,
 )
-var ReBucketName= regexp.MustCompile(`^[a-z0-9][a-z0-9\.-]{1,61}[a-z0-9]$`)
 var ReSecurityGroupId = regexp.MustCompile(`^sg-[0-9a-f]{8,}$`)
 var ReSecurityGroupName = regexp.MustCompile(
     `^[A-Za-z0-9\s\.\_\-\:\/\(\)\#\,\@\[\]\+\=\&\;\{\}\!\$\*]{1,255}$`,
 )
-var ReSubnetId = regexp.MustCompile(`^subnet-[0-9a-f]{8,}$`)
-var ReVpcId = regexp.MustCompile(`^vpc-[0-9a-f]{8}(?:[0-9a-f]{9})?$`)
 
 
 // Ensure the AWS account ID is of proper format.
@@ -55,43 +48,6 @@ func ValidateAccountId(accountId string) error {
     // Validate format with regular expression
     if !ReAccountId.MatchString(accountId) {
         return errors.New("invalid AWS account ID, must be exactly 12 digits")
-    }
-
-    return nil
-}
-
-
-// Ensures the S3 bucket name is of proper format.
-//
-// @Parameters
-//  - name:  The name of the S3 bucket to be validated
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateBucketName(name string) error {
-    if name == "" {
-        return nil
-    }
-
-    length := len(name)
-    // Ensure the bucket is of proper length
-    if length < 3 || length > 63 {
-        return fmt.Errorf("bucket name must be 3 to 63 characters; got %d", length)
-    }
-
-    // Validate format with regular expression
-    if !ReBucketName.MatchString(name) {
-        return errors.New(
-            "bucket name must start and end with a lowercase letter or number, " +
-            "and contain only lowercase letters, numbers, dots (.) or hyphens (-)",
-        )
-    }
-
-    // Ensure there are no IP addresses in the name
-    ip := net.ParseIP(name)
-    if ip != nil {
-        return errors.New("bucket name must not be formatted as an IP address")
     }
 
     return nil
@@ -239,28 +195,6 @@ func ValidateDir(dirPath string) error {
     }
 
     return nil
-}
-
-
-// Ensures Elastic IP Allocation ID is of proper format.
-//
-// @Parameters
-//  - The Elastic IP Allocation ID to be validated
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateEipAllocationId(eipId string) error {
-	if eipId == "" {
-		return nil
-	}
-
-    // Validate format with regular expression
-	if !ReEipAlloc.MatchString(eipId) {
-		return fmt.Errorf("invalid Elastic IP allocation id format - %q", eipId)
-	}
-
-	return nil
 }
 
 
@@ -432,28 +366,6 @@ func ValidateIamUsername(iamUsername string) error {
 }
 
 
-// Ensure the AWS internet gateway ID is of proper format.
-//
-// @Parameters
-//  - igwId:  The internet gateway ID to validate
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateIgwId(igwId string) error {
-	if igwId == "" {
-		return nil
-	}
-
-    // Validate format with regular expression
-	if !ReIgwId.MatchString(igwId) {
-		return fmt.Errorf("invalid IGW id format - %q", igwId)
-	}
-
-	return nil
-}
-
-
 // Ensures the passed in instance type is in the supported slice.
 //
 // @Parameters
@@ -576,28 +488,6 @@ func ValidateMaxSizeRange(percentage float64) bool {
 //
 func ValidateMaxTransfers(maxTransfers int32) bool {
     return maxTransfers > 0
-}
-
-
-// Ensure the passed in NAT Gateway ID is of proper format.
-//
-// @Parameters
-// - natID:  The NAT Gateway ID to be validated
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateNatGatewayId(natId string) error {
-	if natId == "" {
-		return nil
-	}
-
-    // Validate format with regular expression
-	if !ReNatID.MatchString(natId) {
-		return fmt.Errorf("invalid NAT gateway id format - %q", natId)
-	}
-
-	return nil
 }
 
 
@@ -748,50 +638,6 @@ func ValidateSecurityGroups(securityGroups []string) error {
         if !ReSecurityGroupName.MatchString(name) {
             return fmt.Errorf("invalid security group name - %q", name)
         }
-    }
-
-    return nil
-}
-
-
-// Ensures the AWS subnet ID is of proper format.
-//
-// @Parameters
-//  - subnetId:  Subnet ID to validate
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateSubnetId(subnetId string) error {
-    if subnetId == "" {
-        return nil
-    }
-
-    // Validate format with regular expression
-	if !ReSubnetId.MatchString(subnetId) {
-		return fmt.Errorf("invalid Subnet ID - %q", subnetId)
-	}
-
-	return nil
-}
-
-
-// Ensures the AWS VPC ID is of proper format.
-//
-// @Parameters
-//  - vpcId:  VPC ID to validate
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateVpcId(vpcId string) error {
-    if vpcId == "" {
-        return nil
-    }
-
-    // Validate format with regular expression
-    if !ReVpcId.MatchString(vpcId) {
-        return fmt.Errorf("invalid VPC ID - %q", vpcId)
     }
 
     return nil

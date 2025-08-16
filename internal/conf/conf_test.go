@@ -123,12 +123,9 @@ local_config:
 
     // Validate local config fields to original data
     assert.Equal("123456789123", config.LocalConfig.AccountId)
-    assert.Equal("test-bucket", config.LocalConfig.BucketName)
     assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
-    assert.Equal("eipalloc-09ad461b0d03f6aaf", config.LocalConfig.EipId)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
     assert.Equal("doug", config.LocalConfig.IamUsername)
-    assert.Equal("igw-823748aef", config.LocalConfig.IgwId)
     assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
     assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(testDir, config.LocalConfig.LoadDir)
@@ -137,14 +134,11 @@ local_config:
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
-    assert.Equal("nat-0a1b2c3d4e5f6a7b", config.LocalConfig.NatId)
     assert.Equal(3, config.LocalConfig.NumberInstances)
     assert.Equal("us-east-1", config.LocalConfig.Region)
     assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
     assert.Equal(3, len(config.LocalConfig.SecurityGroupIds))
     assert.Equal(2, len(config.LocalConfig.SecurityGroups))
-    assert.Equal("subnet-0a1b2c3d4e5f6a7b8", config.LocalConfig.SubnetId)
-    assert.Equal("vpc-23a3239c203e0230b0a", config.LocalConfig.VpcId)
 
     // Append the yaml data file to test file for deletion
     testFiles = append(testFiles, yamlPath)

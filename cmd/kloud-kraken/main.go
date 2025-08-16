@@ -41,6 +41,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
 	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 // Package level variables
@@ -48,6 +49,15 @@ var CurrentConnections atomic.Int32	   // Tracks current active connections
 var ReceivedDir = "/tmp/received"      // Path where cracked hashes & client logs are stored
 var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
 
+type StateConfig struct {
+    BucketName      string `yaml:"bucket_name"`
+    EipId           string `yaml:"eip_id"`
+    IgwId           string `yaml:"igw_id"`
+    NatId           string `yaml:"nat_id"`
+    PrivateSubnetId string `yaml:"private_subnet_id"`
+    PublicSubnetId  string `yaml:"public_subnet_id"`
+    VpcId           string `yaml:"vpc_id"`
+}
 
 // Select next available file for transfer, if there are no more available send the end transfer
 // message to client. Format the transfer reply with the file name and size, get the IP address
@@ -432,8 +442,8 @@ func startServer(appConfig *conf.AppConfig,
 //  - The generated EC2 user data with args formatted into it
 //  - Error if it occurs, otherwise nil on success
 //
-func ec2UserDataGen(appConf *conf.AppConfig, keyName string,
-                    ipAddrs []string, ssmParam string) (
+func ec2UserDataGen(appConf *conf.AppConfig, stateConfig *StateConfig,
+                    keyName string, ipAddrs []string, ssmParam string) (
                     string, error) {
     var hasRuleset bool
     // Convert the slice of IP addresses to CSV string
@@ -518,7 +528,7 @@ $CWD/client -applyOptimization=%t \
             -maxTransfers=%d \
             -port=%d \
             -workload=%s
-`, appConf.LocalConfig.BucketName, keyName,
+`, stateConfig.BucketName, keyName,
    appConf.ClientConfig.Region, true,
    appConf.ClientConfig.Region, ssmParam,
    appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
@@ -708,7 +718,9 @@ func clientTrustPolicyGen() string {
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               awsConfig aws.Config, ec2Client *ec2utils.Ec2Manger, err error) {
-    //var ec2Client *ec2utils.Ec2Manger
+    stateFilePath := ".kraken-state.yml"
+    var stateConfig StateConfig
+    var stateData []byte
     var yamlUpdates map[string]string
 
     // Set up the AWS credentials based on local chain or environment variables
@@ -718,6 +730,27 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
+    // Check to see if the yaml state file exists
+    exists, isDir, hasData, err := disk.PathExists(stateFilePath)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the yaml state file exists and has data
+    if exists && !isDir && hasData {
+        // Read the data from yaml state file
+        stateData, err = os.ReadFile(stateFilePath)
+        if err != nil {
+            return awsConfig, ec2Client, err
+        }
+
+        // Decode raw bytes into StateConfig struct
+        err = yaml.Unmarshal(stateData, &stateConfig)
+        if err != nil {
+            return awsConfig, ec2Client, err
+        }
+    }
+
     defer func() {
         // If there are no values in YAML file to be updated
         if len(yamlUpdates) == 0 {
@@ -725,15 +758,14 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         }
 
         // Update the yaml values with values from passed in map
-        newYaml, yerr := yamlutils.UpdateYAMLBytes(appConfig.RawYaml,
-                                                   yamlUpdates)
+        newYaml, yerr := yamlutils.UpdateYAMLBytes(stateData, yamlUpdates)
         if yerr != nil {
             err = errors.Join(err, fmt.Errorf("updating yaml:  %w", yerr))
             return
         }
 
         // Overwrite the original yaml with the updated data
-        werr := os.WriteFile(appConfig.YamlPath, newYaml, 0644);
+        werr := os.WriteFile(stateFilePath, newYaml, 0644);
         if werr != nil {
             err = errors.Join(err, fmt.Errorf("writing output yaml:  %w", werr))
         }
@@ -744,40 +776,40 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Check to see if the VPC exists, otherwise create one
     vpcId, err := ec2Client.VpcProvision(5 * time.Minute,
-                                         appConfig.LocalConfig.VpcId,
+                                         stateConfig.VpcId,
                                          appConfig.LocalConfig.CidrBlock)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // If a VPC was created, add the ID to the yaml updates map
+    // If a VPC was created, add ID to yaml updates map
     if vpcId != "" {
-        yamlUpdates["local_config.vpc_id"] = vpcId
+        yamlUpdates["aws_env.vpc_id"] = vpcId
     }
 
     // Check to see if IGW exists, otherwise create & attach one
     igwId, err := ec2Client.InternetGatewayProvision(1 * time.Minute,
-                                                     appConfig.LocalConfig.IgwId,
+                                                     stateConfig.IgwId,
                                                      vpcId)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // If a Internet Gateway was created, add the ID to the yaml updates map
+    // If a Internet Gateway was created, add ID to yaml updates map
     if igwId != "" {
-        yamlUpdates["local_config.igw_id"] = igwId
+        yamlUpdates["aws_env.igw_id"] = igwId
     }
 
     // Check to see if Elastic IP exists, otherwise create one
     eipId, err := ec2Client.ElasticIpProvision(1 * time.Minute,
-                                                appConfig.LocalConfig.EipId)
+                                                stateConfig.EipId)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // If a Elastic IP was created, add the ID to the yaml updates map
+    // If a Elastic IP was created, add ID to yaml updates map
     if eipId != "" {
-        yamlUpdates["local_config.eip_id"] = eipId
+        yamlUpdates["aws_env.eip_id"] = eipId
     }
 
     // Get the slice of availability zones based on region
@@ -806,11 +838,16 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create public subnet if it does not exist
-    pubSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                                appConfig.LocalConfig.SubnetId,
+    pubSubnetId, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                                stateConfig.PublicSubnetId,
                                                 vpcId, pubCidr, az, true)
     if err != nil {
         return awsConfig, ec2Client, err
+    }
+
+    // If a public subnet was created, add ID to yaml updates map
+    if pubSubnetId != "" {
+        yamlUpdates["aws_env.public_subnet_id"] = pubSubnetId
     }
 
     // Allocate next available subnet in CIDR block for private subnet
@@ -821,25 +858,30 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create private subnet if it does not exist
-    privSubnet, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                                 appConfig.LocalConfig.SubnetId,
+    privSubnetId, err := ec2Client.SubnetProvision(1 * time.Minute,
+                                                 stateConfig.PrivateSubnetId,
                                                  vpcId, privCidr, az, false)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
+    // If a private subnet was created, add ID to yaml updates map
+    if privSubnetId != "" {
+        yamlUpdates["aws_env.private_subnet_id"] = privSubnetId
+    }
+
     // Create NAT gateway in public subnet using Elastic IP Allocation ID
     natGatewayId, err := ec2Client.NatGatewayProvision(5 * time.Minute,
-                                                       appConfig.LocalConfig.NatId,
-                                                       pubSubnet, eipId,
+                                                       stateConfig.NatId,
+                                                       pubSubnetId, eipId,
                                                        "Kloud-Kraken-NAT")
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // If a NAT Gateway was created, add the ID to the yaml updates map
+    // If a NAT Gateway was created, add ID to yaml updates map
     if natGatewayId != "" {
-        yamlUpdates["local_config.nat_id"] = natGatewayId
+        yamlUpdates["aws_env.nat_id"] = natGatewayId
     }
 
 
@@ -867,7 +909,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := clientTrustPolicyGen()
-    permissionsPolicy := clientPermPolicyGen(appConfig.LocalConfig.BucketName,
+    permissionsPolicy := clientPermPolicyGen(stateConfig.BucketName,
                                              appConfig.ClientConfig.Region,
                                              appConfig.LocalConfig.AccountId,
                                              "/kloud-kraken/tls-cert", "Kloud-Kraken")
@@ -885,7 +927,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region,
                                             appConfig.LocalConfig.AccountId,
                                             "/kloud-kraken/tls-cert",
-                                            appConfig.LocalConfig.BucketName,
+                                            stateConfig.BucketName,
                                             "ClientRole")
     // Create and apply role for local server permissions
     serverArn, err := iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
@@ -941,7 +983,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     s3Client := s3utils.NewS3Manager(awsConfig)
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Client.PutS3Object(appConfig.LocalConfig.BucketName, "client",
+    keyName, err := s3Client.PutS3Object(stateConfig.BucketName, "client",
                                          binData, 1 * time.Minute)
     if err != nil {
         return awsConfig, ec2Client, err
@@ -950,10 +992,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Uploaded client binary to S3 bucket ",
-                                   color.RadiantAmethyst, appConfig.LocalConfig.BucketName))
+                                   color.RadiantAmethyst, stateConfig.BucketName))
 
     // Generate user data script to set up client program in EC2
-    userData, err := ec2UserDataGen(appConfig, keyName, publicIps, param)
+    userData, err := ec2UserDataGen(appConfig, &stateConfig, keyName, publicIps, param)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -968,7 +1010,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        "ClientRole", "Kloud-Kraken-Client",
                                        appConfig.LocalConfig.SecurityGroupIds,
                                        appConfig.LocalConfig.SecurityGroups,
-                                       appConfig.LocalConfig.SubnetId)
+                                       stateConfig.PrivateSubnetId)
     if err != nil {
         return awsConfig, ec2Client, err
     }

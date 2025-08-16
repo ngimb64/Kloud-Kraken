@@ -12,8 +12,6 @@ import (
 type AppConfig struct {
     ClientConfig ClientConfig `yaml:"client_config"`
     LocalConfig  LocalConfig  `yaml:"local_config"`
-    RawYaml      []byte       `yaml:"-"`            // Parsed later
-    YamlPath     string       `yaml:"-"`            // Parsed later
 }
 
 // ClientConfig contains the yaml configuration for the client settings
@@ -38,12 +36,9 @@ type ClientConfig struct {
 // LocalConfig contains the yaml configuration for local server settings
 type LocalConfig struct {
     AccountId           string   `yaml:"account_id"`
-    BucketName          string   `yaml:"bucket_name"`
     CidrBlock           string   `yaml:"cidr_block"`
-    EipId               string   `yaml:"eip_id"`
     HashFilePath        string   `yaml:"hash_file_path"`
     IamUsername         string   `yaml:"iam_username"`
-    IgwId               string   `yaml:"igw_id"`
     InstanceType        string   `yaml:"instance_type"`
     ListenerPort        int      `yaml:"listener_port"`
     LoadDir	   	        string   `yaml:"load_dir"`
@@ -52,14 +47,11 @@ type LocalConfig struct {
     MaxMergingSize      string   `yaml:"max_merging_size"`
     MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
     MaxSizeRange        float64  `yaml:"max_size_range"`
-    NatId               string   `yaml:"nat_id"`
     NumberInstances     int      `yaml:"number_instances"`
     Region              string   `yaml:"region"`
     RulesetPath         string   `yaml:"ruleset_path"`
     SecurityGroupIds    []string `yaml:"security_group_ids"`
     SecurityGroups      []string `yaml:"security_groups"`
-    SubnetId            string   `yaml:"subnet_id"`
-    VpcId               string   `yaml:"vpc_id"`
 }
 
 
@@ -82,11 +74,6 @@ func LoadConfig(filePath string) (*AppConfig, error) {
     if err != nil {
         return nil, fmt.Errorf("reading config file:  %w", err)
     }
-
-    // Store raw yaml bytes in struct
-    config.RawYaml = yamlBytes
-    // Store the yaml file path after successful operation
-    config.YamlPath = filePath
 
     // Decode the raw bytes into AppConfig struct
     err = yaml.Unmarshal(yamlBytes, &config)
@@ -197,20 +184,8 @@ func validateLocalConfig(localConfig *LocalConfig) error {
         return err
     }
 
-    // Ensure the S3 bucket name is of proper format if exists
-    err = validate.ValidateBucketName(localConfig.BucketName)
-    if err != nil {
-        return err
-    }
-
     // Ensure the CIDR block is of proper format if exists
     err = validate.ValidateCidrBlock(localConfig.CidrBlock)
-    if err != nil {
-        return err
-    }
-
-    // Ensure the Elastic IP Allocation ID is valid
-    err = validate.ValidateEipAllocationId(localConfig.EipId)
     if err != nil {
         return err
     }
@@ -223,12 +198,6 @@ func validateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure the IAM username is valid
     err = validate.ValidateIamUsername(localConfig.IamUsername)
-    if err != nil {
-        return err
-    }
-
-    // Ensure the Internet Gateway is valid
-    err = validate.ValidateIgwId(localConfig.IgwId)
     if err != nil {
         return err
     }
@@ -266,12 +235,6 @@ func validateLocalConfig(localConfig *LocalConfig) error {
         return fmt.Errorf("max_size_range greater than 50 percent")
     }
 
-    // Ensure the NAT Gateway ID is of proper format if specified
-    err = validate.ValidateNatGatewayId(localConfig.NatId)
-    if err != nil {
-        return err
-    }
-
     // If the number of instances is less than one
     if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
         return fmt.Errorf("number_instances must be a positive integer")
@@ -292,24 +255,6 @@ func validateLocalConfig(localConfig *LocalConfig) error {
     err = validate.ValidateSecurityGroupIds(localConfig.SecurityGroupIds)
     if err != nil {
         return err
-    }
-
-    // Ensure specified security group names are valid
-    err = validate.ValidateSecurityGroups(localConfig.SecurityGroups)
-    if err != nil {
-        return err
-    }
-
-    // Ensure specified subnet ID is valid
-    err = validate.ValidateSubnetId(localConfig.SubnetId)
-    if err != nil {
-        return err
-    }
-
-    // Ensure the VPC ID is valid
-    err = validate.ValidateVpcId(localConfig.VpcId)
-    if err != nil {
-        return  err
     }
 
     return nil
