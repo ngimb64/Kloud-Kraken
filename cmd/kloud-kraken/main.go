@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -29,8 +30,12 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
+	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ssmutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/tlsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/tui"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
@@ -702,19 +707,40 @@ func clientTrustPolicyGen() string {
 //  - Error if it occurs, otherwise nil on success
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
-              aws.Config, *awsutils.Ec2Manger, error) {
-    var ec2Client *awsutils.Ec2Manger
+              awsConfig aws.Config, ec2Client *ec2utils.Ec2Manger, err error) {
+    //var ec2Client *ec2utils.Ec2Manger
     var yamlUpdates map[string]string
 
     // Set up the AWS credentials based on local chain or environment variables
-    awsConfig, _, _, err := awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
-                                                    1 * time.Minute)
+    awsConfig, _, _, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
+                                                   1 * time.Minute)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
+    defer func() {
+        // If there are no values in YAML file to be updated
+        if len(yamlUpdates) == 0 {
+            return
+        }
+
+        // Update the yaml values with values from passed in map
+        newYaml, yerr := yamlutils.UpdateYAMLBytes(appConfig.RawYaml,
+                                                   yamlUpdates)
+        if yerr != nil {
+            err = errors.Join(err, fmt.Errorf("updating yaml:  %w", yerr))
+            return
+        }
+
+        // Overwrite the original yaml with the updated data
+        werr := os.WriteFile(appConfig.YamlPath, newYaml, 0644);
+        if werr != nil {
+            err = errors.Join(err, fmt.Errorf("writing output yaml:  %w", werr))
+        }
+    }()
+
     // Establish client to EC2 service
-    ec2Client = awsutils.NewEc2Manager(awsConfig)
+    ec2Client = ec2utils.NewEc2Manager(awsConfig)
 
     // Check to see if the VPC exists, otherwise create one
     vpcId, err := ec2Client.VpcProvision(5 * time.Minute,
@@ -802,6 +828,20 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
+    // Create NAT gateway in public subnet using Elastic IP Allocation ID
+    natGatewayId, err := ec2Client.NatGatewayProvision(5 * time.Minute,
+                                                       appConfig.LocalConfig.NatId,
+                                                       pubSubnet, eipId,
+                                                       "Kloud-Kraken-NAT")
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If a NAT Gateway was created, add the ID to the yaml updates map
+    if natGatewayId != "" {
+        yamlUpdates["local_config.nat_id"] = natGatewayId
+    }
+
 
 
     // TODO: VPC network setup
@@ -809,7 +849,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     X Create and attach Internet Gateway (IGW) to the VPC
     //     X Allocate Elastic IP for NAT Gateway
     //     X Create public and private subnets within the VPC
-    //     - Create NAT Gateway in public subnet (uses Elastic IP)
+    //     X Create NAT Gateway in public subnet (uses Elastic IP)
     //     - Create route table for public subnets: 0.0.0.0/0 → IGW
     //     - Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
     //     - Associate **public** subnets to public route table
@@ -822,23 +862,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
 
 
-    // If there are values in YAML file to be updated
-    if len(yamlUpdates) > 0 {
-        // Update the yaml values with values from passed in map
-        newYaml, err := yamlutils.UpdateYAMLBytes(appConfig.RawYaml, yamlUpdates)
-        if err != nil {
-            return awsConfig, ec2Client, err
-        }
-
-        // Overwrite the original yaml with the updated data
-        err = os.WriteFile(appConfig.YamlPath, newYaml, 0644)
-        if err != nil {
-            return awsConfig, ec2Client, err
-        }
-    }
-
     // Setup client to IAM service
-    iamClient := awsutils.NewIamManager(awsConfig)
+    iamClient := iamutils.NewIamManager(awsConfig)
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := clientTrustPolicyGen()
@@ -892,7 +917,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Setup client to SSM
-    ssmClient := awsutils.NewSsmManager(awsConfig)
+    ssmClient := ssmutils.NewSsmManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
     param, err := ssmClient.PutSsmParameter("/kloud-kraken/tls-cert",
                                             string(TlsMan.CertPemBlock),
@@ -913,7 +938,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Setup client to S3
-    s3Client := awsutils.NewS3Manager(awsConfig)
+    s3Client := s3utils.NewS3Manager(awsConfig)
 
     // Upload the client binary to S3 Bucket
     keyName, err := s3Client.PutS3Object(appConfig.LocalConfig.BucketName, "client",
@@ -934,7 +959,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Re-setup new client to EC2 service with newly assumed role
-    ec2Client = awsutils.NewEc2Manager(awsConfig)
+    ec2Client = ec2utils.NewEc2Manager(awsConfig)
     // Create number of EC2 instances based on passed in data
     err = ec2Client.CreateEc2Instances(20 * time.Minute, []byte(userData),
                                        "ami-0eb94e3d16a6eea5f",
@@ -1081,7 +1106,7 @@ func main() {
                                    color.NeonAzure, "Wordlist merging process completed"))
 
     var awsConfig aws.Config
-    var ec2Man *awsutils.Ec2Manger
+    var ec2Man *ec2utils.Ec2Manger
     var logMan *kloudlogs.LoggerManager
 
     // If the program is being run in full mode (not testing)

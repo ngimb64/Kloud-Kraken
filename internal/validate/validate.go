@@ -21,6 +21,7 @@ var ReAccountId = regexp.MustCompile(`^\d{12}$`)
 var ReEipAlloc = regexp.MustCompile(`^eipalloc-[0-9a-f]{8,17}$`)
 var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
 var ReIgwId = regexp.MustCompile(`^igw-[0-9a-f]{8,17}$`)
+var ReNatID = regexp.MustCompile(`^nat-[0-9a-f]{8,17}$`)
 var RePrivateCidr = regexp.MustCompile(
     `^(?:` +
       // 10.0.0.0/16 - 10.255.255.255/28
@@ -33,6 +34,7 @@ var RePrivateCidr = regexp.MustCompile(
       `192\.168\.(?:[0-9]{1,3}\.)[0-9]{1,3}` +
     `)\/(?:1[6-9]|2[0-8])$`,
 )
+var ReBucketName= regexp.MustCompile(`^[a-z0-9][a-z0-9\.-]{1,61}[a-z0-9]$`)
 var ReSecurityGroupId = regexp.MustCompile(`^sg-[0-9a-f]{8,}$`)
 var ReSecurityGroupName = regexp.MustCompile(
     `^[A-Za-z0-9\s\.\_\-\:\/\(\)\#\,\@\[\]\+\=\&\;\{\}\!\$\*]{1,255}$`,
@@ -78,10 +80,8 @@ func ValidateBucketName(name string) error {
         return fmt.Errorf("bucket name must be 3 to 63 characters; got %d", length)
     }
 
-    // Allows lowercase letters, numbers, dots & hyphens and must start and
-    // end with letter or number
-    validName := regexp.MustCompile(`^[a-z0-9][a-z0-9\.-]{1,61}[a-z0-9]$`)
-    if !validName.MatchString(name) {
+    // Validate format with regular expression
+    if !ReBucketName.MatchString(name) {
         return errors.New(
             "bucket name must start and end with a lowercase letter or number, " +
             "and contain only lowercase letters, numbers, dots (.) or hyphens (-)",
@@ -93,28 +93,6 @@ func ValidateBucketName(name string) error {
     if ip != nil {
         return errors.New("bucket name must not be formatted as an IP address")
     }
-
-    return nil
-}
-
-
-// Ensures the CIDR block is of proper format.
-//
-// @Parameters
-//  - name:  The name of the CIDR block to be validated
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateCidrBlock(cidrBlock string) error {
-    if cidrBlock == "" {
-        return nil
-    }
-
-    // Ensure the AWS subnet ID is of proper format
-	if !RePrivateCidr.MatchString(cidrBlock) {
-		return fmt.Errorf("invalid CIDR block - %q", cidrBlock)
-	}
 
     return nil
 }
@@ -149,6 +127,28 @@ func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool
     }
 
     return true
+}
+
+
+// Ensures the CIDR block is of proper format.
+//
+// @Parameters
+//  - name:  The name of the CIDR block to be validated
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func ValidateCidrBlock(cidrBlock string) error {
+    if cidrBlock == "" {
+        return nil
+    }
+
+    // Ensure the AWS subnet ID is of proper format
+	if !RePrivateCidr.MatchString(cidrBlock) {
+		return fmt.Errorf("invalid CIDR block - %q", cidrBlock)
+	}
+
+    return nil
 }
 
 
@@ -272,7 +272,7 @@ func ValidateEipAllocationId(eipId string) error {
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func ValidateFile(filePath string) error {
+func validateFile(filePath string) error {
     // Check to see if the hash file exists
     exists, isDir, hasData, err := disk.PathExists(filePath)
     if err != nil {
@@ -286,6 +286,54 @@ func ValidateFile(filePath string) error {
     }
 
     return nil
+}
+
+
+// Ensure the passed in max file size is of raw bytes format or in
+// unit format (KB, MB, GB). If in raw bytes it is simply converted to
+// int64, but for unit format a conversion to raw bytes then int64.
+//
+// @Parameters
+//  - maxFileSize:  The max file size prior to parse and calculation/conversion
+//
+// @Returns
+//  - The converted int64 max file size as raw bytes
+//  - Error if it occurs, otherwise nil on success
+//
+func ValidateFileSize(maxFileSize string) (int64, error) {
+    var byteSize int64
+    var err error
+
+    // Save string max file size to local variable ensuring
+    // any units are uppercase (KB, MB, GB)
+    maxFileSize = strings.ToUpper(maxFileSize)
+    // Check to see if the max files size contains a conversion unit
+    sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
+
+    // If the slice contains a data unit to be converted to raw bytes
+    if sliceContains {
+        // Split the size from the unit type
+        size, unit, err := data.ParseFileSizeType(maxFileSize)
+        if err != nil {
+            return -1, fmt.Errorf("error parsing file size unit - %w", err)
+        }
+        // Pass the size and unit to calculate to raw bytes
+        byteSize = data.ToBytes(size, unit)
+    // If the file size seems to already be in bytes
+    } else {
+        // Attempt to convert it straight to int64
+        byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
+        if err != nil {
+            return -1, fmt.Errorf("error converting string to int64 - %w", err)
+        }
+    }
+
+    // If the converted max file size is less than or equal to 0
+    if byteSize <= 0 {
+        return -1, fmt.Errorf("converted max file size is less than or equal to 0")
+    }
+
+    return byteSize, nil
 }
 
 
@@ -305,7 +353,7 @@ func ValidateHashFile(filePath string) error {
     }
 
     // Validate the hash file
-    err = ValidateFile(validPath)
+    err = validateFile(validPath)
     if err != nil {
         return fmt.Errorf("error validating hash file based on %s path - %w", validPath, err)
     }
@@ -503,54 +551,6 @@ func ValidateLogMode(logMode string) bool {
 }
 
 
-// Ensure the passed in max file size is of raw bytes format or in
-// unit format (KB, MB, GB). If in raw bytes it is simply converted to
-// int64, but for unit format a conversion to raw bytes then int64.
-//
-// @Parameters
-//  - maxFileSize:  The max file size prior to parse and calculation/conversion
-//
-// @Returns
-//  - The converted int64 max file size as raw bytes
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateFileSize(maxFileSize string) (int64, error) {
-    var byteSize int64
-    var err error
-
-    // Save string max file size to local variable ensuring
-    // any units are uppercase (KB, MB, GB)
-    maxFileSize = strings.ToUpper(maxFileSize)
-    // Check to see if the max files size contains a conversion unit
-    sliceContains := data.StringSliceContains(globals.FILE_SIZE_TYPES, maxFileSize)
-
-    // If the slice contains a data unit to be converted to raw bytes
-    if sliceContains {
-        // Split the size from the unit type
-        size, unit, err := data.ParseFileSizeType(maxFileSize)
-        if err != nil {
-            return -1, fmt.Errorf("error parsing file size unit - %w", err)
-        }
-        // Pass the size and unit to calculate to raw bytes
-        byteSize = data.ToBytes(size, unit)
-    // If the file size seems to already be in bytes
-    } else {
-        // Attempt to convert it straight to int64
-        byteSize, err = strconv.ParseInt(maxFileSize, 10, 64)
-        if err != nil {
-            return -1, fmt.Errorf("error converting string to int64 - %w", err)
-        }
-    }
-
-    // If the converted max file size is less than or equal to 0
-    if byteSize <= 0 {
-        return -1, fmt.Errorf("converted max file size is less than or equal to 0")
-    }
-
-    return byteSize, nil
-}
-
-
 // Ensure the passed in max size range is 50 percent or below.
 //
 // @Parameters
@@ -576,6 +576,28 @@ func ValidateMaxSizeRange(percentage float64) bool {
 //
 func ValidateMaxTransfers(maxTransfers int32) bool {
     return maxTransfers > 0
+}
+
+
+// Ensure the passed in NAT Gateway ID is of proper format.
+//
+// @Parameters
+// - natID:  The NAT Gateway ID to be validated
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func ValidateNatGatewayId(natId string) error {
+	if natId == "" {
+		return nil
+	}
+
+    // Validate format with regular expression
+	if !ReNatID.MatchString(natId) {
+		return fmt.Errorf("invalid NAT gateway id format - %q", natId)
+	}
+
+	return nil
 }
 
 
@@ -670,7 +692,7 @@ func ValidateRulesetFile(filePath string) error {
     }
 
     // Validate the ruleset file
-    err = ValidateFile(validPath)
+    err = validateFile(validPath)
     if err != nil {
         return fmt.Errorf("error validating ruleset file based on %s path - %w",
                           validPath, err)

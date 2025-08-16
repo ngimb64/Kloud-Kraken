@@ -82,6 +82,7 @@ local_config:
   log_path: "KloudKraken.log"
   max_merging_size: "50MB"
   max_size_range: 25.0
+  nat_id: "nat-0a1b2c3d4e5f6a7b"
   number_instances: 3
   region: "us-east-1"
   ruleset_path: "%s"
@@ -136,6 +137,7 @@ local_config:
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
+    assert.Equal("nat-0a1b2c3d4e5f6a7b", config.LocalConfig.NatId)
     assert.Equal(3, config.LocalConfig.NumberInstances)
     assert.Equal("us-east-1", config.LocalConfig.Region)
     assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)

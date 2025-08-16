@@ -154,45 +154,6 @@ func TestValidateEipAllocationId(t *testing.T) {
 }
 
 
-func TestValidateFile(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    testDir := "testingDir"
-    // Create the test directory
-    err := os.Mkdir(testDir, os.ModePerm)
-    assert.Equal(nil, err)
-
-    testFile := "testFile.txt"
-    // Format the file path with test dir
-    filePath := fmt.Sprintf("%s/%s", testDir, testFile)
-    // Open the file with write permissions
-    file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-    assert.Equal(nil, err)
-
-    // Make a byte buffer based off iteration index
-    buffer := make([]byte, 64)
-    // Fill the buffer up with random data
-    data.GenerateRandomBytes(buffer, 64)
-    // Write the random data to the output file
-    bytesWrote, err := file.Write(buffer)
-    assert.Equal(nil, err)
-    // Close the file after data has been written
-    err = file.Close()
-    assert.Equal(nil, err)
-    // Ensure the bytes wrote matches the buffer size
-    assert.Equal(bytesWrote, 64)
-
-    // Validate the created test file inside the test dir
-    err = validate.ValidateFile(filePath)
-    assert.Equal(nil, err)
-
-    // Delete the test dir after it has been validated
-    err = os.RemoveAll(testDir)
-    assert.Equal(nil, err)
-}
-
-
 func TestValidateHashFile(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)

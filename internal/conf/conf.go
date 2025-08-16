@@ -52,6 +52,7 @@ type LocalConfig struct {
     MaxMergingSize      string   `yaml:"max_merging_size"`
     MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
     MaxSizeRange        float64  `yaml:"max_size_range"`
+    NatId               string   `yaml:"nat_id"`
     NumberInstances     int      `yaml:"number_instances"`
     Region              string   `yaml:"region"`
     RulesetPath         string   `yaml:"ruleset_path"`
@@ -234,7 +235,7 @@ func validateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure instance type is in supported list
     if !validate.ValidateInstanceType(localConfig.InstanceType) {
-        return fmt.Errorf("improper instance_type - %w", err)
+        return fmt.Errorf("improper instance_type - %q", localConfig.InstanceType)
     }
 
     // If the listerner port is less than 1000
@@ -263,6 +264,12 @@ func validateLocalConfig(localConfig *LocalConfig) error {
     // Ensure the max size range is less or equal to 50 percent
     if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
         return fmt.Errorf("max_size_range greater than 50 percent")
+    }
+
+    // Ensure the NAT Gateway ID is of proper format if specified
+    err = validate.ValidateNatGatewayId(localConfig.NatId)
+    if err != nil {
+        return err
     }
 
     // If the number of instances is less than one

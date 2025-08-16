@@ -30,7 +30,7 @@
 
 - Custom TLS based file transfer service using SSM Parameter Store to transfer certificates
   - Service continually transfers data requested by clients based on allowed max file size until the load directory has been completely processed
-  - Files are transferred directly to the local EC2 instance-store which features multiple drives combined in a RAID 0 configuration for performance
+  - Files are transferred directly to the local EC2 instance-store which features multiple NVMe drives combined in a RAID 0 configuration for performance
   - Facilitates multiple file transfers per EC2 client simultaneously
 <br>
 
