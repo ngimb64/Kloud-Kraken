@@ -9,3 +9,6 @@ bin
 
 # Log file
 KloudKraken.log
+
+# State file
+.kraken-state.yml

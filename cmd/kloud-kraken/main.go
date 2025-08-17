@@ -50,13 +50,17 @@ var ReceivedDir = "/tmp/received"      // Path where cracked hashes & client log
 var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
 
 type StateConfig struct {
-    BucketName      string `yaml:"bucket_name"`
-    EipId           string `yaml:"eip_id"`
-    IgwId           string `yaml:"igw_id"`
-    NatId           string `yaml:"nat_id"`
-    PrivateSubnetId string `yaml:"private_subnet_id"`
-    PublicSubnetId  string `yaml:"public_subnet_id"`
-    VpcId           string `yaml:"vpc_id"`
+    BucketName           string `yaml:"bucket_name"`
+    EipId                string `yaml:"eip_id"`
+    IgwId                string `yaml:"igw_id"`
+    NatGatewayId         string `yaml:"nat_gateway_id"`
+    PrivateAssociationId string `yaml:"private_association_id"`
+    PrivateRouteId       string `yaml:"private_route_id"`
+    PrivateSubnetId      string `yaml:"private_subnet_id"`
+    PublicAssociationId  string `yaml:"public_association_id"`
+    PublicRouteId        string `yaml:"public_route_id"`
+    PublicSubnetId       string `yaml:"public_subnet_id"`
+    VpcId                string `yaml:"vpc_id"`
 }
 
 // Select next available file for transfer, if there are no more available send the end transfer
@@ -718,7 +722,7 @@ func clientTrustPolicyGen() string {
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               awsConfig aws.Config, ec2Client *ec2utils.Ec2Manger, err error) {
-    stateFilePath := ".kraken-state.yml"
+    stateFilePath := "../.kraken-state.yml"
     var stateConfig StateConfig
     var stateData []byte
     var yamlUpdates map[string]string
@@ -785,6 +789,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // If a VPC was created, add ID to yaml updates map
     if vpcId != "" {
         yamlUpdates["aws_env.vpc_id"] = vpcId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        vpcId = stateConfig.VpcId
     }
 
     // Check to see if IGW exists, otherwise create & attach one
@@ -798,11 +805,14 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // If a Internet Gateway was created, add ID to yaml updates map
     if igwId != "" {
         yamlUpdates["aws_env.igw_id"] = igwId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        igwId = stateConfig.IgwId
     }
 
     // Check to see if Elastic IP exists, otherwise create one
     eipId, err := ec2Client.ElasticIpProvision(1 * time.Minute,
-                                                stateConfig.EipId)
+                                               stateConfig.EipId)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -810,6 +820,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // If a Elastic IP was created, add ID to yaml updates map
     if eipId != "" {
         yamlUpdates["aws_env.eip_id"] = eipId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        eipId = stateConfig.EipId
     }
 
     // Get the slice of availability zones based on region
@@ -848,6 +861,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // If a public subnet was created, add ID to yaml updates map
     if pubSubnetId != "" {
         yamlUpdates["aws_env.public_subnet_id"] = pubSubnetId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        pubSubnetId = stateConfig.PublicSubnetId
     }
 
     // Allocate next available subnet in CIDR block for private subnet
@@ -868,21 +884,96 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // If a private subnet was created, add ID to yaml updates map
     if privSubnetId != "" {
         yamlUpdates["aws_env.private_subnet_id"] = privSubnetId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        privSubnetId = stateConfig.PrivateSubnetId
     }
 
-    // Create NAT gateway in public subnet using Elastic IP Allocation ID
+    // Create NAT gateway in public subnet if it does not exist
     natGatewayId, err := ec2Client.NatGatewayProvision(5 * time.Minute,
-                                                       stateConfig.NatId,
+                                                       stateConfig.NatGatewayId,
                                                        pubSubnetId, eipId,
-                                                       "Kloud-Kraken-NAT")
+                                                       "Kloud-Kraken-NAT-Gateway")
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
     // If a NAT Gateway was created, add ID to yaml updates map
     if natGatewayId != "" {
-        yamlUpdates["aws_env.nat_id"] = natGatewayId
+        yamlUpdates["aws_env.nat_gateway_id"] = natGatewayId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        natGatewayId = stateConfig.NatGatewayId
     }
+
+    // Create route table for subnets to internet gateway if does not exist
+    publicRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
+                                                        stateConfig.PublicRouteId,
+                                                        vpcId, igwId, "",
+                                                        pubSubnetId,
+                                                        "Kloud-Kraken-Public-Route")
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the public route table was created, add ID to yaml updates map
+    if publicRouteId != "" {
+        yamlUpdates["aws_env.public_route_id"] = publicRouteId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        publicRouteId = stateConfig.PublicRouteId
+    }
+
+    // Create route table for subnets to NAT Gateway if does not exist
+    privateRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
+                                                         stateConfig.PrivateRouteId,
+                                                         vpcId, "", natGatewayId,
+                                                         privSubnetId,
+                                                         "Kloud-Kraken-Private-Route")
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the private route table was created, add ID to yaml updates map
+    if privateRouteId != "" {
+        yamlUpdates["aws_env.private_route_id"] = privateRouteId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        privateRouteId = stateConfig.PrivateRouteId
+    }
+
+    // Ensure public route tables are associated to subnet
+    publicAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
+                                                                   stateConfig.PublicAssociationId,
+                                                                   publicRouteId, pubSubnetId)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the public association occured, add ID to yaml updates map
+    if publicAssocId != "" {
+        yamlUpdates["aws_env.public_association_id"] = publicAssocId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        publicAssocId = stateConfig.PublicAssociationId
+    }
+
+    // Ensure private route tables are associated to subnet
+    privateAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
+                                                                    stateConfig.PrivateAssociationId,
+                                                                    privateRouteId, privSubnetId)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the private association occured, add ID to yaml updates map
+    if privateAssocId != "" {
+        yamlUpdates["aws_env.private_association_id"] = privateAssocId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        privateAssocId = stateConfig.PrivateAssociationId
+    }
+
 
 
 
@@ -892,10 +983,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     X Allocate Elastic IP for NAT Gateway
     //     X Create public and private subnets within the VPC
     //     X Create NAT Gateway in public subnet (uses Elastic IP)
-    //     - Create route table for public subnets: 0.0.0.0/0 → IGW
-    //     - Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
-    //     - Associate **public** subnets to public route table
-    //     - Associate **private** subnets to private route tables
+    //     X Create route table for public subnets: 0.0.0.0/0 → IGW
+    //     X Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
+    //     X Associate **public** subnets to public route table
+    //     X Associate **private** subnets to private route tables
     //     - Create security groups for EC2 and other services
     //     - Configure Network ACLs for granular subnet-level rules
     //     - Create VPC endpoints (e.g., S3, SSM) for private access
@@ -1007,7 +1098,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        "ami-0eb94e3d16a6eea5f",
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,
-                                       "ClientRole", "Kloud-Kraken-Client",
+                                       "ClientRole", "Kloud-Kraken-EC2-Client",
                                        appConfig.LocalConfig.SecurityGroupIds,
                                        appConfig.LocalConfig.SecurityGroups,
                                        stateConfig.PrivateSubnetId)

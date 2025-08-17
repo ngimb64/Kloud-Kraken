@@ -59,12 +59,13 @@ func (Ec2Man *Ec2Manger) AssociateRouteTableToSubnet(callTime time.Duration,
 //
 //
 func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
+                                           associationId string,
                                            routeTableId string,
                                            subnetId string) (
-                                           bool, string, error) {
+                                           bool, error) {
     // Ensure required args are present
     if routeTableId == "" || subnetId == "" {
-        return false, "", fmt.Errorf("routeTableId and subnetId are required")
+        return false, fmt.Errorf("routeTableId and subnetId are required")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -78,26 +79,28 @@ func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
     // Describe the route table and inspect associations
     out, err := Ec2Man.client.DescribeRouteTables(ctx, input)
     if err != nil {
-        return false, "", fmt.Errorf("describe route tables - %w", err)
+        return false, fmt.Errorf("describe route tables - %w", err)
     }
 
     if len(out.RouteTables) == 0 {
-        return false, "", nil
+        return false, nil
     }
 
+    // Iterate through the identified route tables
     for _, rt := range out.RouteTables {
-        for _, as := range rt.Associations {
-            if as.SubnetId != nil && *as.SubnetId == subnetId {
-                if as.RouteTableAssociationId != nil {
-                    return true, *as.RouteTableAssociationId, nil
+        // Iterate through the route table associates
+        for _, assoc := range rt.Associations {
+            // If the association subnet ID matches arg
+            if *assoc.SubnetId == subnetId {
+                // If the association ID matches arg
+                if *assoc.RouteTableAssociationId == associationId {
+                    return true, nil
                 }
-
-                return true, "", nil
             }
         }
     }
 
-    return false, "", nil
+    return false, nil
 }
 
 // Ensure a route table association exists between routeTableId and subnetId.
@@ -108,26 +111,31 @@ func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) EnsureRouteTableAssociation(callTime time.Duration,
-                                                     routeTableId string,
-                                                     subnetId string) (
-                                                     string, error) {
-    // If association already exists return it
-    exists, assocID, err := Ec2Man.AssociationExists(callTime, routeTableId,
-                                                     subnetId)
-    if err != nil {
-        return "", err
-    }
+func (Ec2Man *Ec2Manger) RouteTableAssociationProvision(callTime time.Duration,
+                                                        associationId string,
+                                                        routeTableId string,
+                                                        subnetId string) (
+                                                        string, error) {
+    // If the route table associate ID is present in YAML
+    if associationId != "" {
+        // If association already exists return it
+        exists, err := Ec2Man.AssociationExists(callTime, associationId,
+                                                routeTableId, subnetId)
+        if err != nil {
+            return "", err
+        }
 
-    if exists {
-        return assocID, nil
+        if exists {
+            return "", nil
+        }
     }
 
     // Create a new association
-    newAssocID, err := Ec2Man.AssociateRouteTableToSubnet(callTime, routeTableId,
-                                                          subnetId)
+    associationId, err := Ec2Man.AssociateRouteTableToSubnet(callTime, routeTableId,
+                                                             subnetId)
     if err != nil {
         return "", err
     }
-    return newAssocID, nil
+
+    return associationId, nil
 }

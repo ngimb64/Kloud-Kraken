@@ -63,9 +63,13 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration, vpcId string,
-                                      cidrBlock string, subnetId string,
-                                      az string) (bool, error) {
+func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
+                                      subnetId string) (
+                                      bool, error) {
+    if subnetId == "" {
+        return false, fmt.Errorf("subnetId is empty")
+    }
+
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -73,24 +77,22 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration, vpcId string,
     // Format the input for the subnet description call
     describeInput := &ec2.DescribeSubnetsInput{
         Filters: []ec2types.Filter{
-            {Name: aws.String("vpc-id"), Values: []string{vpcId}},
-            {Name: aws.String("cidr-block"), Values: []string{cidrBlock}},
-            {Name: aws.String("availability-zone"), Values: []string{az}},
+            {Name: aws.String("subnet-id"), Values: []string{subnetId}},
         },
     }
 
-    // Get description of input subnet to see if it exists
+    // Describe the subnet by passed in ID
     out, err := Ec2Man.client.DescribeSubnets(ctx, describeInput)
     if err != nil {
         return false, fmt.Errorf("DescribeSubnets failed - %w", err)
     }
 
     // If there was a result and it matches the intended subnet ID
-    if len(out.Subnets) > 0 && out.Subnets[0].SubnetId == &subnetId {
-        return true, nil
+    if len(out.Subnets) == 0 {
+        return false, nil
     }
 
-    return false, nil
+    return true, nil
 }
 
 //
@@ -108,8 +110,7 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
     // If subnet ID is present in YAML
     if subnetId != "" {
         // Check to see if it exists in AWS enviroment
-        subnetExists, err := Ec2Man.SubnetExists(callTime, vpcID, cidrBlock,
-                                                 subnetId, az)
+        subnetExists, err := Ec2Man.SubnetExists(callTime, subnetId)
         if err != nil {
             return "", err
         }

@@ -2,13 +2,12 @@ package ec2utils
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/aws/smithy-go"
 )
 
 // Creates and waits for the VPC to be created.
@@ -89,22 +88,16 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
     out, err := Ec2Man.client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
         VpcIds: []string{vpcId},
     })
+    if err != nil {
+        return false, fmt.Errorf("describe VPC - %w", err)
+    }
 
     // If the ID was identified, exit early
-    if err == nil && len(out.Vpcs) == 1 {
-        return true, nil
+    if len(out.Vpcs) == 0 {
+        return false, nil
     }
 
-    var apiErr smithy.APIError
-    // If the error is not API related
-    // OR the API error suggests the VPC exists
-    if !errors.As(err, &apiErr) ||
-    apiErr.ErrorCode() != "InvalidVpcID.NotFound" {
-        return true, err
-    }
-
-    // The VPC was not found
-    return false, nil
+    return true, nil
 }
 
 // Returns VPC ID if it exists, or creates it using supplied CIDR.

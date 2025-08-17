@@ -69,12 +69,9 @@ client_config:
 
 local_config:
   account_id: "123456789123"
-  bucket_name: "test-bucket"
   cidr_block: "10.0.0.1/24"
-  eip_id: "eipalloc-09ad461b0d03f6aaf"
   hash_file_path: "%s"
   iam_username: "doug"
-  igw_id: "igw-823748aef"
   instance_type: "p4d.24xlarge"
   listener_port: 6969
   load_dir: "%s"
@@ -82,7 +79,6 @@ local_config:
   log_path: "KloudKraken.log"
   max_merging_size: "50MB"
   max_size_range: 25.0
-  nat_id: "nat-0a1b2c3d4e5f6a7b"
   number_instances: 3
   region: "us-east-1"
   ruleset_path: "%s"
@@ -93,8 +89,6 @@ local_config:
   security_groups:
     - "my-security-group"
     - "web.server@frontend"
-  subnet_id: "subnet-0a1b2c3d4e5f6a7b8"
-  vpc_id: "vpc-23a3239c203e0230b0a"
 `, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
     err = os.WriteFile(yamlPath, []byte(testData), 0644)

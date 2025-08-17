@@ -118,68 +118,35 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration, vpcId string,
-                                          igwId string, natId string,
-                                          subnetId string) (
-                                          bool, string, string, error) {
-    // Ensure required arg is present
-    if (igwId == "" && natId == "") || (igwId != "" && natId != "") {
-        return false, "", "", fmt.Errorf("exactly one of igwId or natId must be provided")
+func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
+                                          rtId string) (
+                                          bool, error) {
+    if rtId == "" {
+        return false, fmt.Errorf("rtId is empty")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Build filters dynamically based on target type
-    filters := []ec2types.Filter{
-        {Name: aws.String("vpc-id"), Values: []string{vpcId}},
-        {Name: aws.String("route.destination-cidr-block"), Values: []string{"0.0.0.0/0"}},
+    callInput := &ec2.DescribeRouteTablesInput{
+        Filters: []ec2types.Filter{
+            {Name: aws.String("route-table-id"), Values: []string{rtId}},
+        },
     }
 
-    if igwId != "" {
-        filters = append(filters, ec2types.Filter{
-            Name: aws.String("route.gateway-id"), Values: []string{igwId},
-        })
-    } else {
-        filters = append(filters, ec2types.Filter{
-            Name: aws.String("route.nat-gateway-id"), Values: []string{natId},
-        })
-    }
-
-    input := &ec2.DescribeRouteTablesInput{Filters: filters}
-
-    out, err := Ec2Man.client.DescribeRouteTables(ctx, input)
+    // Describe route tables based on passed in ID
+    out, err := Ec2Man.client.DescribeRouteTables(ctx, callInput)
     if err != nil {
-        return false, "", "", fmt.Errorf("describe route tables - %w", err)
+        return false, fmt.Errorf("describe route tables - %w", err)
     }
 
+    // If there were no route tables found
     if len(out.RouteTables) == 0 {
-        return false, "", "", nil
+        return false, nil
     }
 
-    // Inspect first matching route table and check association if requested
-    for _, rt := range out.RouteTables {
-        if rt.RouteTableId == nil {
-            continue
-        }
-        rtID := aws.ToString(rt.RouteTableId)
-
-        if subnetId != "" {
-            for _, as := range rt.Associations {
-                if as.SubnetId != nil && *as.SubnetId == subnetId {
-                    return true, rtID, "has-route-and-association", nil
-                }
-            }
-
-            continue
-        }
-
-        // Found a table with the appropriate route and no subnet requirement
-        return true, rtID, "has-route", nil
-    }
-
-    return false, "", "", nil
+    return true, nil
 }
 
 
@@ -200,25 +167,23 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
     // If route_table_id is present in YAML
     if rtId != "" {
         // If a matching route table exists return it
-        exists, foundRtId, state, err := Ec2Man.RouteTableExists(callTime, vpcId, igwId,
-                                                                 natId, subnetId)
+        exists, err := Ec2Man.RouteTableExists(callTime, rtId)
         if err != nil {
             return "", err
         }
 
-        // If the route tables exists AND is in proper state AND matches one in yaml
-        if exists && (state == "has-route" || state == "has-route-and-association") &&
-        rtId == foundRtId {
+        // If the route table exists
+        if exists {
             return "", nil
         }
     }
 
     // Create a new route table with the chosen target and optionally associate it
-    newRT, err := Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId,
+    rtId, err := Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId,
                                                    natId, subnetId, nameTag)
     if err != nil {
         return "", err
     }
 
-    return newRT, nil
+    return rtId, nil
 }

@@ -95,6 +95,10 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration, subnetI
 //
 func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) (
                                           bool, error) {
+    if natId == "" {
+        return false, fmt.Errorf("natId is empty")
+    }
+
     // Ensure AWS API calls do not hang for longer than the provided timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -105,7 +109,7 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) 
         },
     }
 
-    // Get the NAT gateways in passed in subnet ID
+    // Describe the NAT gateway by passed in ID
     out, err := Ec2Man.client.DescribeNatGateways(ctx, describeCallInput)
     if err != nil {
         return false, fmt.Errorf("describe nat gateways - %w", err)
