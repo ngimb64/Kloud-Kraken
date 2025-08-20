@@ -90,12 +90,10 @@ func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
     for _, rt := range out.RouteTables {
         // Iterate through the route table associates
         for _, assoc := range rt.Associations {
-            // If the association subnet ID matches arg
-            if *assoc.SubnetId == subnetId {
-                // If the association ID matches arg
-                if *assoc.RouteTableAssociationId == associationId {
-                    return true, nil
-                }
+            // If the association subnet ID and association ID matches args
+            if *assoc.SubnetId == subnetId &&
+            *assoc.RouteTableAssociationId == associationId {
+                return true, nil
             }
         }
     }

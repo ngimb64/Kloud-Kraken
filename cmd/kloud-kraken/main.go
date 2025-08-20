@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -102,8 +100,11 @@ func handleTransfer(connection net.Conn, buffer []byte,
         return
     }
 
+    // Get random available port as a listener
+    listener, port := netio.GetAvailableListener()
+
     // Format transfer reply to inform client of selected file name and size
-    sendLength, err := netio.FormatTransferReply(filePath, fileSize, &buffer,
+    sendLength, err := netio.FormatTransferReply(filePath, fileSize, port, &buffer,
                                                  globals.START_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer reply:  %v", err)
@@ -117,24 +118,29 @@ func handleTransfer(connection net.Conn, buffer []byte,
         return
     }
 
-    var port uint16
-    // Receive bytes of port of client port to connect to for file transfer
-    err = binary.Read(connection, binary.LittleEndian, &port)
+    // Set up context handler for TLS listener
+    ctx, cancel := context.WithCancel(context.Background())
+    // Setup up TLS listener from existing raw TCP listener
+    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
+                                                       TlsMan.CaCertPool, ctx,
+                                                       "", port, listener)
     if err != nil {
-        logMan.LogMessage("error", "Error receiving client listener port:  %v", err)
-        return
+        logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
     }
 
-    // Strip the original port used for connection from address
-    ipAddr = strings.Split(ipAddr, ":")[0]
-    // Format remote address with parsed IP and received port for transfer
-    remoteAddr := ipAddr + ":" + strconv.Itoa(int(port))
-
-    // Make a connection to the client for file transfer
-    transferConn, err := tls.Dial("tcp", remoteAddr,
-                                  tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
+    // Wait for an incoming connection
+    transferConn, err := tlsListener.Accept()
     if err != nil {
-        logMan.LogMessage("error", "Error connecting to remote client for transfer:  %v", err)
+        logMan.LogMessage("error", "Error accepting server connection:  %v", err)
+
+        // Ensure TLS listener is closed
+        err = tlsListener.Close()
+        if err != nil {
+            logMan.LogMessage("Error", "Error closing TLS listener:  %v", err)
+        }
+
+        // Call cancel function to ensure raw TCP socket is closed
+        cancel()
         return
     }
 
@@ -155,17 +161,29 @@ func handleTransfer(connection net.Conn, buffer []byte,
 
     logMan.LogMessage("info", "Connected remote client %s on port %d, %s to be transfered",
                       ipAddr, port, filePath)
+
+    // Get the IP address of the remote connection
+    remoteIp := strings.Split(transferConn.RemoteAddr().String(), ":")[0]
     // Increment waitgroup counter
     waitGroup.Add(1)
 
     go func() {
-        // Close transfer connection on local exit
         defer func() {
+            // Close the transfer connection
             err = transferConn.Close()
             if err != nil {
                 logMan.LogMessage("Error", "Error closing file transfer connection %s:  %v",
-                                  remoteAddr, err)
+                                  remoteIp, err)
             }
+
+            // Close the TLS listener
+            err = tlsListener.Close()
+            if err != nil {
+                logMan.LogMessage("Error", "Error closing the TLS listener:  %v", err)
+            }
+
+            // Call cancel function to close raw TCP socket
+            cancel()
 
             // Decrement waitgroup counter
             waitGroup.Done()
@@ -175,7 +193,7 @@ func handleTransfer(connection net.Conn, buffer []byte,
         err = netio.TransferFile(transferConn, filePath, fileSize)
         if err != nil {
             logMan.LogMessage("error", "Error occured transfering file to client %s:  %v",
-                              remoteAddr, err)
+                              remoteIp, err)
         }
 
         // Display the file path to be transfered in right panel
@@ -769,7 +787,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         }
 
         // Overwrite the original yaml with the updated data
-        werr := os.WriteFile(stateFilePath, newYaml, 0644);
+        werr := os.WriteFile(stateFilePath, newYaml, 0644)
         if werr != nil {
             err = errors.Join(err, fmt.Errorf("writing output yaml:  %w", werr))
         }
@@ -852,8 +870,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Create public subnet if it does not exist
     pubSubnetId, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                                stateConfig.PublicSubnetId,
-                                                vpcId, pubCidr, az, true)
+                                                  stateConfig.PublicSubnetId,
+                                                  vpcId, pubCidr, az, true)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -875,8 +893,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Create private subnet if it does not exist
     privSubnetId, err := ec2Client.SubnetProvision(1 * time.Minute,
-                                                 stateConfig.PrivateSubnetId,
-                                                 vpcId, privCidr, az, false)
+                                                   stateConfig.PrivateSubnetId,
+                                                   vpcId, privCidr, az, false)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -973,7 +991,6 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     } else {
         privateAssocId = stateConfig.PrivateAssociationId
     }
-
 
 
 

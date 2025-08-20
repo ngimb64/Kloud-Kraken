@@ -1,9 +1,8 @@
-- Move AWS resource IDs to their own YAML file
+- Finish implementing provisioner list
 
-- Finish fixing route table and association provisioners and review others
+- Research which resources should persist and which should be deleted per execution
 
-- AWS code logic needs to account for subsequent uses instead of just a one time use approach
-    - Add logic to delete S3 bucket and certificate from SSM Param Store after EC2 instances are terminated
+- Check provisioner list methods about how AWS resource Existence check function are or need fixing and review all AWS code
 
 - After AWS code logic is update do extensive permissions review and make sure all policies are updated
 

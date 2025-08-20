@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,12 +22,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
-	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/hashcat"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ssmutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/tlsutils"
 	"go.uber.org/zap"
 )
@@ -371,56 +370,28 @@ func processTransfer(connection net.Conn, buffer []byte,
     // If the read data does not start with special delimiter or end with closed bracket
     if !bytes.HasPrefix(readBuffer, globals.START_TRANSFER_PREFIX) ||
     !bytes.HasSuffix(readBuffer, globals.TRANSFER_SUFFIX) {
-        logMan.LogMessage("error", "Unusual format in receieved start transfer message")
+        logMan.LogMessage("error", "Unusual format in receieved start transfer message",
+                          zap.String("transfer message", string(readBuffer)))
         return
     }
 
     // Extract the file name and size from the stripped initial transfer message
-    fileName, fileSize, err := netio.GetFileInfo(buffer, globals.START_TRANSFER_PREFIX, bytesRead)
+    fileName, fileSize, port, err := netio.ParseTransferReply(buffer,
+                                                              globals.START_TRANSFER_PREFIX,
+                                                              bytesRead)
     if err != nil {
         logMan.LogMessage("error", "Error extracting file name and " +
                           "size from start transfer message:  %v", err)
         return
     }
 
-    // Make buffer for int port bytes
-    intBuffer := make([]byte, 2)
-    // Get random available port as a listener
-    listener, port := netio.GetAvailableListener()
+    ipAddr := strings.Split(connection.RemoteAddr().String(), ":")[0]
 
-    // Convert int port to bytes and write it into the buffer
-    binary.LittleEndian.PutUint16(intBuffer, uint16(port))
-
-    // Send the converted port bytes to server to notify open port to connect for transfer
-    _, err = netio.WriteHandler(connection, intBuffer, len(intBuffer))
+    // Make a connection to the client for file transfer
+    transferConn, err := tls.Dial("tcp", ipAddr + ":" + string(port),
+                                  tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
-        logMan.LogMessage("error", "Error occurred sending converted int32 port to server:  %v", err)
-        return
-    }
-
-    // Set up context handler for TLS listener
-    ctx, cancel := context.WithCancel(context.Background())
-    // Setup up TLS listener from existing raw TCP listener
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       TlsMan.CaCertPool, ctx,
-                                                       "", port, listener)
-    if err != nil {
-        logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
-    }
-
-    // Wait for an incoming connection
-    transferConn, err := tlsListener.Accept()
-    if err != nil {
-        logMan.LogMessage("error", "Error accepting server connection:  %v", err)
-
-        // Ensure TLS listener is closed
-        err = tlsListener.Close()
-        if err != nil {
-            logMan.LogMessage("Error", "Error closing TLS listener:  %v", err)
-        }
-
-        // Call cancel function to ensure raw TCP socket is closed
-        cancel()
+        logMan.LogMessage("error", "Error connecting to remote client for transfer:  %v", err)
         return
     }
 
@@ -434,17 +405,10 @@ func processTransfer(connection net.Conn, buffer []byte,
             // Close the transfer connection
             err = transferConn.Close()
             if err != nil {
-                logMan.LogMessage("Error", "Error closing transfer connection:  %v", err)
+                logMan.LogMessage("Error", "Error closing transfer connection %d:  %v",
+                                  port, err)
             }
 
-            // Close the TLS listener
-            err = tlsListener.Close()
-            if err != nil {
-                logMan.LogMessage("Error", "Error closing the TLS listener:  %v", err)
-            }
-
-            // Call cancel function to close raw TCP socket
-            cancel()
             // Decrement the waitgroup
             waitGroup.Done()
         } ()
@@ -752,7 +716,7 @@ func main() {
         }
 
         // Establish client to SSM
-        ssmMan := awsutils.NewSsmManager(awsConfig)
+        ssmMan := ssmutils.NewSsmManager(awsConfig)
         // Retrieve the server TLS cert from SSM param store
         certPemString, err := ssmMan.GetSsmParameter(certSsmParam, 1*time.Minute)
         if err != nil {

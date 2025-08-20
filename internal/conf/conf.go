@@ -50,8 +50,6 @@ type LocalConfig struct {
     NumberInstances     int      `yaml:"number_instances"`
     Region              string   `yaml:"region"`
     RulesetPath         string   `yaml:"ruleset_path"`
-    SecurityGroupIds    []string `yaml:"security_group_ids"`
-    SecurityGroups      []string `yaml:"security_groups"`
 }
 
 
@@ -247,12 +245,6 @@ func validateLocalConfig(localConfig *LocalConfig) error {
 
     // Ensure the ruleset file path exists
     err = validate.ValidateRulesetFile(localConfig.RulesetPath)
-    if err != nil {
-        return err
-    }
-
-    // Ensure specified security group IDs are valid
-    err = validate.ValidateSecurityGroupIds(localConfig.SecurityGroupIds)
     if err != nil {
         return err
     }

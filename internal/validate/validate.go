@@ -418,7 +418,7 @@ func ValidateInstanceType(instanceType string) bool {
 //  - true/false boolean depending on whether the port is above 1000 or not
 //
 func ValidateListenerPort(listenerPort int) bool {
-    return listenerPort > 1000
+    return listenerPort > 1024
 }
 
 
@@ -586,58 +586,6 @@ func ValidateRulesetFile(filePath string) error {
     if err != nil {
         return fmt.Errorf("error validating ruleset file based on %s path - %w",
                           validPath, err)
-    }
-
-    return nil
-}
-
-
-// Ensures any security group IDs are of proper format.
-//
-// @Parameters
-//  - securityGroupIds:  Slice of security group IDs to validate
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateSecurityGroupIds(securityGroupIds []string) error {
-    // Iterate through passed in list of security group IDs
-    for _, sg := range securityGroupIds {
-        // If the current security group is not of proper format
-        if !ReSecurityGroupId.MatchString(sg) {
-            return fmt.Errorf("invalid security group ID - %q", sg)
-        }
-    }
-
-    return nil
-}
-
-
-// Ensures any security group names are of proper format.
-//
-// @Parameters
-//  - securityGroups:  Slice of security group names to validate
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateSecurityGroups(securityGroups []string) error {
-    // Iterate through passed in list of security group names
-    for _, name := range securityGroups {
-        // If the security group name is not of proper length
-        if len(name) == 0 || len(name) > 255 {
-            return fmt.Errorf("invalid security group name: %q (must be 1–255 characters)", name)
-        }
-
-        // If the security group has "sg-" prefix reserve for IDs
-        if len(name) >= 3 && name[:3] == "sg-" {
-            return fmt.Errorf("invalid security group name: %q (cannot start with \"sg-\")", name)
-        }
-
-        // If the security group name is not of proper format
-        if !ReSecurityGroupName.MatchString(name) {
-            return fmt.Errorf("invalid security group name - %q", name)
-        }
     }
 
     return nil

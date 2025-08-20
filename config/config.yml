@@ -29,5 +29,3 @@ local_config:
   number_instances: 1
   region: "us-east-1"
   ruleset_path: ""
-  security_group_ids: []
-  security_groups: []

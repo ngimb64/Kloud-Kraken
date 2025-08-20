@@ -82,13 +82,6 @@ local_config:
   number_instances: 3
   region: "us-east-1"
   ruleset_path: "%s"
-  security_group_ids:
-    - "sg-01234567"
-    - "sg-0a1b2c3d4e5f6a7b8"
-    - "sg-abcdef1234567890abcdef"
-  security_groups:
-    - "my-security-group"
-    - "web.server@frontend"
 `, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
     err = os.WriteFile(yamlPath, []byte(testData), 0644)
@@ -131,8 +124,6 @@ local_config:
     assert.Equal(3, config.LocalConfig.NumberInstances)
     assert.Equal("us-east-1", config.LocalConfig.Region)
     assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
-    assert.Equal(3, len(config.LocalConfig.SecurityGroupIds))
-    assert.Equal(2, len(config.LocalConfig.SecurityGroups))
 
     // Append the yaml data file to test file for deletion
     testFiles = append(testFiles, yamlPath)
