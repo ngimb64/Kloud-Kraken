@@ -58,6 +58,7 @@ type StateConfig struct {
     PublicAssociationId  string `yaml:"public_association_id"`
     PublicRouteId        string `yaml:"public_route_id"`
     PublicSubnetId       string `yaml:"public_subnet_id"`
+    Ec2SecurityGroupId   string `yaml:"ec2_security_group_id"`
     VpcId                string `yaml:"vpc_id"`
 }
 
@@ -412,7 +413,7 @@ func startServer(appConfig *conf.AppConfig,
 
     for {
         // If current number of connection is greater than or equal to number of instances
-        if CurrentConnections.Load() >= int32(appConfig.LocalConfig.NumberInstances) {
+        if CurrentConnections.Load() >= appConfig.LocalConfig.NumberInstances {
             logMan.LogMessage("info", "All remote clients are connected")
             break
         }
@@ -797,7 +798,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     ec2Client = ec2utils.NewEc2Manager(awsConfig)
 
     // Check to see if the VPC exists, otherwise create one
-    vpcId, err := ec2Client.VpcProvision(5 * time.Minute,
+    vpcId, err := ec2Client.VpcProvision(20 * time.Minute,
                                          stateConfig.VpcId,
                                          appConfig.LocalConfig.CidrBlock)
     if err != nil {
@@ -813,7 +814,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Check to see if IGW exists, otherwise create & attach one
-    igwId, err := ec2Client.InternetGatewayProvision(1 * time.Minute,
+    igwId, err := ec2Client.InternetGatewayProvision(10 * time.Minute,
                                                      stateConfig.IgwId,
                                                      vpcId)
     if err != nil {
@@ -829,7 +830,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Check to see if Elastic IP exists, otherwise create one
-    eipId, err := ec2Client.ElasticIpProvision(1 * time.Minute,
+    eipId, err := ec2Client.ElasticIpProvision(10 * time.Minute,
                                                stateConfig.EipId)
     if err != nil {
         return awsConfig, ec2Client, err
@@ -844,7 +845,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Get the slice of availability zones based on region
-    azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
+    azs, err := ec2Client.FetchAvailableAZs(5 * time.Minute)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -869,7 +870,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create public subnet if it does not exist
-    pubSubnetId, err := ec2Client.SubnetProvision(1 * time.Minute,
+    pubSubnetId, err := ec2Client.SubnetProvision(5 * time.Minute,
                                                   stateConfig.PublicSubnetId,
                                                   vpcId, pubCidr, az, true)
     if err != nil {
@@ -892,7 +893,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create private subnet if it does not exist
-    privSubnetId, err := ec2Client.SubnetProvision(1 * time.Minute,
+    privSubnetId, err := ec2Client.SubnetProvision(5 * time.Minute,
                                                    stateConfig.PrivateSubnetId,
                                                    vpcId, privCidr, az, false)
     if err != nil {
@@ -908,7 +909,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create NAT gateway in public subnet if it does not exist
-    natGatewayId, err := ec2Client.NatGatewayProvision(5 * time.Minute,
+    natGatewayId, err := ec2Client.NatGatewayProvision(10 * time.Minute,
                                                        stateConfig.NatGatewayId,
                                                        pubSubnetId, eipId,
                                                        "Kloud-Kraken-NAT-Gateway")
@@ -925,10 +926,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create route table for subnets to internet gateway if does not exist
-    publicRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
+    publicRouteId, err := ec2Client.RouteTableProvision(5 * time.Minute,
                                                         stateConfig.PublicRouteId,
                                                         vpcId, igwId, "",
-                                                        pubSubnetId,
+                                                        pubSubnetId, "0.0.0.0/0",
                                                         "Kloud-Kraken-Public-Route")
     if err != nil {
         return awsConfig, ec2Client, err
@@ -943,10 +944,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create route table for subnets to NAT Gateway if does not exist
-    privateRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
+    privateRouteId, err := ec2Client.RouteTableProvision(5 * time.Minute,
                                                          stateConfig.PrivateRouteId,
                                                          vpcId, "", natGatewayId,
-                                                         privSubnetId,
+                                                         privSubnetId, "0.0.0.0/0",
                                                          "Kloud-Kraken-Private-Route")
     if err != nil {
         return awsConfig, ec2Client, err
@@ -961,7 +962,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Ensure public route tables are associated to subnet
-    publicAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
+    publicAssocId, err := ec2Client.RouteTableAssociationProvision(5 * time.Minute,
                                                                    stateConfig.PublicAssociationId,
                                                                    publicRouteId, pubSubnetId)
     if err != nil {
@@ -977,7 +978,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Ensure private route tables are associated to subnet
-    privateAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
+    privateAssocId, err := ec2Client.RouteTableAssociationProvision(5 * time.Minute,
                                                                     stateConfig.PrivateAssociationId,
                                                                     privateRouteId, privSubnetId)
     if err != nil {
@@ -992,6 +993,57 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         privateAssocId = stateConfig.PrivateAssociationId
     }
 
+    // Create EC2 security group if does not exist
+    ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute, vpcId,
+                                                     stateConfig.Ec2SecurityGroupId,
+                                                     "Kloud-Kraken-EC2-SG",
+                                                     "Security group for Kloud" +
+                                                     " Kraken EC2 instances")
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the security group was created, add ID to yaml updates map
+    if ec2SgId != "" {
+        yamlUpdates["aws_env.ec2_security_group_id"] = ec2SgId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        ec2SgId = stateConfig.Ec2SecurityGroupId
+    }
+
+    // Get the DNS address from the CIDR (Ex: 192.168.0.0/24 => 192.168.0.2/32)
+    dnsAddr, err := ec2Client.VpcResolverForCidr(appConfig.LocalConfig.CidrBlock)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Configure UDP rule in security group for DNS
+    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
+                                                 dnsAddr, "udp", 53, 53)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Configure TCP rule in security group for DNS
+    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
+                                                 dnsAddr, "tcp", 53, 53)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Configure TCP rule in security group for HTTP
+    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
+                                                 "0.0.0.0/0", "tcp", 80, 80)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Configure TCP rule in security group for HTTPS
+    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
+                                                 "0.0.0.0/0", "tcp", 443, 443)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
 
 
     // TODO: VPC network setup
@@ -1004,8 +1056,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     X Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
     //     X Associate **public** subnets to public route table
     //     X Associate **private** subnets to private route tables
-    //     - Create security groups for EC2 and other services
-    //     - Configure Network ACLs for granular subnet-level rules
+    //     X Create security groups for EC2
+    //     X Add rules to EC2 security group to allow updates and package installation
+    //     - Create security group for SSM Parameter Store
+    //     - Add rules to SSM parameter store for allowing storing and grabbing TLS certs
     //     - Create VPC endpoints (e.g., S3, SSM) for private access
     //     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
     //     - Enable VPC Flow Logs for traffic monitoring and auditing
@@ -1114,6 +1168,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     err = ec2Client.CreateEc2Instances(20 * time.Minute, []byte(userData),
                                        "ami-0eb94e3d16a6eea5f",
                                        appConfig.LocalConfig.InstanceType,
+                                       appConfig.LocalConfig.NumberInstances,
                                        appConfig.LocalConfig.NumberInstances,
                                        "ClientRole", "Kloud-Kraken-EC2-Client",
                                        appConfig.LocalConfig.SecurityGroupIds,

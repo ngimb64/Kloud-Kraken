@@ -51,11 +51,17 @@ func NewEc2Manager(awsConfig aws.Config) *Ec2Manger {
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration, userData []byte,
-                                            ami string, instanceType string,
-                                            count int, roleName string,
-                                            name string, securityGroupIds []string,
-                                            securityGroups []string, subnetId string) (
+func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration,
+                                            userData []byte,
+                                            ami string,
+                                            instanceType string,
+                                            minCount int32,
+                                            maxCount int32,
+                                            roleName string,
+                                            name string,
+                                            securityGroupIds []string,
+                                            securityGroups []string,
+                                            subnetId string) (
                                             error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -68,8 +74,8 @@ func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration, userData []b
     input := &ec2.RunInstancesInput{
         ImageId:      aws.String(ami),
         InstanceType: ec2types.InstanceType(instanceType),
-        MinCount:     aws.Int32(int32(count)),
-        MaxCount:     aws.Int32(int32(count)),
+        MinCount:     aws.Int32(minCount),
+        MaxCount:     aws.Int32(maxCount),
         UserData:     aws.String(encodedUserData),
         IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
             Name: aws.String(roleName),
@@ -134,7 +140,7 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
         },
     }
 
-    // Retrieve the list of avail
+    // Retrieve the list of available availibility zones
     output, err := Ec2Man.client.DescribeAvailabilityZones(ctx, callInput)
     if err != nil {
         return nil, fmt.Errorf("failed to describe AZs - %w", err)

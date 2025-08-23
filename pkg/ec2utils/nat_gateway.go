@@ -2,12 +2,14 @@ package ec2utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 )
 
 // Create a NAT gateway in the specified subnet using the provided EIP allocation ID.
@@ -22,52 +24,48 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration, subnetI
                                                  eipId string, nameTag string) (
                                                  string, error) {
     // Ensure required args are present
-    if subnetID == "" {
-        return "", fmt.Errorf("subnetID is required")
-    }
-
-    if eipId == "" {
-        return "", fmt.Errorf("eipId is required")
+    if subnetID == ""  || eipId == "" {
+        return "", fmt.Errorf("subnetID or eipId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer than the provided timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
 
     createIn := &ec2.CreateNatGatewayInput{
         SubnetId:     aws.String(subnetID),
         AllocationId: aws.String(eipId),
     }
 
+    // Create the NAT Gateway
     createOut, err := Ec2Man.client.CreateNatGateway(ctx, createIn)
-    cancel()
     if err != nil {
         return "", fmt.Errorf("create nat gateway - %w", err)
     }
 
+    // If the create call failed to produce output or the NAT
+    // Gateway or it's corresponding ID are missing
     if createOut == nil || createOut.NatGateway == nil ||
     createOut.NatGateway.NatGatewayId == nil {
-        return "", fmt.Errorf("create nat gateway returned empty id")
+        return "", fmt.Errorf("create nat gateway failed to return gateway id")
     }
 
     newNatID := aws.ToString(createOut.NatGateway.NatGatewayId)
 
     // Tag the NAT gateway name if provided
     if nameTag != "" {
-        // Ensure AWS API calls do not hang for longer specified timeout
-        ctxTag, cancelTag := context.WithTimeout(context.Background(), callTime)
-
-        _, _ = Ec2Man.client.CreateTags(ctxTag, &ec2.CreateTagsInput{
+        createCallInput := &ec2.CreateTagsInput{
             Resources: []string{newNatID},
             Tags: []ec2types.Tag{
-                {Key: aws.String("Name"), Value: aws.String(nameTag)},
+                {
+                    Key: aws.String("Name"), Value: aws.String(nameTag),
+                },
             },
-        })
-        cancelTag()
-    }
+        }
 
-    // Ensure AWS API calls do not hang for longer than the provided timeout
-    ctxWait, cancelWait := context.WithTimeout(context.Background(), callTime)
-    defer cancelWait()
+        // Create tags for the resource with created resource ID
+        _, _ = Ec2Man.client.CreateTags(ctx, createCallInput)
+    }
 
     waitCallInput := &ec2.DescribeNatGatewaysInput{
         NatGatewayIds: []string{newNatID},
@@ -75,7 +73,7 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration, subnetI
 
     waiter := ec2.NewNatGatewayAvailableWaiter(Ec2Man.client)
     // Wait until the NAT gateway becomes available
-    err = waiter.Wait(ctxWait, waitCallInput, callTime)
+    err = waiter.Wait(ctx, waitCallInput, callTime)
     if err != nil {
         return newNatID, fmt.Errorf("waiting for nat gateway %s available status - %w",
                                     newNatID, err)
@@ -95,8 +93,9 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration, subnetI
 //
 func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) (
                                           bool, error) {
+    // Ensure required args are present
     if natId == "" {
-        return false, fmt.Errorf("natId is empty")
+        return false, fmt.Errorf("natId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer than the provided timeout
@@ -109,18 +108,26 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) 
         },
     }
 
-    // Describe the NAT gateway by passed in ID
+    // Describe the NAT Gateway by passed in ID
     out, err := Ec2Man.client.DescribeNatGateways(ctx, describeCallInput)
     if err != nil {
+        var apiErr smithy.APIError
+
+        // If the NAT Gateway ID was not found
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "InvalidNatGatewayID.NotFound" {
+            return false, nil
+        }
+
+        // If a non API related error occured during request
         return false, fmt.Errorf("describe nat gateways - %w", err)
     }
 
-    // No NAT gateways found in the subnet
+    // No NAT Gateways found in the subnet
     if len(out.NatGateways) == 0 {
         return false, nil
     }
 
-    // Gateway found
     return true, nil
 }
 

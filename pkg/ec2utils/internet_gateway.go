@@ -2,12 +2,14 @@ package ec2utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 )
 
 //
@@ -24,13 +26,16 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
                                                         string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
 
     createCallInput := &ec2.CreateInternetGatewayInput{
         TagSpecifications: []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInternetGateway,
                 Tags: []ec2types.Tag{
-                    {Key: aws.String("Name"), Value: aws.String(nameTag)},
+                    {
+                        Key: aws.String("Name"), Value: aws.String(nameTag),
+                    },
                 },
             },
         },
@@ -38,21 +43,17 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
 
     // Create the internet gateway
     createOut, err := Ec2Man.client.CreateInternetGateway(ctx, createCallInput)
-    cancel()
     if err != nil {
         return "", fmt.Errorf("create internet gateway - %w", err)
     }
 
     // If the create internet gateway call failed to return an ID
-    if createOut.InternetGateway == nil || createOut.InternetGateway.InternetGatewayId == nil {
+    if createOut.InternetGateway == nil ||
+    createOut.InternetGateway.InternetGatewayId == nil {
         return "", fmt.Errorf("create internet gateway returned empty id")
     }
 
     igwId := *createOut.InternetGateway.InternetGatewayId
-
-    // Ensure AWS API calls do not hang for longer specified timeout
-    ctx, cancel = context.WithTimeout(context.Background(), callTime)
-    defer cancel()
 
     attachCallInput := &ec2.AttachInternetGatewayInput{
         InternetGatewayId: aws.String(igwId),
@@ -62,7 +63,8 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     // Attach the created internet gateway to the associated VPC
     _, err = Ec2Man.client.AttachInternetGateway(ctx, attachCallInput)
     if err != nil {
-        return "", fmt.Errorf("attach internet gateway %s to vpc %s - %w", igwId, vpcId, err)
+        return "", fmt.Errorf("attach internet gateway %s to vpc %s - %w",
+                              igwId, vpcId, err)
     }
 
     return igwId, nil
@@ -79,34 +81,57 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
 func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
                                                vpcId string, igwId string) (
                                                bool, error) {
-    // Ensure AWS API calls do not hang for longer specified timeout
+    // Ensure required args are present
+    if vpcId == "" || igwId == "" {
+        return false, fmt.Errorf("vpcId or igwId is missing")
+    }
+
+    // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    callInput := &ec2.DescribeInternetGatewaysInput{
-        Filters: []ec2types.Filter{
-            {
-                Name:   aws.String("attachment.vpc-id"),
-                Values: []string{vpcId},
-            },
-        },
+    input := &ec2.DescribeInternetGatewaysInput{
+        InternetGatewayIds: []string{igwId},
     }
 
-    // Get informations on any internet gateways in the VPC
-    out, err := Ec2Man.client.DescribeInternetGateways(ctx, callInput)
+    // Get the Internet Gateway based on passed in Gateway ID
+    out, err := Ec2Man.client.DescribeInternetGateways(ctx, input)
     if err != nil {
+        var apiErr smithy.APIError
+
+        // If the Gateway ID was not found
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "InvalidInternetGatewayID.NotFound" {
+            return false, nil
+        }
+
+        // If a non API related error occured during request
         return false, fmt.Errorf("describe internet gateways - %w", err)
     }
 
-    // Iterate through retrieved IGW IDs
+    // If no Internet Gatewys were found
+    if len(out.InternetGateways) == 0 {
+        return false, nil
+    }
+
+    // Iterate through retrieved Internet Gateways
     for _, igw := range out.InternetGateways {
-        // If the current IGW ID is equal to arg passed in
-        if igw.InternetGatewayId == &igwId {
-            return true, nil
+        // If the IGW ID is present and matches arg
+        if igw.InternetGatewayId != nil &&
+        *igw.InternetGatewayId == igwId {
+            // Iterate through the IGW attachments
+            for _, attachment := range igw.Attachments {
+                // If the attached VPC ID is present and matches arg
+                if attachment.VpcId != nil &&
+                *attachment.VpcId == vpcId {
+                    return true, nil
+                }
+            }
         }
     }
 
-    return false, nil
+    // IGW exists but is not attached to the provided VPC
+    return false, fmt.Errorf("igw exist but is not attached to %s", vpcId)
 }
 
 //

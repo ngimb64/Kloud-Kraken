@@ -2,7 +2,9 @@ package ec2utils
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -134,4 +136,63 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
     }
 
     return vpcId, nil
+}
+
+
+// VPCResolverForCIDR returns the VPC resolver IP for the given IPv4 CIDR.
+// AWS convention: resolver is network base + 2 (returned as /32).
+//
+// Examples:
+//   "10.1.0.0/16"  -> "10.1.0.2/32"
+//   "192.168.0.0/24" -> "192.168.0.2/32"
+//
+// Returns error if:
+//  - cidr is invalid
+//  - it's not IPv4
+//  - the prefix is too small to contain a +2 host (prefix > 30)
+//
+func (Ec2Man *Ec2Manger) VpcResolverForCidr(cidr string) (string, error) {
+    // Parse the IP and network address with CIDR
+    ip, ipnet, err := net.ParseCIDR(cidr)
+    if err != nil {
+        return "", fmt.Errorf("parse cidr %q - %w", cidr, err)
+    }
+
+    // Converts IP address to 4 byte representation
+    ip4 := ip.To4()
+    if ip4 == nil {
+        return "", fmt.Errorf("only IPv4 CIDRs supported - %s", cidr)
+    }
+
+    // Get the CIDR size
+    ones, bits := ipnet.Mask.Size()
+    if bits != 32 {
+        return "", fmt.Errorf("unexpected mask size for %s", cidr)
+    }
+
+    // Ensure CIDR is less than /30
+    if ones > 30 {
+        return "", fmt.Errorf("cidr %s is too small (/%d) to compute resolver" +
+                              " (needs prefix <= /30)", cidr, ones)
+    }
+
+    // Convert network base to uint32
+    networkStart := binary.BigEndian.Uint32(ip4)
+
+    // Compute resolver address in network
+    resolver := networkStart + 2
+
+    // Compute broadcast for sanity check
+    mask := ^uint32(0) << (32-ones)
+    broadcast := networkStart | ^mask
+
+    if resolver > broadcast {
+        return "", fmt.Errorf("computed resolver address outside CIDR %s", cidr)
+    }
+
+    // Put resolver result in buffer big endian
+    resIP := make(net.IP, 4)
+    binary.BigEndian.PutUint32(resIP, resolver)
+
+    return resIP.String() + "/32", nil
 }

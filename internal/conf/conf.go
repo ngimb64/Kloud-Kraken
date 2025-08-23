@@ -47,7 +47,7 @@ type LocalConfig struct {
     MaxMergingSize      string   `yaml:"max_merging_size"`
     MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
     MaxSizeRange        float64  `yaml:"max_size_range"`
-    NumberInstances     int      `yaml:"number_instances"`
+    NumberInstances     int32    `yaml:"number_instances"`
     Region              string   `yaml:"region"`
     RulesetPath         string   `yaml:"ruleset_path"`
 }

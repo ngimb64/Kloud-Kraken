@@ -1,8 +1,13 @@
+- Check provisioner list methods about how AWS resource Existence check function are or need fixing and review all AWS code
+    - subnet.go
+    - vpc_endpoints.go
+    - vpc.go
+
 - Finish implementing provisioner list
 
-- Research which resources should persist and which should be deleted per execution
+- Finish documentation for AWS code
 
-- Check provisioner list methods about how AWS resource Existence check function are or need fixing and review all AWS code
+- Research tips of calculating cost of resources and which should persist & which should be deleted per execution
 
 - After AWS code logic is update do extensive permissions review and make sure all policies are updated
 
