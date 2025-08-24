@@ -3,6 +3,7 @@ package ec2utils
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 )
 
 // Creates and waits for the VPC to be created.
@@ -22,11 +24,11 @@ import (
 //  - The ID of the created VPC
 //  - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
-                                   cidrBlock string) (
-                                   string, error) {
-    // Set context timeout for API call
+func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
+                                   tagName string) (string, error) {
+    // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
 
     // Format input for CreateVpc call
     createCallInput := &ec2.CreateVpcInput{
@@ -36,7 +38,7 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
                 ResourceType: ec2types.ResourceTypeVpc,
                 Tags: []ec2types.Tag{
                 {
-                    Key: aws.String("Name"), Value: aws.String("Kloud-Kraken-VPC"),
+                    Key: aws.String("Name"), Value: aws.String(tagName),
                 },
             },
         }},
@@ -44,21 +46,15 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
 
     // Create a new VPC since no valid ID was provided
     createOut, err := Ec2Man.client.CreateVpc(ctx, createCallInput)
-    cancel()
     if err != nil {
         return "", err
     }
 
     vpcId := *createOut.Vpc.VpcId
 
-    // Format input for NewVpcExistsWaiter call
     waiterCallInput := &ec2.DescribeVpcsInput{
         VpcIds: []string{vpcId},
     }
-
-    // Set context timeout for API call
-    ctx, cancel = context.WithTimeout(context.Background(), callTime)
-    defer cancel()
 
     // Allocate waiter and wait until the VPC is available
     waiter := ec2.NewVpcExistsWaiter(Ec2Man.client)
@@ -82,20 +78,31 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
                                    bool, error) {
-    // Set context timeout for API call
+    // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Check to see if the VPC exists
-    out, err := Ec2Man.client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{
+    callInput := &ec2.DescribeVpcsInput{
         VpcIds: []string{vpcId},
-    })
+    }
+
+    // Check to see if the VPC exists based on ID
+    out, err := Ec2Man.client.DescribeVpcs(ctx, callInput)
     if err != nil {
+        var apiErr smithy.APIError
+
+        // If the VPC ID was not found
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "InvalidVpcID.NotFound" {
+            return false, nil
+        }
+
+        // If a non API related error occured during request
         return false, fmt.Errorf("describe VPC - %w", err)
     }
 
     // If the ID was identified, exit early
-    if len(out.Vpcs) == 0 {
+    if out == nil || len(out.Vpcs) == 0 {
         return false, nil
     }
 
@@ -114,7 +121,8 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
-                                      cidrBlock string) (string, error) {
+                                      cidrBlock string, tagName string) (
+                                      string, error) {
     // If VPC ID is present in YAML
     if vpcId != "" {
         // Check to see if it exists in AWS enviroment
@@ -130,7 +138,7 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
     }
 
     // Create and wait until VPC is created
-    vpcId, err := Ec2Man.vpcCreate(callTime, cidrBlock)
+    vpcId, err := Ec2Man.vpcCreate(callTime, cidrBlock, tagName)
     if err != nil {
         return vpcId, err
     }

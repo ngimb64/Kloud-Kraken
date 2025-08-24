@@ -49,6 +49,7 @@ var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, e
 
 type StateConfig struct {
     BucketName           string `yaml:"bucket_name"`
+    Ec2SecurityGroupId   string `yaml:"ec2_security_group_id"`
     EipId                string `yaml:"eip_id"`
     IgwId                string `yaml:"igw_id"`
     NatGatewayId         string `yaml:"nat_gateway_id"`
@@ -58,7 +59,7 @@ type StateConfig struct {
     PublicAssociationId  string `yaml:"public_association_id"`
     PublicRouteId        string `yaml:"public_route_id"`
     PublicSubnetId       string `yaml:"public_subnet_id"`
-    Ec2SecurityGroupId   string `yaml:"ec2_security_group_id"`
+    SsmSecurityGroupId   string `yaml:"ssm_security_group_id"`
     VpcId                string `yaml:"vpc_id"`
 }
 
@@ -795,12 +796,13 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }()
 
     // Establish client to EC2 service
-    ec2Client = ec2utils.NewEc2Manager(awsConfig)
+    ec2Client = ec2utils.Ec2NewManager(awsConfig)
 
     // Check to see if the VPC exists, otherwise create one
     vpcId, err := ec2Client.VpcProvision(20 * time.Minute,
                                          stateConfig.VpcId,
-                                         appConfig.LocalConfig.CidrBlock)
+                                         appConfig.LocalConfig.CidrBlock,
+                                         "Kloud-Kraken-VPC")
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -1018,32 +1020,59 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Configure UDP rule in security group for DNS
-    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
-                                                 dnsAddr, "udp", 53, 53)
+    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, dnsAddr,
+                                               "udp", "egress", 53, 53)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
     // Configure TCP rule in security group for DNS
-    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
-                                                 dnsAddr, "tcp", 53, 53)
+    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, dnsAddr,
+                                               "tcp", "egress", 53, 53)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
     // Configure TCP rule in security group for HTTP
-    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
-                                                 "0.0.0.0/0", "tcp", 80, 80)
+    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, "0.0.0.0/0",
+                                               "tcp", "egress", 80, 80)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
     // Configure TCP rule in security group for HTTPS
-    err = ec2Client.SecurityGroupEgressProvision(5 * time.Minute, ec2SgId,
-                                                 "0.0.0.0/0", "tcp", 443, 443)
+    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, "0.0.0.0/0",
+                                               "tcp", "egress", 443, 443)
     if err != nil {
         return awsConfig, ec2Client, err
     }
+
+    // Create SSM Parameter Store security group if does not exist
+    ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute, vpcId,
+                                                     stateConfig.SsmSecurityGroupId,
+                                                     "Kloud-Kraken-SSM-SG",
+                                                     "Security group for Kloud " +
+                                                     "Kraken SSM parameter store" +
+                                                     " VPC endpoint")
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the security group was created, add ID to yaml updates map
+    if ssmSgId != "" {
+        yamlUpdates["aws_env.ssm_security_group_id"] = ssmSgId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        ssmSgId = stateConfig.SsmSecurityGroupId
+    }
+
+    // Configure TCP rule in security group for HTTPS
+    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ssmSgId, "0.0.0.0/0",
+                                               "tcp", "ingress", 443, 443)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
 
 
     // TODO: VPC network setup
@@ -1058,8 +1087,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     X Associate **private** subnets to private route tables
     //     X Create security groups for EC2
     //     X Add rules to EC2 security group to allow updates and package installation
-    //     - Create security group for SSM Parameter Store
-    //     - Add rules to SSM parameter store for allowing storing and grabbing TLS certs
+    //     X Create security group for SSM Parameter Store
+    //     X Add rules to SSM parameter store for allowing storing and grabbing TLS certs
     //     - Create VPC endpoints (e.g., S3, SSM) for private access
     //     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
     //     - Enable VPC Flow Logs for traffic monitoring and auditing
@@ -1076,7 +1105,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                              appConfig.LocalConfig.AccountId,
                                              "/kloud-kraken/tls-cert", "Kloud-Kraken")
     // Create and apply the EC2 client role
-    _, err = iamClient.IamRoleCreation(2 * time.Minute, "ClientRole",
+    _, err = iamClient.IamRoleCreation(5 * time.Minute, "ClientRole",
                                        trustPolicy, "ClientPermissions",
                                        permissionsPolicy, true)
     if err != nil {
@@ -1121,9 +1150,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Setup client to SSM
-    ssmClient := ssmutils.NewSsmManager(awsConfig)
+    ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
-    param, err := ssmClient.PutSsmParameter("/kloud-kraken/tls-cert",
+    param, err := ssmClient.SsmPutParameter("/kloud-kraken/tls-cert",
                                             string(TlsMan.CertPemBlock),
                                             1 * time.Minute)
     if err != nil {
@@ -1142,10 +1171,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Setup client to S3
-    s3Client := s3utils.NewS3Manager(awsConfig)
+    s3Client := s3utils.S3NewManager(awsConfig)
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Client.PutS3Object(stateConfig.BucketName, "client",
+    keyName, err := s3Client.S3PutObject(stateConfig.BucketName, "client",
                                          binData, 1 * time.Minute)
     if err != nil {
         return awsConfig, ec2Client, err
@@ -1163,9 +1192,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Re-setup new client to EC2 service with newly assumed role
-    ec2Client = ec2utils.NewEc2Manager(awsConfig)
+    ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
-    err = ec2Client.CreateEc2Instances(20 * time.Minute, []byte(userData),
+    err = ec2Client.Ec2CreateInstances(20 * time.Minute, []byte(userData),
                                        "ami-0eb94e3d16a6eea5f",
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,
@@ -1347,7 +1376,7 @@ func main() {
 
         defer func() {
             // Terminate the EC2 instances when processing is complete
-            termOutput, err := ec2Man.TerminateEc2Instances(time.Minute * 10)
+            termOutput, err := ec2Man.Ec2TerminateInstances(time.Minute * 10)
             if err != nil {
                 log.Printf("Error terminating EC2 instances:  %v", err)
             }

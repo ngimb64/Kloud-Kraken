@@ -69,7 +69,7 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
         return false, fmt.Errorf("eipId is missing")
     }
 
-    // Ensure API calls do not hang for longer specified timeout
+    // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
@@ -82,7 +82,7 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
     if err != nil {
         var apiErr smithy.APIError
 
-        // If the Allocation ID was not found
+        // If Allocation ID was not found
         if errors.As(err, &apiErr) &&
         apiErr.ErrorCode() == "InvalidAllocationID.NotFound" {
             return false, nil

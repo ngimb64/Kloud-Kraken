@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"time"
@@ -26,13 +27,61 @@ type S3Manager struct {
 // @Returns
 //  - The initialized S3 manager with client reference
 //
-func NewS3Manager(config aws.Config) *S3Manager {
+func S3NewManager(config aws.Config) *S3Manager {
     // Set up a new S3 client
     s3Client := s3.NewFromConfig(config)
 
     return &S3Manager{
         client:     s3Client,
     }
+}
+
+// Create an S3 bucket.
+//
+// @Parameters
+//  - bucketName:  The name of the bucket to be created
+//  - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (S3Man *S3Manager) S3BucketCreate(callTime time.Duration,
+                                       bucketName string) error {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &s3.CreateBucketInput{
+        Bucket: aws.String(bucketName),
+    }
+
+    // Create the bucket based on the bucket name in S3 manager
+    out, err := S3Man.client.CreateBucket(ctx, callInput)
+    // If the bucket was successfully created
+    if err != nil {
+        var apiErr smithy.APIError
+
+        // If an API error occured
+        if errors.As(err, &apiErr) {
+            // Get the error code
+            errCode := apiErr.ErrorCode()
+            // If the error code signals the bucket already exists
+            if errCode == "BucketAlreadyExists" ||
+            errCode == "BucketAlreadyOwnedByYou" {
+                return errors.New("S3 bucket already exists")
+            }
+        }
+
+        // If a non API related error occured during request
+        return fmt.Errorf("bucket create - %w", err)
+    }
+
+    // If no bucket was created
+    if out == nil {
+        return errors.New("S3 bucket failed to create")
+    }
+
+    return nil
 }
 
 // Checks to see if an S3 bucket already exists.
@@ -45,74 +94,42 @@ func NewS3Manager(config aws.Config) *S3Manager {
 //  - Boolean toggle whether the bucket exists or not
 //  - Error if it occurs, otherwise nil on success
 //
-func (S3Man *S3Manager) BucketExists(bucketName string, callTime time.Duration) (
-                                     bool, error) {
+func (S3Man *S3Manager) S3BucketExists(callTime time.Duration,
+                                       bucketName string) (
+                                       bool, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
+
+    callInput := &s3.HeadBucketInput{
+        Bucket: aws.String(bucketName),
+    }
 
     // Check if the bucket exists and get information
-    _, err := S3Man.client.HeadBucket(ctx, &s3.HeadBucketInput{
-        Bucket: aws.String(bucketName),
-    })
-    // If there was no error, bucket exists and is accessible
-    if err == nil {
-        return true, nil
-    }
+    out, err := S3Man.client.HeadBucket(ctx, callInput)
+    if err != nil {
+        var apiErr smithy.APIError
 
-    var apiErr smithy.APIError
-
-    // If an API error occured
-    if errors.As(err, &apiErr) {
-        // Get the error code
-        errCode := apiErr.ErrorCode()
-        // If the error code signals the buck does not exist
-        if errCode == "NotFound" || errCode == "NoSuchBucket" {
-            return false, nil
+        // If an API error occured
+        if errors.As(err, &apiErr) {
+            // Get the error code
+            errCode := apiErr.ErrorCode()
+            // If the error code signals the buck does not exist
+            if errCode == "EndpointNotFound" || errCode == "NoSuchBucket" {
+                return false, nil
+            }
         }
+
+        // If a non API related error occured during request
+        return false, fmt.Errorf("bucket exists - %w", err)
     }
 
-    // Any other error (403 Forbidden, network, etc)
-    return false, err
-}
-
-// Create an S3 bucket.
-//
-// @Parameters
-//  - bucketName:  The name of the bucket to be created
-//  - callTime:  The length of time the API call is allowed to execute
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) error {
-    // Ensure AWS API calls do not hang for longer specified timeout
-    ctx, cancel := context.WithTimeout(context.Background(), callTime)
-    defer cancel()
-
-    // Create the bucket based on the bucket name in S3 manager
-    _, err := S3Man.client.CreateBucket(ctx, &s3.CreateBucketInput{
-        Bucket: aws.String(bucketName),
-    })
-    // If the bucket was successfully created
-    if err == nil {
-        return nil
+    // If no bucket exists
+    if out == nil || len(*out.BucketRegion) == 0 {
+        return false, nil
     }
 
-    var apiErr smithy.APIError
-
-    // If an API error occured
-    if errors.As(err, &apiErr){
-        // Get the error code
-        errCode := apiErr.ErrorCode()
-        // If the error code signals the bucket already exists
-        if errCode == "BucketAlreadyExists" || errCode == "BucketAlreadyOwnedByYou" {
-            return errors.New("S3 bucket already exists")
-        }
-    }
-
-    // For any other errors
-    return err
+    return true, nil
 }
 
 // Retrieve object from S3 bucket.
@@ -126,24 +143,31 @@ func (S3Man *S3Manager) CreateBucket(bucketName string, callTime time.Duration) 
 //  - The retrieved S3 object as a byte slice
 //  - Error if it occurs, otherwise nil on success
 //
-func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
+func (S3Man *S3Manager) S3GetObject(bucketName string, key string,
                                     callTime time.Duration) (
-                                    []byte, error) {
+                                    _ []byte, err error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Retrieve the object from S3 storage
-    resp, err := S3Man.client.GetObject(ctx, &s3.GetObjectInput{
+    callInput := &s3.GetObjectInput{
         Bucket: aws.String(bucketName),
         Key:    aws.String(key),
-    })
+    }
+
+    // Retrieve the object from S3 storage
+    resp, err := S3Man.client.GetObject(ctx, callInput)
     if err != nil {
         return nil, err
     }
 
     // Close response body on local exit
-    defer resp.Body.Close()
+    defer func() {
+        cerr := resp.Body.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing S3 Get request - %w", err))
+        }
+    }()
 
     // Read all the data from the request
     rawData, err := io.ReadAll(resp.Body)
@@ -166,10 +190,8 @@ func (S3Man *S3Manager) GetS3Object(bucketName string, key string,
 //  - The final key name that is used
 //  - Error if it occurs, otherwise nil on success
 //
-func (S3Man *S3Manager) PutS3Object(bucketName string, key string, data []byte,
+func (S3Man *S3Manager) S3PutObject(bucketName string, key string, data []byte,
                                     callTime time.Duration) (string, error) {
-    var apiErr smithy.APIError
-
     // Keep attemping key with number added until unused is found
     for i := 1; ; i++ {
         // Add number to end of key name
@@ -177,27 +199,29 @@ func (S3Man *S3Manager) PutS3Object(bucketName string, key string, data []byte,
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
-        // Put the object in S3 storage based on key
-        _, err := S3Man.client.PutObject(ctx, &s3.PutObjectInput{
+        callInput := &s3.PutObjectInput{
             Bucket:      aws.String(bucketName),
             Key:         aws.String(candidate),
             Body:        bytes.NewReader(data),
             IfNoneMatch: aws.String("*"),
-        })
-        // Cancel context per API call
-        cancel()
-
-        // If the candiate was successful
-        if err == nil {
-            return candidate, nil
         }
 
-        // If the error is an API error an its code signals object already exists
-        if errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed" {
+        // Put the object in S3 storage based on key
+        _, err := S3Man.client.PutObject(ctx, callInput)
+        // Cancel context per API call
+        cancel()
+        if err != nil {
+            return "", err
+        }
+
+        var apiErr smithy.APIError
+
+        // If API error says object already exists
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "PreconditionFailed" {
             continue
         }
 
-        // Otherwise an undesired error occured
-        return "", err
+        return candidate, nil
     }
 }

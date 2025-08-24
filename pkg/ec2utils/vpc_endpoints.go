@@ -87,6 +87,7 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration, vpcId s
         return "", fmt.Errorf("securityGroupIds required for interface endpoint")
     }
 
+    // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
@@ -192,6 +193,7 @@ func (Ec2Man *Ec2Manger) vpcEndpointExists(callTime time.Duration, vpcId string,
         return false, "", fmt.Errorf("serviceName is empty")
     }
 
+    // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 

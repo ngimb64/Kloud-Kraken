@@ -24,7 +24,7 @@ type SsmManager struct {
 // @Returns
 //  - The initialized SSM manager with client reference
 //
-func NewSsmManager(config aws.Config) *SsmManager {
+func SsmNewManager(config aws.Config) *SsmManager {
     // Set up a new SSM client
     ssmClient := ssm.NewFromConfig(config)
 
@@ -43,17 +43,20 @@ func NewSsmManager(config aws.Config) *SsmManager {
 //  - The retrieved parameter from param store
 //  - Error if it occurs, otherwise nil on success
 //
-func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Duration) (
+func (SsmMan *SsmManager) SsmGetParameter(parameter string,
+                                          callTime time.Duration) (
                                           string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Get parameter from AWS SSM Parameter Store
-    output, err := SsmMan.client.GetParameter(ctx, &ssm.GetParameterInput{
+    callInput := &ssm.GetParameterInput{
         Name:           aws.String(parameter),
         WithDecryption: aws.Bool(true),
-    })
+    }
+
+    // Get parameter from AWS SSM Parameter Store
+    output, err := SsmMan.client.GetParameter(ctx, callInput)
     if err != nil {
         return "", err
     }
@@ -72,7 +75,7 @@ func (SsmMan *SsmManager) GetSsmParameter(parameter string, callTime time.Durati
 //  - The path where the parameter is stored in param store
 //  - Error if it occurs, otherwise nil on success
 //
-func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
+func (SsmMan *SsmManager) SsmPutParameter(parameter string, data string,
                                           callTime time.Duration) (
                                           string, error) {
     var existsErr *ssmtypes.ParameterAlreadyExists
@@ -84,16 +87,17 @@ func (SsmMan *SsmManager) PutSsmParameter(parameter string, data string,
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
-        // Put parameter into AWS SSM Parameter Store
-        _, err := SsmMan.client.PutParameter(ctx, &ssm.PutParameterInput{
+        callInput := &ssm.PutParameterInput{
             Name:      aws.String(candidate),
             Value:     aws.String(data),
             Type:      ssmtypes.ParameterTypeSecureString,
             Overwrite: aws.Bool(false),
-        })
+        }
+
+        // Put parameter into AWS SSM Parameter Store
+        _, err := SsmMan.client.PutParameter(ctx, callInput)
         // Cancel context per API call
         cancel()
-
         if err != nil {
             // If the parameter already exists in SSM Parameter Store
             if errors.As(err, &existsErr) {

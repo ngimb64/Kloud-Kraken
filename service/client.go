@@ -716,9 +716,9 @@ func main() {
         }
 
         // Establish client to SSM
-        ssmMan := ssmutils.NewSsmManager(awsConfig)
+        ssmMan := ssmutils.SsmNewManager(awsConfig)
         // Retrieve the server TLS cert from SSM param store
-        certPemString, err := ssmMan.GetSsmParameter(certSsmParam, 1*time.Minute)
+        certPemString, err := ssmMan.SsmGetParameter(certSsmParam, 1*time.Minute)
         if err != nil {
             log.Fatalf("Error getting server TLS cert via SSM Param Store:  %v", err)
         }

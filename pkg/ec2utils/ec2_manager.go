@@ -25,7 +25,7 @@ type Ec2Manger struct {
 // @Returns
 //  - The initialized EC2 manager with populated data
 //
-func NewEc2Manager(awsConfig aws.Config) *Ec2Manger {
+func Ec2NewManager(awsConfig aws.Config) *Ec2Manger {
     // Setup a new EC2 client
     ec2Client := ec2.NewFromConfig(awsConfig)
 
@@ -51,7 +51,7 @@ func NewEc2Manager(awsConfig aws.Config) *Ec2Manger {
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) CreateEc2Instances(callTime time.Duration,
+func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
                                             userData []byte,
                                             ami string,
                                             instanceType string,
@@ -170,7 +170,7 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
 //  - The output from the EC2 termination API call
 //  - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) TerminateEc2Instances(callTime time.Duration) (
+func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
                                                *ec2.TerminateInstancesOutput, error) {
     var ids []string
 
