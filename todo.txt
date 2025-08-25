@@ -1,6 +1,3 @@
-- Check provisioner list methods about how AWS resource Existence check function are or need fixing and review all AWS code
-    - vpc_endpoints.go
-
 - Finish implementing provisioner list
 
 - Finish documentation for AWS code

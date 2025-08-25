@@ -121,6 +121,11 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
                                          vpcID string, cidrBlock string,
                                          az string, isPublic bool) (
                                          string, error) {
+    // Ensure required args are present
+    if vpcID == "" || cidrBlock == "" || az == "" {
+        return "", fmt.Errorf("vpcId or cidrBlock or az is missing")
+    }
+
     // If subnet ID is present in YAML
     if subnetId != "" {
         // Check to see if it exists in AWS enviroment
@@ -136,11 +141,5 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
     }
 
     // Create new subnet
-    subnetId, err := Ec2Man.subnetCreate(callTime, vpcID, cidrBlock,
-                                         az, isPublic)
-    if err != nil {
-        return "", err
-    }
-
-    return subnetId, nil
+    return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
 }

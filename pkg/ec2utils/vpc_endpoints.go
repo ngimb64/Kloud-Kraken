@@ -20,40 +20,34 @@ import (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration, vpcId string,
-                                               routeTableIds []string, region string) (
+func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
+                                               vpcId string,
+                                               serviceName string,
+                                               routeTableIds []string) (
                                                string, error) {
-    if vpcId == "" {
-        return "", fmt.Errorf("vpcId is empty")
-    }
-
-    if len(routeTableIds) == 0 {
-        return "", fmt.Errorf("routeTableIds required for gateway endpoint")
-    }
-
-    if region == "" {
-        return "", fmt.Errorf("region is empty")
-    }
-
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    serviceName := "com.amazonaws." + region + ".s3"
-    in := &ec2.CreateVpcEndpointInput{
-        VpcId:           aws.String(vpcId),
+    callInput := &ec2.CreateVpcEndpointInput{
+        RouteTableIds:   routeTableIds,
         ServiceName:     aws.String(serviceName),
         VpcEndpointType: ec2types.VpcEndpointTypeGateway,
-        RouteTableIds:   routeTableIds,
+        VpcId:           aws.String(vpcId),
     }
 
-    out, err := Ec2Man.client.CreateVpcEndpoint(ctx, in)
+    // Create the gateway VPC endpoint
+    out, err := Ec2Man.client.CreateVpcEndpoint(ctx, callInput)
     if err != nil {
-        return "", fmt.Errorf("create gateway vpc endpoint (%s) - %w", serviceName, err)
+        return "", fmt.Errorf("create gateway vpc endpoint (%s) - %w",
+                              serviceName, err)
     }
 
-    if out == nil || out.VpcEndpoint == nil || out.VpcEndpoint.VpcEndpointId == nil {
-        return "", fmt.Errorf("createVpcEndpoint returned nil for %s", serviceName)
+    // If VPC endpoint creation failed to return output
+    if out == nil || out.VpcEndpoint == nil ||
+    out.VpcEndpoint.VpcEndpointId == nil {
+        return "", fmt.Errorf("createVpcEndpoint returned nil for %s",
+                              serviceName)
     }
 
     return aws.ToString(out.VpcEndpoint.VpcEndpointId), nil
@@ -67,47 +61,37 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration, vpcId str
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration, vpcId string,
-                                                 serviceName string, subnetIds []string,
-                                                 securityGroupIds []string, privateDns bool) (
+func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
+                                                 vpcId string,
+                                                 serviceName string,
+                                                 subnetIds []string,
+                                                 securityGroupIds []string) (
                                                  string, error) {
-    if vpcId == "" {
-        return "", fmt.Errorf("vpcId is empty")
-    }
-
-    if serviceName == "" {
-        return "", fmt.Errorf("serviceName is empty")
-    }
-
-    if len(subnetIds) == 0 {
-        return "", fmt.Errorf("subnetIds required for interface endpoint")
-    }
-
-    if len(securityGroupIds) == 0 {
-        return "", fmt.Errorf("securityGroupIds required for interface endpoint")
-    }
-
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     callInput := &ec2.CreateVpcEndpointInput{
-        VpcId:             aws.String(vpcId),
-        ServiceName:       aws.String(serviceName),
-        VpcEndpointType:   ec2types.VpcEndpointTypeInterface,
-        SubnetIds:         subnetIds,
+        PrivateDnsEnabled: aws.Bool(true),
         SecurityGroupIds:  securityGroupIds,
-        PrivateDnsEnabled: aws.Bool(privateDns),
+        ServiceName:       aws.String(serviceName),
+        SubnetIds:         subnetIds,
+        VpcEndpointType:   ec2types.VpcEndpointTypeInterface,
+        VpcId:             aws.String(vpcId),
     }
 
+    // Create the interface VPC endpoint
     out, err := Ec2Man.client.CreateVpcEndpoint(ctx, callInput)
     if err != nil {
         return "", fmt.Errorf("create interface vpc endpoint (%s) - %w",
                               serviceName, err)
     }
 
-    if out == nil || out.VpcEndpoint == nil || out.VpcEndpoint.VpcEndpointId == nil {
-        return "", fmt.Errorf("createVpcEndpoint returned nil for %s", serviceName)
+    // If VPC endpoint creation failed to return output
+    if out == nil || out.VpcEndpoint == nil ||
+    out.VpcEndpoint.VpcEndpointId == nil {
+        return "", fmt.Errorf("createVpcEndpoint returned nil for %s",
+                              serviceName)
     }
 
     return aws.ToString(out.VpcEndpoint.VpcEndpointId), nil
@@ -121,25 +105,41 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration, vpcId s
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration, region string,
-                                             vpcId string, routeTableIds []string) (
+func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
+                                             endpointId string,
+                                             region string, vpcId string,
+                                             routeTableIds []string) (
                                              string, error) {
-    if region == "" {
-        return "", fmt.Errorf("region is empty")
+    // Ensure required args are present
+    if vpcId == "" || region == "" {
+        return "", fmt.Errorf("vpcId or region is missing")
     }
 
+    // Ensure a route table ID was passed in
+    if len(routeTableIds) == 0 {
+        return "", fmt.Errorf("routeTableIds is missing entries")
+    }
+
+    // Set the service name for VPC Endpoint
     serviceName := "com.amazonaws." + region + ".s3"
 
-    exists, epId, err := Ec2Man.vpcEndpointExists(callTime, vpcId, serviceName)
-    if err != nil {
-        return "", err
+    // If VPC Endpoint ID is present in state file
+    if endpointId != "" {
+        // Check to see if it exists in AWS environment
+        exists, epId, err := Ec2Man.VpcEndpointExists(callTime, endpointId,
+                                                      vpcId, serviceName)
+        if err != nil {
+            return "", err
+        }
+
+        // If the VPC Endpoint ID already exists, exit early
+        if exists {
+            return epId, nil
+        }
     }
 
-    if exists {
-        return epId, nil
-    }
-
-    return Ec2Man.gatewayEndpointCreate(callTime, vpcId, routeTableIds, region)
+    return Ec2Man.gatewayEndpointCreate(callTime, vpcId, serviceName,
+                                        routeTableIds)
 }
 
 // SSM provisioner: tiny function that reuses vpcEndpointExists + interfaceEndpointCreate.
@@ -150,28 +150,42 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration, region stri
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration, region string,
+func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
+                                              endpointId string, region string,
                                               vpcId string, subnetIds []string,
                                               securityGroupIds []string) (
                                               string, error) {
-    if region == "" {
-        return "", fmt.Errorf("region is empty")
+    // Ensure required args are present
+    if region == "" || vpcId == "" {
+        return "", fmt.Errorf("region or vpcId is missing")
     }
 
+    // Ensure Subnet IDs and Security Group IDs have entries
+    if len(subnetIds) == 0 || len(securityGroupIds) == 0 {
+        return "", fmt.Errorf("subnetIds or securityGroupIds is missing entries")
+    }
+
+    // Set the service name for VPC Endpoint
     serviceName := "com.amazonaws." + region + ".ssm"
 
-    exists, epId, err := Ec2Man.vpcEndpointExists(callTime, vpcId, serviceName)
-    if err != nil {
-        return "", err
-    }
+    // If VPC Endpoint ID is present in state file
+    if endpointId != "" {
+        // Check to see if it exists in AWS environment
+        exists, epId, err := Ec2Man.VpcEndpointExists(callTime, endpointId,
+                                                      vpcId, serviceName)
+        if err != nil {
+            return "", err
+        }
 
-    if exists {
-        return epId, nil
+        // If the VPC Endpoint ID already exists, exit early
+        if exists {
+            return epId, nil
+        }
     }
 
     // Private DNS enabled for SSM
     return Ec2Man.interfaceEndpointCreate(callTime, vpcId, serviceName,
-                                          subnetIds, securityGroupIds, true)
+                                          subnetIds, securityGroupIds)
 }
 
 // Generic existence checker usable by S3, SSM, etc.
@@ -182,23 +196,25 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration, region str
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) vpcEndpointExists(callTime time.Duration, vpcId string,
+func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
+                                           endpointId string, vpcId string,
                                            serviceName string) (
                                            bool, string, error) {
-    if vpcId == "" {
-        return false, "", fmt.Errorf("vpcId is empty")
-    }
-
-    if serviceName == "" {
-        return false, "", fmt.Errorf("serviceName is empty")
+    // Ensure required args are present
+    if endpointId == "" || vpcId == "" || serviceName == "" {
+        return false, "", fmt.Errorf("endpointId or vpcId or serviceName is missing")
     }
 
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    in := &ec2.DescribeVpcEndpointsInput{
+    callInput := &ec2.DescribeVpcEndpointsInput{
         Filters: []ec2types.Filter{
+            {
+                Name: aws.String("vpc-endpoint-id"),
+                Values: []string{endpointId},
+            },
             {
                 Name:   aws.String("vpc-id"),
                 Values: []string{vpcId},
@@ -210,17 +226,21 @@ func (Ec2Man *Ec2Manger) vpcEndpointExists(callTime time.Duration, vpcId string,
         },
     }
 
-    out, err := Ec2Man.client.DescribeVpcEndpoints(ctx, in)
+    // Get VPC endpoint based in specified filters
+    out, err := Ec2Man.client.DescribeVpcEndpoints(ctx, callInput)
     if err != nil {
         var apiErr smithy.APIError
-        // No stable NotFound code for DescribeVpcEndpoints; treat API errors as "not exists"
-        if errors.As(err, &apiErr) {
+
+        // If the VPC Endpoint was not found
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "InvalidVpcEndpoint.NotFound" {
             return false, "", nil
         }
 
         return false, "", fmt.Errorf("describe vpc endpoints - %w", err)
     }
 
+    // If no VPC Endpoints were retrieved
     if out == nil || len(out.VpcEndpoints) == 0 {
         return false, "", nil
     }

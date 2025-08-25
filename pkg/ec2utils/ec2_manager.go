@@ -171,7 +171,8 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
-                                               *ec2.TerminateInstancesOutput, error) {
+                                               *ec2.TerminateInstancesOutput,
+                                               error) {
     var ids []string
 
     // Ensure AWS API calls do not hang for longer specified timeout

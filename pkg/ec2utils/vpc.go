@@ -78,6 +78,11 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
 //
 func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
                                    bool, error) {
+    // Ensure required arg is present
+    if vpcId == "" {
+        return false, fmt.Errorf("vpcId is missing")
+    }
+
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -123,7 +128,12 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
 func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
                                       cidrBlock string, tagName string) (
                                       string, error) {
-    // If VPC ID is present in YAML
+    // Ensure required args are present
+    if cidrBlock == "" || tagName == "" {
+        return "", fmt.Errorf("cidrBlock or tagName is missing")
+    }
+
+    // If VPC ID is present in state file
     if vpcId != "" {
         // Check to see if it exists in AWS enviroment
         vpcExists, err := Ec2Man.VpcExists(callTime, vpcId)
@@ -138,12 +148,7 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
     }
 
     // Create and wait until VPC is created
-    vpcId, err := Ec2Man.vpcCreate(callTime, cidrBlock, tagName)
-    if err != nil {
-        return vpcId, err
-    }
-
-    return vpcId, nil
+    return Ec2Man.vpcCreate(callTime, cidrBlock, tagName)
 }
 
 

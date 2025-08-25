@@ -20,8 +20,10 @@ import (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration, subnetID string,
-                                                 eipId string, nameTag string) (
+func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
+                                                 subnetID string,
+                                                 eipId string,
+                                                 nameTag string) (
                                                  string, error) {
     // Ensure required args are present
     if subnetID == ""  || eipId == "" {
@@ -91,7 +93,8 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration, subnetI
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) (
+func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
+                                          natId string) (
                                           bool, error) {
     // Ensure required args are present
     if natId == "" {
@@ -123,7 +126,7 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) 
         return false, fmt.Errorf("describe nat gateways - %w", err)
     }
 
-    // No NAT Gateways found in the subnet
+    // If no NAT Gateways found in the subnet
     if len(out.NatGateways) == 0 {
         return false, nil
     }
@@ -142,7 +145,12 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration, natId string) 
 func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId string,
                                              subnetId string, eipId string,
                                              nameTag string) (string, error) {
-    // If nat_id is present in yaml
+    // Ensure required args are present
+    if subnetId == "" || eipId == "" {
+        return "", fmt.Errorf("subnetId or eipId is missing")
+    }
+
+    // If nat_id is present in state file
     if natId != "" {
         // Check to see if it exists in AWS enviroment
         exists, err := Ec2Man.NatGatewayExists(callTime, natId)
@@ -157,11 +165,6 @@ func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId strin
     }
 
     // Create and wait for a new NAT gateway
-    natId, err := Ec2Man.natGatewayCreateAndWait(callTime, subnetId,
-                                                 eipId, nameTag)
-    if err != nil {
-        return "", err
-    }
-
-    return natId, nil
+    return Ec2Man.natGatewayCreateAndWait(callTime, subnetId,
+                                          eipId, nameTag)
 }

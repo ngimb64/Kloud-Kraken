@@ -20,7 +20,7 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
-                                         eipId string, err error) {
+                                         string, error) {
     // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -111,7 +111,7 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
 func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
                                             eipId string) (
                                             string, error) {
-    // If Elastic IP ID is present in yaml
+    // If Elastic IP ID is present in state file
     if eipId != "" {
         // Check to see if it exists in AWS enviroment
         eipExists, err := Ec2Man.ElasticIPExists(callTime, eipId)
@@ -126,10 +126,5 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
     }
 
     // Create and wait until VPC is created
-    eipId, err := Ec2Man.elasticIPCreate(callTime)
-    if err != nil {
-        return eipId, err
-    }
-
-    return eipId, nil
+    return Ec2Man.elasticIPCreate(callTime)
 }

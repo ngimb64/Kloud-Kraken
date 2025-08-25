@@ -138,10 +138,16 @@ func (Ec2Man *Ec2Manger) SecurityGroupExists(callTime time.Duration,
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration, vpcId string,
-                                                sgId string, groupName string,
+func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
+                                                sgId string, vpcId string,
+                                                groupName string,
                                                 description string) (
                                                 string, error) {
+    // Ensure required args are present
+    if vpcId == "" || groupName == "" || description == "" {
+        return "", fmt.Errorf("vpcId or groupName or description is missing")
+    }
+
     // If Securityy Group IP ID is present in YAML
     if sgId != "" {
         exists, err := Ec2Man.SecurityGroupExists(callTime, sgId)
@@ -156,11 +162,5 @@ func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration, vpcId st
     }
 
     // Create a new Security Group
-    newSgId, err := Ec2Man.securityGroupCreate(callTime, vpcId,
-                                               groupName, description)
-    if err != nil {
-        return "", err
-    }
-
-    return newSgId, nil
+    return Ec2Man.securityGroupCreate(callTime, vpcId, groupName, description)
 }

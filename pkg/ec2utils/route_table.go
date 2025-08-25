@@ -23,12 +23,12 @@ import (
 //
 func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId string,
                                                    igwId string, natId string,
-                                                   subnetId string, destCidr string,
-                                                   nameTag string) (
+                                                   destCidr string, nameTag string,
+                                                   subnetId string) (
                                                    string, error) {
     // Ensure required arg is present
-    if vpcId == "" {
-        return "", fmt.Errorf("vpcId is required")
+    if vpcId == "" || destCidr == "" {
+        return "", fmt.Errorf("vpcId or destCidr is missing")
     }
 
     // Ensure either one of the two args are set
@@ -180,7 +180,17 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
                                              natId string, subnetId string,
                                              destCidr string, nameTag string) (
                                              string, error) {
-    // If route_table_id is present in YAML
+    // Ensure required arg is present
+    if vpcId == "" || destCidr == "" {
+        return "", fmt.Errorf("vpcId or destCidr is missing")
+    }
+
+    // Ensure either one of the two args are set
+    if (igwId == "") == (natId == "") {
+        return "", fmt.Errorf("either igwId or natId must be provided")
+    }
+
+    // If route_table_id is present in state file
     if rtId != "" {
         // If a matching route table exists return it
         exists, err := Ec2Man.RouteTableExists(callTime, rtId)
@@ -195,11 +205,6 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
     }
 
     // Create a new route table with the chosen target and optionally associate it
-    rtId, err := Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId, natId,
-                                                  subnetId, destCidr, nameTag)
-    if err != nil {
-        return "", err
-    }
-
-    return rtId, nil
+    return Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId, natId,
+                                            destCidr, nameTag, subnetId)
 }

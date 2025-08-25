@@ -142,9 +142,16 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration, igwId string,
-                                                  vpcId string) (string, error) {
-    // If IGW ID is present in YAML
+func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
+                                                  igwId string,
+                                                  vpcId string) (
+                                                  string, error) {
+    // Ensure required args are present
+    if vpcId == "" {
+        return "", fmt.Errorf("vpcId is missing")
+    }
+
+    // If IGW ID is present in state file
     if igwId != "" {
         // Check to see if it exists in AWS enviroment
         igwExists, err := Ec2Man.InternetGatewayExists(callTime, vpcId, igwId)
@@ -159,11 +166,6 @@ func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration, igwId 
     }
 
     // Create new internet gateway
-    subnetId, err := Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId,
-                                                           "Kloud-Kraken-IGW")
-    if err != nil {
-        return "", err
-    }
-
-    return subnetId, nil
+    return Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId,
+                                                 "Kloud-Kraken-IGW")
 }

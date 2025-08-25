@@ -18,7 +18,7 @@ import (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) AssociateRouteTableToSubnet(callTime time.Duration,
+func (Ec2Man *Ec2Manger) associateRouteTableToSubnet(callTime time.Duration,
                                                      routeTableId string,
                                                      subnetId string) (
                                                      string, error) {
@@ -66,8 +66,9 @@ func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
                                            subnetId string) (
                                            bool, error) {
     // Ensure required args are present
-    if associationId == "" || routeTableId == "" {
-        return false, fmt.Errorf("associationId and routeTableId are required")
+    if associationId == "" || routeTableId == "" || subnetId == "" {
+        return false, fmt.Errorf("associationId or routeTableId or " +
+                                 "subnetId is missing")
     }
 
     // Ensure API calls do not hang for longer specified timeout
@@ -130,27 +131,26 @@ func (Ec2Man *Ec2Manger) RouteTableAssociationProvision(callTime time.Duration,
                                                         routeTableId string,
                                                         subnetId string) (
                                                         string, error) {
-    // If the route table associate ID is present in YAML
+    // Ensure required args are present
+    if routeTableId == "" || subnetId == "" {
+        return "", fmt.Errorf("routeTableId or subnetId is missing")
+    }
+
+    // If the route table associate ID is present in state file
     if associationId != "" {
-        // If association already exists return it
+        // Check to see if it exists in AWS environment
         exists, err := Ec2Man.AssociationExists(callTime, associationId,
                                                 routeTableId, subnetId)
         if err != nil {
             return "", err
         }
 
+        // If the route table association exists
         if exists {
             return "", nil
         }
     }
 
-    // Create a new association
-    associationId, err := Ec2Man.AssociateRouteTableToSubnet(callTime,
-                                                             routeTableId,
-                                                             subnetId)
-    if err != nil {
-        return "", err
-    }
-
-    return associationId, nil
+    // Create a new association from route table to subnet
+    return Ec2Man.associateRouteTableToSubnet(callTime, routeTableId, subnetId)
 }

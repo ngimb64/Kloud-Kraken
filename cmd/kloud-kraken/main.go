@@ -996,9 +996,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create EC2 security group if does not exist
-    ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute, vpcId,
+    ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.Ec2SecurityGroupId,
-                                                     "Kloud-Kraken-EC2-SG",
+                                                     vpcId, "Kloud-Kraken-EC2-SG",
                                                      "Security group for Kloud" +
                                                      " Kraken EC2 instances")
     if err != nil {
@@ -1048,9 +1048,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Create SSM Parameter Store security group if does not exist
-    ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute, vpcId,
+    ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.SsmSecurityGroupId,
-                                                     "Kloud-Kraken-SSM-SG",
+                                                     vpcId, "Kloud-Kraken-SSM-SG",
                                                      "Security group for Kloud " +
                                                      "Kraken SSM parameter store" +
                                                      " VPC endpoint")

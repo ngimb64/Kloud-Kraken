@@ -92,7 +92,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
                                                  bool, error) {
     // Ensure required args are present
     if sgId == "" || cidr == "" || proto == "" {
-        return false, fmt.Errorf("sgId or cidr or protocol is missing")
+        return false, fmt.Errorf("sgId or cidr or proto is missing")
     }
 
     // Ensure protocol is all lowercase
@@ -206,6 +206,11 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleProvision(callTime time.Duration,
                                                     proto string, direction string,
                                                     minPort int32,
                                                     maxPort int32) error {
+    // Ensure required args are present
+    if cidr == "" || proto == "" || direction == "" {
+        return fmt.Errorf("sgId or cidr or proto is missing")
+    }
+
     // If Security Group ID is present in YAML
     if sgId != "" {
         exists, err := Ec2Man.SecurityGroupRuleExists(callTime, sgId, cidr,
@@ -221,11 +226,6 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleProvision(callTime time.Duration,
     }
 
     // Create egress security group
-    err := Ec2Man.securityGroupRuleCreate(callTime, sgId, cidr,
-                                          direction, minPort, maxPort)
-    if err != nil {
-        return err
-    }
-
-    return nil
+    return Ec2Man.securityGroupRuleCreate(callTime, sgId, cidr, direction,
+                                          minPort, maxPort)
 }
