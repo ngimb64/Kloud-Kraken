@@ -60,7 +60,6 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
                                             roleName string,
                                             name string,
                                             securityGroupIds []string,
-                                            securityGroups []string,
                                             subnetId string) (
                                             error) {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -94,11 +93,6 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     // If there security groups IDs to apply
     if len(securityGroupIds) > 0 {
         input.SecurityGroupIds = securityGroupIds
-    }
-
-    // If there are security group names to apply
-    if len(securityGroups) > 0 {
-        input.SecurityGroups = securityGroups
     }
 
     // If there is specified subnet to apply

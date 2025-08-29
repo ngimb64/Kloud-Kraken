@@ -15,11 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
@@ -51,7 +50,6 @@ var ReceivedDir = "/tmp/received"      // Path where cracked hashes & client log
 var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
 
 type StateConfig struct {
-    BucketName           string `yaml:"bucket_name"`
     Ec2SecurityGroupId   string `yaml:"ec2_security_group_id"`
     EipId                string `yaml:"eip_id"`
     FlowLogId            string `yaml:"flow_log_id"`
@@ -63,6 +61,9 @@ type StateConfig struct {
     PublicAssociationId  string `yaml:"public_association_id"`
     PublicRouteId        string `yaml:"public_route_id"`
     PublicSubnetId       string `yaml:"public_subnet_id"`
+    S3BucketName         string `yaml:"s3_bucket_name"`
+    S3VpcEndpointId      string `yaml:"s3_vpc_endpoint_id"`
+    SsmVpcEndpointId     string `yaml:"ssm_vpc_endpoint_id"`
     SsmSecurityGroupId   string `yaml:"ssm_security_group_id"`
     VpcId                string `yaml:"vpc_id"`
 }
@@ -594,6 +595,27 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     var stateData []byte
     var yamlUpdates map[string]string
 
+
+    // TODO: VPC network setup
+    //    X Create VPC with CIDR block
+    //    X Create and attach Internet Gateway (IGW) to the VPC
+    //    X Allocate Elastic IP for NAT Gateway
+    //    X Create public and private subnets within the VPC
+    //    X Create NAT Gateway in public subnet (uses Elastic IP)
+    //    X Create route table for public subnets: 0.0.0.0/0 → IGW
+    //    X Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
+    //    X Associate **public** subnets to public route table
+    //    X Associate **private** subnets to private route tables
+    //    X Create security groups for EC2
+    //    X Add rules to EC2 security group to allow updates and package installation
+    //    X Create security group for SSM Parameter Store
+    //    X Add rules to SSM parameter store for allowing storing and grabbing TLS certs
+    //    X Create VPC endpoints (e.g., S3, SSM) for private access
+    //    X Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
+    //    X Generate role and trust policy for VPC Flow Logs
+    //    X Enable VPC Flow Logs for traffic monitoring and auditing
+
+
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, _, _, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
                                                    1 * time.Minute)
@@ -664,8 +686,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Check to see if IGW exists, otherwise create & attach one
     igwId, err := ec2Client.InternetGatewayProvision(10 * time.Minute,
-                                                     stateConfig.IgwId,
-                                                     vpcId)
+                                                     stateConfig.IgwId, vpcId,
+                                                     "Kloud-Kraken-IGW")
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -792,7 +814,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         publicRouteId = stateConfig.PublicRouteId
     }
 
-    // Create route table for subnets to NAT Gateway if does not exist
+    // Create route table for subnets to NAT Gateway if it does not exist
     privateRouteId, err := ec2Client.RouteTableProvision(5 * time.Minute,
                                                          stateConfig.PrivateRouteId,
                                                          vpcId, "", natGatewayId,
@@ -842,7 +864,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         privateAssocId = stateConfig.PrivateAssociationId
     }
 
-    // Create EC2 security group if does not exist
+    // Create EC2 security group if it does not exist
     ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.Ec2SecurityGroupId,
                                                      vpcId, "Kloud-Kraken-EC2-SG",
@@ -894,7 +916,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-    // Create SSM Parameter Store security group if does not exist
+    // Create SSM Parameter Store security group if it does not exist
     ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.SsmSecurityGroupId,
                                                      vpcId, "Kloud-Kraken-SSM-SG",
@@ -920,28 +942,58 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
+    // Create VPC endpoint for S3 if it does not exist
+    s3VpcEndPointId, err := ec2Client.S3EndpointProvision(5 * time.Minute,
+                                                          stateConfig.S3VpcEndpointId,
+                                                          appConfig.LocalConfig.Region,
+                                                          vpcId, []string{privateRouteId})
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
 
+    // If S3 VPC endpoint created, add name to yaml updates map
+    if s3VpcEndPointId != "" {
+        yamlUpdates["aws_env.s3_vpc_endpoint"] = s3VpcEndPointId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        s3VpcEndPointId = stateConfig.S3VpcEndpointId
+    }
 
-    // TODO: VPC network setup
-    //     X Create VPC with CIDR block
-    //     X Create and attach Internet Gateway (IGW) to the VPC
-    //     X Allocate Elastic IP for NAT Gateway
-    //     X Create public and private subnets within the VPC
-    //     X Create NAT Gateway in public subnet (uses Elastic IP)
-    //     X Create route table for public subnets: 0.0.0.0/0 → IGW
-    //     X Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
-    //     X Associate **public** subnets to public route table
-    //     X Associate **private** subnets to private route tables
-    //     X Create security groups for EC2
-    //     X Add rules to EC2 security group to allow updates and package installation
-    //     X Create security group for SSM Parameter Store
-    //     X Add rules to SSM parameter store for allowing storing and grabbing TLS certs
-    //     - Create VPC endpoints (e.g., S3, SSM) for private access
-    //     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
-    //     X Generate role and trust policy for VPC Flow Logs
-    //     X Enable VPC Flow Logs for traffic monitoring and auditing
+    // Create VPC endpoint for SSM if it does not exist
+    ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(5 * time.Minute,
+                                                            stateConfig.SsmVpcEndpointId,
+                                                            appConfig.LocalConfig.Region,
+                                                            vpcId, []string{privSubnetId},
+                                                            []string{ssmSgId})
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
 
+    // If SSM VPC endpoint was created, add name to yaml updates map
+    if ssmVpcEndpointId != "" {
+        yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ssmVpcEndpointId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        ssmVpcEndpointId = stateConfig.SsmVpcEndpointId
+    }
 
+    // Set up client to S3 service
+    s3Client := s3utils.S3NewManager(awsConfig)
+
+    bucketName, err := s3Client.S3BucketProvision(5 * time.Minute,
+                                                  stateConfig.S3BucketName,
+                                                  "Kloud-Kraken-S3")
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If S3 buccket created, add name to yaml updates map
+    if bucketName != "" {
+        yamlUpdates["aws_env.s3_bucket_name"] = bucketName
+    // Otherwise use the one from YAML since it was found
+    } else {
+        bucketName = stateConfig.S3BucketName
+    }
 
     // Set up client to Security Token Service
     stsClient := sts.NewFromConfig(awsConfig)
@@ -978,7 +1030,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-    // If the VPC Flow Logs group was created, add ID to yaml updates map
+    // If VPC Flow Logs group was created, add ID to yaml updates map
     if flowLogId != "" {
         yamlUpdates["aws_env.flow_log_id"] = flowLogId
     // Otherwise use the one from YAML since it was found
@@ -1056,8 +1108,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-    // Setup client to S3
-    s3Client := s3utils.S3NewManager(awsConfig)
+    // Re-establish client to S3 with new API key set
+    s3Client = s3utils.S3NewManager(awsConfig)
 
     // Upload the client binary to S3 Bucket
     keyName, err := s3Client.S3PutObject(bucketName, "client",
@@ -1086,9 +1138,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        appConfig.LocalConfig.NumberInstances,
                                        appConfig.LocalConfig.NumberInstances,
                                        "ClientRole", "Kloud-Kraken-EC2-Client",
-                                       appConfig.LocalConfig.SecurityGroupIds,
-                                       appConfig.LocalConfig.SecurityGroups,
-                                       privSubnetId)
+                                       []string{ec2SgId}, privSubnetId)
     if err != nil {
         return awsConfig, ec2Client, err
     }

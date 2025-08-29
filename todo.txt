@@ -1,5 +1,3 @@
-- Finish implementing provisioner list
-
 - After AWS code logic is update do extensive permissions review and make sure all policies are updated
 
 - Research tips of calculating cost of resources and which should persist & which should be deleted per execution

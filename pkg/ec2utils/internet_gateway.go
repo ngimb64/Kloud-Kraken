@@ -144,7 +144,8 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
                                                   igwId string,
-                                                  vpcId string) (
+                                                  vpcId string,
+                                                  nameTag string) (
                                                   string, error) {
     // Ensure required args are present
     if vpcId == "" {
@@ -166,6 +167,5 @@ func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
     }
 
     // Create new internet gateway
-    return Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId,
-                                                 "Kloud-Kraken-IGW")
+    return Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId, nameTag)
 }

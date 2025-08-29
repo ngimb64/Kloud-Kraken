@@ -45,8 +45,9 @@ func S3NewManager(config aws.Config) *S3Manager {
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func (S3Man *S3Manager) S3BucketCreate(callTime time.Duration,
-                                       bucketName string) error {
+func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
+                                       bucketName string) (
+                                       string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -68,20 +69,20 @@ func (S3Man *S3Manager) S3BucketCreate(callTime time.Duration,
             // If the error code signals the bucket already exists
             if errCode == "BucketAlreadyExists" ||
             errCode == "BucketAlreadyOwnedByYou" {
-                return errors.New("S3 bucket already exists")
+                return "", errors.New("S3 bucket already exists")
             }
         }
 
         // If a non API related error occured during request
-        return fmt.Errorf("bucket create - %w", err)
+        return "", fmt.Errorf("bucket create - %w", err)
     }
 
     // If no bucket was created
     if out == nil {
-        return errors.New("S3 bucket failed to create")
+        return "", errors.New("S3 bucket failed to create")
     }
 
-    return nil
+    return bucketName, nil
 }
 
 // Checks to see if an S3 bucket already exists.
@@ -176,6 +177,38 @@ func (S3Man *S3Manager) S3GetObject(bucketName string, key string,
     }
 
     return rawData, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
+                                          bucketName string,
+                                          defaultBucketName string) (
+                                          string, error) {
+    // If the bucket name is present in state file
+    if bucketName != "" {
+        // Check to see if it exists in AWS environment
+        bucketExists, err := S3Man.S3BucketExists(callTime, bucketName)
+        if err != nil {
+            return "", err
+        }
+
+        // If the S3 bucket exists, exit early
+        if bucketExists {
+            return "", nil
+        }
+    }
+
+    // If no bucket name is present, use the default one passed in
+    bucketName = defaultBucketName
+    // Create S3 bucket by passed in name
+    return S3Man.s3BucketCreate(callTime, bucketName)
 }
 
 // Put an object into a S3 bucket.
