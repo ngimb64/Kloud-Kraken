@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // Package level varaibles
@@ -91,6 +92,30 @@ func AwsConfigSetup(region string, callTime time.Duration) (
     }
 
     return cfg, accessKey, secretKey, nil
+}
+
+
+// Gets the account ID from STS client.
+//
+// @Parameters
+// - ctx:  Context that manages timeout for API calls
+// - stsClient:  Initialized client to the Security Token Service
+//
+// @Returns
+// - The retrieved account ID
+//  - Error if it occurs, otherwise nil on success
+//
+func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+	out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", err
+	}
+
+	return *out.Account, nil
 }
 
 

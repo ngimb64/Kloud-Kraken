@@ -35,7 +35,6 @@ type ClientConfig struct {
 
 // LocalConfig contains the yaml configuration for local server settings
 type LocalConfig struct {
-    AccountId           string   `yaml:"account_id"`
     CidrBlock           string   `yaml:"cidr_block"`
     HashFilePath        string   `yaml:"hash_file_path"`
     IamUsername         string   `yaml:"iam_username"`
@@ -176,14 +175,8 @@ func validateClientConfig(clientConfig *ClientConfig) error {
 //  - Error if it occurs, otherwise nil on success
 //
 func validateLocalConfig(localConfig *LocalConfig) error {
-    // Ensure the account id is of proper format
-    err := validate.ValidateAccountId(localConfig.AccountId)
-    if err != nil {
-        return err
-    }
-
     // Ensure the CIDR block is of proper format if exists
-    err = validate.ValidateCidrBlock(localConfig.CidrBlock)
+    err := validate.ValidateCidrBlock(localConfig.CidrBlock)
     if err != nil {
         return err
     }

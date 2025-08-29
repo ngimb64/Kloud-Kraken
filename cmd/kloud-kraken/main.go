@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
@@ -22,6 +24,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
+	"github.com/ngimb64/Kloud-Kraken/internal/policies"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/cidrutils"
@@ -51,6 +54,7 @@ type StateConfig struct {
     BucketName           string `yaml:"bucket_name"`
     Ec2SecurityGroupId   string `yaml:"ec2_security_group_id"`
     EipId                string `yaml:"eip_id"`
+    FlowLogId            string `yaml:"flow_log_id"`
     IgwId                string `yaml:"igw_id"`
     NatGatewayId         string `yaml:"nat_gateway_id"`
     PrivateAssociationId string `yaml:"private_association_id"`
@@ -466,7 +470,7 @@ func startServer(appConfig *conf.AppConfig,
 //  - The generated EC2 user data with args formatted into it
 //  - Error if it occurs, otherwise nil on success
 //
-func ec2UserDataGen(appConf *conf.AppConfig, stateConfig *StateConfig,
+func ec2UserDataGen(appConf *conf.AppConfig, bucketName string,
                     keyName string, ipAddrs []string, ssmParam string) (
                     string, error) {
     var hasRuleset bool
@@ -552,7 +556,7 @@ $CWD/client -applyOptimization=%t \
             -maxTransfers=%d \
             -port=%d \
             -workload=%s
-`, stateConfig.BucketName, keyName,
+`, bucketName, keyName,
    appConf.ClientConfig.Region, true,
    appConf.ClientConfig.Region, ssmParam,
    appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
@@ -564,163 +568,6 @@ $CWD/client -applyOptimization=%t \
    appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
     return data, nil
-}
-
-
-// Generates permission policy for the server.
-//
-// @Parameters
-//  - region:  The AWS region where actions will be performed
-//  - accountId:  The AWS account ID where actions will be performed
-//  - ssmParam:  The path where the certificate is stored in SSM param store
-//  - bucketName:  The name of the S3 bucket where actions will be performed
-//  - clientRoleName:  The name of IAM role the client will be using
-//
-// @Returns
-//  - The generated permissions policy with args formatted into it
-//
-func serverPermPolicyGen(region string, accountId string,
-                         ssmParam string, bucketName string,
-                         clientRoleName string) string {
-    return fmt.Sprintf(`{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "SSMUploadClientCert",
-      "Effect": "Allow",
-      "Action": [
-        "ssm:PutParameter"
-      ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter%s*"
-    },
-    {
-      "Sid": "S3UploadClientBinary",
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:PutObjectAcl"
-      ],
-      "Resource": "arn:aws:s3:::%s/*"
-    },
-    {
-      "Sid": "EC2LifecycleControl",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:RunInstances",
-        "ec2:TerminateInstances",
-        "ec2:DescribeInstances",
-        "ec2:CreateTags"
-      ],
-      "Resource": [
-        "arn:aws:ec2:%s:%s:instance/*",
-        "arn:aws:ec2:%s:%s:subnet/*",
-        "arn:aws:ec2:%s:%s:security-group/*"
-      ]
-    },
-    {
-      "Sid": "EC2PassRoleForInstanceProfile",
-      "Effect": "Allow",
-      "Action": [
-        "iam:PassRole"
-      ],
-      "Resource": "arn:aws:iam::%s:role/%s"
-    }
-  ]
-}`, region, accountId, ssmParam, bucketName, region, accountId, region,
-    accountId, region, accountId, accountId, clientRoleName)
-}
-
-
-// Generates trust policy for the server.
-//
-// @Parameters
-//  - accountId:  The AWS account ID where actions will be performed
-//  - iamUser:  The IAM user that the policy will apply to
-//
-// @Returns
-//  - The generated trust policy with args formatted into it
-//
-func serverTrustPolicyGen(accountId string, iamUser string) string {
-    return fmt.Sprintf(`{
-  "Version":"2012-10-17",
-  "Statement":[{
-    "Effect":"Allow",
-    "Principal":{
-      "AWS":"arn:aws:iam::%s:user/%s"
-    },
-    "Action":"sts:AssumeRole"
-  }]
-}`, accountId, iamUser)
-}
-
-
-// Generates permission policy for the client.
-//
-// @Parameters
-//  - bucketName:  The name of the S3 bucket where actions will be performed
-//  - region:  The AWS region where actions will be performed
-//  - accountId:  The AWS account ID where actions will be performed
-//  - paramPath:  The path where the certificate is stored in SSM param store
-//  - logGroup:  The name of the CloudWatch group being utilized
-//
-// @Returns
-//  - The generated permissions policy with args formatted into it
-//
-func clientPermPolicyGen(bucketName string, region string,
-                         accountId string, paramPath string,
-                         logGroup string) string {
-    return fmt.Sprintf(`{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "S3DownloadBinary",
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject"
-      ],
-      "Resource": "arn:aws:s3:::%s/*"
-    },
-    {
-      "Sid": "SSMFetchParameters",
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath"
-      ],
-      "Resource": [
-        "arn:aws:ssm:%s:%s:parameter%s*"
-      ]
-    },
-    {
-      "Sid": "CloudWatchLogging",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "arn:aws:logs:%s:%s:log-group:/%s*"
-    }
-  ]
-}`, bucketName, region, accountId, paramPath, region, accountId, logGroup)
-}
-
-
-// Generates trust policy for the client.
-//
-// @Returns
-//  - The generated trust policy with args formatted into it
-//
-func clientTrustPolicyGen() string {
-    return `{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect":    "Allow",
-    "Principal": { "Service": "ec2.amazonaws.com" },
-    "Action":    "sts:AssumeRole"
-  }]
-}`
 }
 
 
@@ -1091,19 +938,61 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     //     X Add rules to SSM parameter store for allowing storing and grabbing TLS certs
     //     - Create VPC endpoints (e.g., S3, SSM) for private access
     //     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
-    //     - Enable VPC Flow Logs for traffic monitoring and auditing
+    //     X Generate role and trust policy for VPC Flow Logs
+    //     X Enable VPC Flow Logs for traffic monitoring and auditing
 
 
+
+    // Set up client to Security Token Service
+    stsClient := sts.NewFromConfig(awsConfig)
+    // Get the account ID associated with API credentials
+    accountId, err := awsutils.GetAccountID(1 * time.Minute, *stsClient)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
 
     // Setup client to IAM service
     iamClient := iamutils.NewIamManager(awsConfig)
 
+    // Generate the VPC Flow Logs trust and permissions policy templates
+    trustPolicy := policies.VpcFlowLogsTrustPolicyGen()
+    permissionsPolicy := policies.VpcFlowLogsPermPolicyGen()
+    // Create and appy the VPC flow logs role
+    vpcFlowLogArn, err := iamClient.IamRoleCreation(5 * time.Minute, "VpcFlowLogsRole",
+                                                   trustPolicy, "VpcFlowLogPermissions",
+                                                   permissionsPolicy, false)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // Set up client to CloudWatch Logs
+    cwlClient := cwl.NewFromConfig(awsConfig)
+
+    // Create and enable the VPC Flow Logs via CloudWatch if it does not exist
+    flowLogId, err := ec2Client.VpcFlowLogProvision(5 * time.Minute,
+                                                    stateConfig.FlowLogId,
+                                                    vpcId, cwlClient,
+                                                    "Kloud-Kraken-VPC-Flow-Logs",
+                                                    vpcFlowLogArn)
+    if err != nil {
+        return awsConfig, ec2Client, err
+    }
+
+    // If the VPC Flow Logs group was created, add ID to yaml updates map
+    if flowLogId != "" {
+        yamlUpdates["aws_env.flow_log_id"] = flowLogId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        flowLogId = stateConfig.FlowLogId
+    }
+
     // Generate the EC2 clients trust and permissions policy templates
-    trustPolicy := clientTrustPolicyGen()
-    permissionsPolicy := clientPermPolicyGen(stateConfig.BucketName,
-                                             appConfig.ClientConfig.Region,
-                                             appConfig.LocalConfig.AccountId,
-                                             "/kloud-kraken/tls-cert", "Kloud-Kraken")
+    trustPolicy = policies.ClientTrustPolicyGen()
+    permissionsPolicy = policies.ClientPermPolicyGen(bucketName,
+                                                     appConfig.ClientConfig.Region,
+                                                     accountId,
+                                                     "/kloud-kraken/tls-cert",
+                                                     "Kloud-Kraken")
     // Create and apply the EC2 client role
     _, err = iamClient.IamRoleCreation(5 * time.Minute, "ClientRole",
                                        trustPolicy, "ClientPermissions",
@@ -1113,13 +1002,12 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Generate the servers trust and permissions policy templates
-    trustPolicy = serverTrustPolicyGen(appConfig.LocalConfig.AccountId,
-                                       appConfig.LocalConfig.IamUsername)
-    permissionsPolicy = serverPermPolicyGen(appConfig.LocalConfig.Region,
-                                            appConfig.LocalConfig.AccountId,
-                                            "/kloud-kraken/tls-cert",
-                                            stateConfig.BucketName,
-                                            "ClientRole")
+    trustPolicy = policies.ServerTrustPolicyGen(accountId,
+                                                appConfig.LocalConfig.IamUsername)
+    permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
+                                                     accountId,
+                                                     "/kloud-kraken/tls-cert",
+                                                     bucketName, "ClientRole")
     // Create and apply role for local server permissions
     serverArn, err := iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
                                                 trustPolicy, "ServerPermissions",
@@ -1132,8 +1020,6 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "IAM server and client roles created"))
 
-    // Set up client to Security Token Service
-    stsClient := sts.NewFromConfig(awsConfig)
     // Format role ARN from created role
     roleArn := "arn:aws:iam::" + serverArn + ":role/ServerRole"
     // Create a provider that will call STS AssumeRole under the covers
@@ -1174,7 +1060,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     s3Client := s3utils.S3NewManager(awsConfig)
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Client.S3PutObject(stateConfig.BucketName, "client",
+    keyName, err := s3Client.S3PutObject(bucketName, "client",
                                          binData, 1 * time.Minute)
     if err != nil {
         return awsConfig, ec2Client, err
@@ -1183,10 +1069,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Uploaded client binary to S3 bucket ",
-                                   color.RadiantAmethyst, stateConfig.BucketName))
+                                   color.RadiantAmethyst, bucketName))
 
     // Generate user data script to set up client program in EC2
-    userData, err := ec2UserDataGen(appConfig, &stateConfig, keyName, publicIps, param)
+    userData, err := ec2UserDataGen(appConfig, bucketName, keyName, publicIps, param)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -1202,7 +1088,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        "ClientRole", "Kloud-Kraken-EC2-Client",
                                        appConfig.LocalConfig.SecurityGroupIds,
                                        appConfig.LocalConfig.SecurityGroups,
-                                       stateConfig.PrivateSubnetId)
+                                       privSubnetId)
     if err != nil {
         return awsConfig, ec2Client, err
     }

@@ -13,20 +13,6 @@ import (
 )
 
 
-func TestValidateAccountId(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateAccountId("123412341234")
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateAccountId("blahblah")
-    assert.NotEqual(nil, err)
-}
-
-
 func TestValidateCidrBlock(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -234,7 +220,7 @@ func TestValidateIamUsername(t *testing.T) {
     assert.Equal(nil, err)
 
     // Try test with bad value
-    err = validate.ValidateAccountId("!@)#%* $#)%\\|)!@#>>C<C")
+    err = validate.ValidateIamUsername("!@)#%* $#)%\\|)!@#>>C<C")
     // Ensure the error is not nil meaning failed operation
     assert.NotEqual(nil, err)
 }

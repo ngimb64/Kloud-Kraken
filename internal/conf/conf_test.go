@@ -68,7 +68,6 @@ client_config:
   workload: "4"
 
 local_config:
-  account_id: "123456789123"
   cidr_block: "10.0.0.1/24"
   hash_file_path: "%s"
   iam_username: "doug"
@@ -109,7 +108,6 @@ local_config:
     assert.Equal("4", config.ClientConfig.Workload)
 
     // Validate local config fields to original data
-    assert.Equal("123456789123", config.LocalConfig.AccountId)
     assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
     assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
     assert.Equal("doug", config.LocalConfig.IamUsername)

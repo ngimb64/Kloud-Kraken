@@ -16,7 +16,6 @@ import (
 )
 
 // Package level variables
-var ReAccountId = regexp.MustCompile(`^\d{12}$`)
 var ReIamUsername = regexp.MustCompile(`^[\w+=,.@-]{1,64}$`)
 var RePrivateCidr = regexp.MustCompile(
     `^(?:` +
@@ -34,24 +33,6 @@ var ReSecurityGroupId = regexp.MustCompile(`^sg-[0-9a-f]{8,}$`)
 var ReSecurityGroupName = regexp.MustCompile(
     `^[A-Za-z0-9\s\.\_\-\:\/\(\)\#\,\@\[\]\+\=\&\;\{\}\!\$\*]{1,255}$`,
 )
-
-
-// Ensure the AWS account ID is of proper format.
-//
-// @Parameters
-//  - accountId:  The ID number for the AWS account
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func ValidateAccountId(accountId string) error {
-    // Validate format with regular expression
-    if !ReAccountId.MatchString(accountId) {
-        return errors.New("invalid AWS account ID, must be exactly 12 digits")
-    }
-
-    return nil
-}
 
 
 // Ensures that if there is a char set that is present and the proper cracking

@@ -1,10 +1,12 @@
 - Finish implementing provisioner list
 
-- Finish documentation for AWS code
+- After AWS code logic is update do extensive permissions review and make sure all policies are updated
 
 - Research tips of calculating cost of resources and which should persist & which should be deleted per execution
 
-- After AWS code logic is update do extensive permissions review and make sure all policies are updated
+- Look into adding benchmarking and cost estimation logic
+
+- Finish documentation for AWS code
 
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
