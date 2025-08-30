@@ -1,0 +1,145 @@
+package ec2utils
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
+)
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
+                                      cidrBlock string, az string,
+                                      isPublic bool) (string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    createCallInput := &ec2.CreateSubnetInput{
+        VpcId:            aws.String(vpcId),
+        CidrBlock:        aws.String(cidrBlock),
+        AvailabilityZone: aws.String(az),
+    }
+
+    // Create the subnet
+    createOut, err := Ec2Man.client.CreateSubnet(ctx, createCallInput)
+    if err != nil {
+        return "", fmt.Errorf("unable to create subnet - %w", err)
+    }
+
+    subnetID := aws.ToString(createOut.Subnet.SubnetId)
+
+    modifyCallInput := &ec2.ModifySubnetAttributeInput{
+        SubnetId: aws.String(subnetID),
+        MapPublicIpOnLaunch: &ec2types.AttributeBooleanValue{
+            Value: aws.Bool(isPublic),
+        },
+    }
+
+    // Configure to map to public IP address on launch
+    _, err = Ec2Man.client.ModifySubnetAttribute(ctx, modifyCallInput)
+    if err != nil {
+        return "", fmt.Errorf("unable map subnet to public IP on launch - %w", err)
+    }
+
+    return subnetID, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
+                                      subnetId string) (
+                                      bool, error) {
+    // Ensure required args are present
+    if subnetId == "" {
+        return false, fmt.Errorf("subnetId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Format the input for the subnet description call
+    describeInput := &ec2.DescribeSubnetsInput{
+        Filters: []ec2types.Filter{
+            {
+                Name: aws.String("subnet-id"), Values: []string{subnetId},
+            },
+        },
+    }
+
+    // Describe the subnet by passed in ID
+    out, err := Ec2Man.client.DescribeSubnets(ctx, describeInput)
+    if err != nil {
+        var apiErr smithy.APIError
+
+        // If Subnet ID was not found
+        if errors.As(err, &apiErr) &&
+        apiErr.ErrorCode() == "InvalidSubnet" {
+            return false, nil
+        }
+
+        // If a non API related error occured during request
+        return false, fmt.Errorf("DescribeSubnets failed - %w", err)
+    }
+
+    // If there was a result and it matches the intended subnet ID
+    if out == nil || len(out.Subnets) == 0 {
+        return false, nil
+    }
+
+    return true, nil
+}
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string,
+                                         vpcID string, cidrBlock string,
+                                         az string, isPublic bool) (
+                                         string, error) {
+    // Ensure required args are present
+    if vpcID == "" || cidrBlock == "" || az == "" {
+        return "", fmt.Errorf("vpcId or cidrBlock or az is missing")
+    }
+
+    // If subnet ID is present in YAML
+    if subnetId != "" {
+        // Check to see if it exists in AWS enviroment
+        subnetExists, err := Ec2Man.SubnetExists(callTime, subnetId)
+        if err != nil {
+            return "", err
+        }
+
+        // If the subnet exists, exit early
+        if subnetExists {
+            return "", nil
+        }
+    }
+
+    // Create new subnet
+    return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
+}

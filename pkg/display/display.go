@@ -13,7 +13,7 @@ const AnsiReset = "\033[0m"
 // Clear the terminal display with a sleep prior if specified.
 //
 // @Parameters
-// - sleepTime:  The number of seconds to sleep before clearing the display
+//  - sleepTime:  The number of seconds to sleep before clearing the display
 //
 func ClearScreen(sleepTime int) {
     // If there was a positive amount of sleep time, then sleep
@@ -29,11 +29,11 @@ func ClearScreen(sleepTime int) {
 // Wraps text with the given color code and returns the colored string.
 //
 // @Parameters
-// - color:  The ANSI color to format the string
-// - text:  The content of the colored string
+//  - color:  The ANSI color to format the string
+//  - text:  The content of the colored string
 //
 // @Returns
-// - Formated colorized string
+//  - Formated colorized string
 //
 func Ctext(color string, text string) string {
     return color + text + AnsiReset
@@ -43,10 +43,10 @@ func Ctext(color string, text string) string {
 // Takes pairs of color and text and applies color to each text portion.
 //
 // @Parameters
-// - pairs:  The pairs of ANSI color code and text it applies to
+//  - pairs:  The pairs of ANSI color code and text it applies to
 //
 // @Returns
-// - The resulting formatted string
+//  - The resulting formatted string
 //
 func CtextMulti(pairs ...string) string {
     var result string
@@ -64,12 +64,12 @@ func CtextMulti(pairs ...string) string {
 // Wraps text inside bracket like [TEXT], or with sybols like [+], [!], etc.
 //
 // @Parameters
-// - bracketColor:  The ANSI color be assigned to the outer brackets
-// - innerColor:  The ANSI color be assigned to the content inside the brackets
-// - innerContent:  The content to be written inside the brackets
+//  - bracketColor:  The ANSI color be assigned to the outer brackets
+//  - innerColor:  The ANSI color be assigned to the content inside the brackets
+//  - innerContent:  The content to be written inside the brackets
 //
 // @Returns
-// - The formated colorized message prefix
+//  - The formated colorized message prefix
 //
 func CtextPrefix(bracketColor string, innerColor string,
                  innerContent string) string {

@@ -17,11 +17,11 @@ import (
 // is deleted and the cat file slice is reset for the next execution.
 //
 // @Parameters
-// - catFiles:  Slice of the file paths of files to be concatenated via cat
-// - catPath:  The path to the resulting output file of the cat command
+//  - catFiles:  Slice of the file paths of files to be concatenated via cat
+//  - catPath:  The path to the resulting output file of the cat command
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func CatAndDelete(catFiles *[]string, catPath string) error {
     catCmd := "cat"
@@ -61,12 +61,12 @@ func CatAndDelete(catFiles *[]string, catPath string) error {
 // to the destination file and comparing its size to the max file size.
 //
 // @Parameters
-// - srcPath:  The path to the source file that needs de-deplication
-// - destPath:  The path to the resulting output file of duplicut
+//  - srcPath:  The path to the source file that needs de-deplication
+//  - destPath:  The path to the resulting output file of duplicut
 //
 // @Returns
-// - The size of the duplicut output file
-// - Error if it occurs, otherwise nil on success
+//  - The size of the duplicut output file
+//  - Error if it occurs, otherwise nil on success
 //
 func DuplicutAndDelete(srcPath string, destPath string) (int64, error) {
     // Format duplicut command to be executed
@@ -100,19 +100,20 @@ func DuplicutAndDelete(srcPath string, destPath string) (int64, error) {
 // any data over that max into a new file via dd command.
 //
 // @Parameters
-// - filterPath:  The source file that is over the max size that needs
+//  - filterPath:  The source file that is over the max size that needs
 //                excess data to be filtered
-// - shavePath:  The destination file there the excess data is written to
-// - originalPath:  Path to original file data after excess filtered
-// - blockSize:  The size of the block of data for dd to send at a time
-// - maxFileSize:  The max allowed size for wordlist file
+//  - shavePath:  The destination file there the excess data is written to
+//  - originalPath:  Path to original file data after excess filtered
+//  - blockSize:  The size of the block of data for dd to send at a time
+//  - maxFileSize:  The max allowed size for wordlist file
 //
 // @Returns
-// - The size of resulting file where extra data is shaved
-// - Error if it occurs, otherwise nil on success
+//  - The size of resulting file where extra data is shaved
+//  - Error if it occurs, otherwise nil on success
 //
-func FileShaveDD(filterPath string, shavePath string, originalPath string,
-                 blockSize int64, maxFileSize int64) (int64, error) {
+func FileShaveDD(filterPath string, shavePath string,
+                 originalPath string, blockSize int64,
+                 maxFileSize int64) (int64, error) {
     // Divide the max file size by the block size to get
     // the number of blocks to skip
     skipSize := float64(maxFileSize) / float64(blockSize)
@@ -161,19 +162,20 @@ func FileShaveDD(filterPath string, shavePath string, originalPath string,
 // any data over that max into a new file via cut command.
 //
 // @Parameters
-// - filterPath:  The source file that is over the max size that
+//  - filterPath:  The source file that is over the max size that
 //                needs excess data to be filtered
-// - shavePath:  The destination file there the excess data is written to
-// - maxFileSize:  The max allowed size for wordlist file
-// - catFiles:  The slice of file paths to pass into CatAndDelete()
-// - outFilesMap:  The map used to ensure only files that have not been
+//  - shavePath:  The destination file there the excess data is written to
+//  - maxFileSize:  The max allowed size for wordlist file
+//  - catFiles:  The slice of file paths to pass into CatAndDelete()
+//  - outFilesMap:  The map used to ensure only files that have not been
 //                 processed are selected
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
-func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
-                    catFiles *[]string, outFilesMap map[string]struct{}) error {
+func FileShaveSplit(filterPath string, shavePath string,
+                    maxFileSize int64, catFiles *[]string,
+                    outFilesMap map[string]struct{}) error {
     // Convert the max file size to string
     maxFileSizeStr := strconv.FormatInt(maxFileSize, 10)
     // Format the cut command to be executed
@@ -232,11 +234,11 @@ func FileShaveSplit(filterPath string, shavePath string, maxFileSize int64,
 // Gets the optimal block size for file spliting based on the size of the file.
 //
 // @Parameters
-// - fileSize:  The size of the file which will be used to calculate optimal block size
+//  - fileSize:  The size of the file which will be used to calculate optimal block size
 //
 // @Returns
-// - The calculated optimal block size
-// - Error if it occurs, otherwise nil on success
+//  - The calculated optimal block size
+//  - Error if it occurs, otherwise nil on success
 //
 func GetOptimalBlockSize(fileSize int64) (int64, error) {
     // Start with a 4 KiB buffer
@@ -263,17 +265,18 @@ func GetOptimalBlockSize(fileSize int64) (int64, error) {
 // call filepath walk with closure function above until complete.
 //
 // @Parameters
-// - dirPath:  The path to the directory where wordlist merging occurs
-// - maxMergingSize:  The maximum allowed size until merging process is skipped
-// - maxFileSize:  The maximum size a wordlist should be
-// - maxRange:  The range within the max that makes a file register as full
-// - maxCutSize:  The max size threshold where dd is utilized instead of cut
+//  - dirPath:  The path to the directory where wordlist merging occurs
+//  - maxMergingSize:  The maximum allowed size until merging process is skipped
+//  - maxFileSize:  The maximum size a wordlist should be
+//  - maxRange:  The range within the max that makes a file register as full
+//  - maxCutSize:  The max size threshold where dd is utilized instead of cut
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
-func MergeWordlistDir(dirPath string, maxMergingSize int64, maxFileSize int64,
-                      maxRange float64, maxCutSize int64) error {
+func MergeWordlistDir(dirPath string, maxMergingSize int64,
+                      maxFileSize int64, maxRange float64,
+                      maxCutSize int64) error {
     catFiles := []string{}
     outFilesMap := make(map[string]struct{})
 
@@ -302,23 +305,24 @@ func MergeWordlistDir(dirPath string, maxMergingSize int64, maxFileSize int64,
 // data into a new file and save the original to the output files list.
 //
 // @Parameters
-// - dirPath:  The path to the directory where wordlist merging occurs
-// - maxMergingSize:  The maximum allowed size until merging process is skipped
-// - maxFileSize:  The maximum allowed size a wordlist that can be sent
-// - maxRange:  The range within the max that makes a file register as full
-// - maxCutSize:  The max size threshold where dd is utilized instead of cut
-// - catFiles:  The slice of file paths to pass into CatAndDelete()
-// - outFilesMap:  The map used to ensure only files that have not been
+//  - dirPath:  The path to the directory where wordlist merging occurs
+//  - maxMergingSize:  The maximum allowed size until merging process is skipped
+//  - maxFileSize:  The maximum allowed size a wordlist that can be sent
+//  - maxRange:  The range within the max that makes a file register as full
+//  - maxCutSize:  The max size threshold where dd is utilized instead of cut
+//  - catFiles:  The slice of file paths to pass into CatAndDelete()
+//  - outFilesMap:  The map used to ensure only files that have not been
 //                 processed are selected
-// - path:  Path to the currently selected item in merge directory
-// - itemInfo:  The info of currently seleted item
-// - err:  Error if it occurs during walk, otherwise nil on success
+//  - path:  Path to the currently selected item in merge directory
+//  - itemInfo:  The info of currently seleted item
+//  - err:  Error if it occurs during walk, otherwise nil on success
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
-func MergeWordlists(dirPath string, maxMergingSize int64, maxFileSize int64,
-                    maxRange float64, maxCutSize int64, catFiles *[]string,
+func MergeWordlists(dirPath string, maxMergingSize int64,
+                    maxFileSize int64, maxRange float64,
+                    maxCutSize int64, catFiles *[]string,
                     outFilesMap map[string]struct{}, path string,
                     itemInfo os.FileInfo, err error) error {
     if err != nil {
@@ -482,10 +486,10 @@ func MergeWordlists(dirPath string, maxMergingSize int64, maxFileSize int64,
 // Deletes any subdirs and their contents in passed in dir path.
 //
 // @Parameters
-// - dirPath:  The path to the directory to delete subdirs
+//  - dirPath:  The path to the directory to delete subdirs
 //
 // Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func RemoveMergeSubdirs(dirPath string) error {
     // Get the contents of the wordlist merge dirs

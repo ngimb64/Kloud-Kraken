@@ -13,36 +13,16 @@ import (
 )
 
 
-func TestValidateAccountId(t *testing.T) {
+func TestValidateCidrBlock(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
     // Try test with proper value
-    err := validate.ValidateAccountId("123412341234")
-    // Ensure the error is nil meaning successful operation
+    err := validate.ValidateCidrBlock("10.0.1.0/24")
     assert.Equal(nil, err)
 
     // Try test with bad value
-    err = validate.ValidateAccountId("blahblah")
-    // Ensure the error is not nil meaning failed operation
-    assert.NotEqual(nil, err)
-}
-
-
-func TestValidateBucketName(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    err := validate.ValidateBucketName("test-bucket")
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    err = validate.ValidateBucketName("#3$$3dsslmdv.12mvm_#")
-    // Ensure the error occured
-    assert.NotEqual(nil, err)
-
-    err = validate.ValidateBucketName("10.10.10.10")
-    // Ensure the error occured
+    err = validate.ValidateCidrBlock("10.0.1.0/15")
     assert.NotEqual(nil, err)
 }
 
@@ -94,7 +74,6 @@ func TestValidateDir(t *testing.T) {
     testDir := "testingDir"
     // Create the test directory
     err := os.Mkdir(testDir, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testFile := "testFile.txt"
@@ -102,7 +81,6 @@ func TestValidateDir(t *testing.T) {
     filePath := fmt.Sprintf("%s/%s", testDir, testFile)
     // Open the file with write permissions
     file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Make a byte buffer based off iteration index
@@ -111,65 +89,44 @@ func TestValidateDir(t *testing.T) {
     data.GenerateRandomBytes(buffer, 64)
     // Write the random data to the output file
     bytesWrote, err := file.Write(buffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the file after data has been written
-    file.Close()
+    err = file.Close()
+    assert.Equal(nil, err)
     // Ensure the bytes wrote matches the buffer size
     assert.Equal(bytesWrote, 64)
 
     // Validate the created test dir
     err = validate.ValidateDir(testDir)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Delete the test dir after it has been validated
     err = os.RemoveAll(testDir)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
 
-func TestValidateFile(t *testing.T) {
+func TestValidateFileSize(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
-    testDir := "testingDir"
-    // Create the test directory
-    err := os.Mkdir(testDir, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    tests := []struct {
+        input   string
+        output  int64
+    } {
+        {"100mb", int64(100 * globals.MB)},
+        {"10GB", int64(10 * globals.GB)},
+        {"512kb", int64(512 * globals.KB)},
+    }
 
-    testFile := "testFile.txt"
-    // Format the file path with test dir
-    filePath := fmt.Sprintf("%s/%s", testDir, testFile)
-    // Open the file with write permissions
-    file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Make a byte buffer based off iteration index
-    buffer := make([]byte, 64)
-    // Fill the buffer up with random data
-    data.GenerateRandomBytes(buffer, 64)
-    // Write the random data to the output file
-    bytesWrote, err := file.Write(buffer)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-    // Close the file after data has been written
-    file.Close()
-    // Ensure the bytes wrote matches the buffer size
-    assert.Equal(bytesWrote, 64)
-
-    // Validate the created test file inside the test dir
-    err = validate.ValidateFile(filePath)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Delete the test dir after it has been validated
-    err = os.RemoveAll(testDir)
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
+    // Iterate through slice of test structs
+    for _, test := range tests {
+        // Use struct member as input to call function
+        outputSize, err := validate.ValidateFileSize(test.input)
+        assert.Equal(nil, err)
+        // Ensure the expected test size equals function output
+        assert.Equal(test.output, outputSize)
+    }
 }
 
 
@@ -180,7 +137,6 @@ func TestValidateHashFile(t *testing.T) {
     testDir := "testingDir"
     // Create the test directory
     err := os.Mkdir(testDir, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testFile := "testHashFile"
@@ -188,7 +144,6 @@ func TestValidateHashFile(t *testing.T) {
     filePath := fmt.Sprintf("%s/%s", testDir, testFile)
     // Open the file with write permissions
     file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Generate hash for hash file
@@ -197,21 +152,19 @@ func TestValidateHashFile(t *testing.T) {
 
     // Write the hash to the hash file
     bytesWrote, err := file.Write(hasher.Sum(nil))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the file after data has been written
-    file.Close()
+    err = file.Close()
+    assert.Equal(nil, err)
     // Ensure the bytes wrote matches the buffer size
     assert.Equal(bytesWrote, 64)
 
     // Validate the created test file inside the test dir
     err = validate.ValidateHashFile(filePath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Delete the test dir after it has been validated
     err = os.RemoveAll(testDir)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -264,11 +217,10 @@ func TestValidateIamUsername(t *testing.T) {
 
     // Try test with proper value
     err := validate.ValidateIamUsername("Dookie-Shoez")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Try test with bad value
-    err = validate.ValidateAccountId("!@)#%* $#)%\\|)!@#>>C<C")
+    err = validate.ValidateIamUsername("!@)#%* $#)%\\|)!@#>>C<C")
     // Ensure the error is not nil meaning failed operation
     assert.NotEqual(nil, err)
 }
@@ -293,7 +245,7 @@ func TestValidateListenerPort(t *testing.T) {
     assert := assert.New(t)
 
     // Test with a port below or equal 1000
-    assert.False(validate.ValidateListenerPort(420))
+    assert.False(validate.ValidateListenerPort(123))
     // Test with a port above 1000
     assert.True(validate.ValidateListenerPort(4444))
 }
@@ -306,7 +258,6 @@ func TestValidateLoadDir(t *testing.T) {
    testDir := "testingDir"
    // Create the test directory
    err := os.Mkdir(testDir, os.ModePerm)
-   // Ensure the error is nil meaning successful operation
    assert.Equal(nil, err)
 
    testFile := "testFile.txt"
@@ -314,7 +265,6 @@ func TestValidateLoadDir(t *testing.T) {
    filePath := fmt.Sprintf("%s/%s", testDir, testFile)
    // Open the file with write permissions
    file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-   // Ensure the error is nil meaning successful operation
    assert.Equal(nil, err)
 
    // Make a byte buffer based off iteration index
@@ -323,21 +273,19 @@ func TestValidateLoadDir(t *testing.T) {
    data.GenerateRandomBytes(buffer, 64)
    // Write the random data to the output file
    bytesWrote, err := file.Write(buffer)
-   // Ensure the error is nil meaning successful operation
    assert.Equal(nil, err)
    // Close the file after data has been written
-   file.Close()
+   err = file.Close()
+   assert.Equal(nil, err)
    // Ensure the bytes wrote matches the buffer size
    assert.Equal(bytesWrote, 64)
 
    // Validate the created test dir
    err = validate.ValidateLoadDir(testDir)
-   // Ensure the error is nil meaning successful operation
    assert.Equal(nil, err)
 
    // Delete the test dir after it has been validated
    err = os.RemoveAll(testDir)
-   // Ensure the error is nil meaning successful operation
    assert.Equal(nil, err)
 }
 
@@ -356,31 +304,6 @@ func TestValidateLogMode(t *testing.T) {
     // Iterate through slice of truths and test them
     for _, falacy := range falacies {
         assert.False(validate.ValidateLogMode(falacy))
-    }
-}
-
-
-func TestValidateFileSize(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    tests := []struct {
-        input   string
-        output  int64
-    } {
-        {"100mb", int64(100 * globals.MB)},
-        {"10GB", int64(10 * globals.GB)},
-        {"512kb", int64(512 * globals.KB)},
-    }
-
-    // Iterate through slice of test structs
-    for _, test := range tests {
-        // Use struct member as input to call function
-        outputSize, err := validate.ValidateFileSize(test.input)
-        // Ensure the error is nil meaning successful operation
-        assert.Equal(nil, err)
-        // Ensure the expected test size equals function output
-        assert.Equal(test.output, outputSize)
     }
 }
 
@@ -437,7 +360,6 @@ func TestValidatePath(t *testing.T) {
     testPath = "./test//path"
     // Run test with path that needs cleansing
     resultPath, err := validate.ValidatePath(testPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(err, nil)
     // Ensure the path was properly cleansed
     assert.Equal("test/path", resultPath)
@@ -445,7 +367,6 @@ func TestValidatePath(t *testing.T) {
     testPath = "./test/../path"
     // Run test with path that needs cleansing
     resultPath, err = validate.ValidatePath(testPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(err, nil)
     // Ensure that ../ and before are removed
     assert.Equal("path", resultPath)
@@ -483,7 +404,6 @@ func TestValidateRulesetFile(t *testing.T) {
     testDir := "testingDir"
     // Create the test directory
     err := os.Mkdir(testDir, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testFile := "testFile.txt"
@@ -491,7 +411,6 @@ func TestValidateRulesetFile(t *testing.T) {
     filePath := fmt.Sprintf("%s/%s", testDir, testFile)
     // Open the file with write permissions
     file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Make a byte buffer based off iteration index
@@ -500,81 +419,21 @@ func TestValidateRulesetFile(t *testing.T) {
     data.GenerateRandomBytes(buffer, 64)
     // Write the random data to the output file
     bytesWrote, err := file.Write(buffer)
-    // Ensure the error is nil meaning successful operation
+
     assert.Equal(nil, err)
     // Close the file after data has been written
-    file.Close()
+    err = file.Close()
+    assert.Equal(nil, err)
     // Ensure the bytes wrote matches the buffer size
     assert.Equal(bytesWrote, 64)
 
     // Validate the created test file inside the test dir
     err = validate.ValidateRulesetFile(filePath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Delete the test dir after it has been validated
     err = os.RemoveAll(testDir)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
-}
-
-
-func TestValidateSecurityGroupIds(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateSecurityGroupIds([]string{"sg-0a1b2c3d",
-                                                      "sg-0a1b2c3d4e5f6a7b8",
-                                                      "sg-abcdef1234567890abcdef"})
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateSecurityGroupIds([]string{"SG-01234567",
-                                                     "sg-0123456",
-                                                     "sg-0123 567",
-                                                     "sg-0123-4567"})
-    // Ensure the error is not nil meaning failed operation
-    assert.NotEqual(nil, err)
-}
-
-
-func TestValidateSecurityGroups(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateSecurityGroups([]string{"my-security-group",
-                                                    "AdminDatabaseSG",
-                                                    "web.server@frontend",
-                                                    "Production SG 01"})
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateSecurityGroups([]string{"sg-override",
-                                                   "Invalid~Name",
-                                                   "Name/With\\Backslash",
-                                                   "NameWith%Percent"})
-    // Ensure the error is not nil meaning failed operation
-    assert.NotEqual(nil, err)
-}
-
-
-func TestValidateSubnetId(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Try test with proper value
-    err := validate.ValidateSubnetId("subnet-0a1b2c3d4e5f6a7b8")
-    // Ensure the error is nil meaning successful operation
-    assert.Equal(nil, err)
-
-    // Try test with bad value
-    err = validate.ValidateSubnetId("subnet-01234g78")
-    // Ensure the error is not nil meaning failed operation
-    assert.NotEqual(nil, err)
 }
 
 

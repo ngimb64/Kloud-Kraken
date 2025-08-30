@@ -41,15 +41,15 @@ type LoggerManager struct {
 // NewLoggerManager initializes local and CloudWatch loggers based on the flag.
 //
 // @Parameters
-// - logDestination:  Where the logs will be stored (local, cloudwatch, both)
-// - localLogFile:  Path where the logs will be stored locally on file
-// - awsConfig:  The initialized AWS configuration instance
-// - group:  The CloudWatch logging group
-// - logToMemory:  Boolean toggler whether to log to memory or not
+//  - logDestination:  Where the logs will be stored (local, cloudwatch, both)
+//  - localLogFile:  Path where the logs will be stored locally on file
+//  - awsConfig:  The initialized AWS configuration instance
+//  - group:  The CloudWatch logging group
+//  - logToMemory:  Boolean toggler whether to log to memory or not
 //
 // @Returns
-// - The initialzed logging manager
-// - Error if it occurs, otherwise nil on success
+//  - The initialzed logging manager
+//  - Error if it occurs, otherwise nil on success
 //
 func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
                       group string, logToMemory bool) (*LoggerManager, error) {
@@ -83,7 +83,7 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 // returns it be stored in memory variable.
 //
 // @Returns
-// - The string JSON log from the zap logging instance
+//  - The string JSON log from the zap logging instance
 //
 func (logMan *LoggerManager) GetLog() string {
     return logMan.LocalLogger.GetMemoryLog()
@@ -92,11 +92,10 @@ func (logMan *LoggerManager) GetLog() string {
 // Parses the variable length args  based on data type into different lists.
 //
 // @Parameters
-// - manager:  The logger manager for zap and CloudWatch instances
-// - level:  The level of logging
-// - message:  The message to be logged, supports printf format with below args
-// - args:  Variadic length list of args with zap.Fields and regular data types
-//          supporting printf format
+//  - level:  The level of logging
+//  - message:  The message to be logged, supports printf format with below args
+//  - args:  Variadic length list of args with zap.Fields and regular data types
+//           supporting printf format
 //
 func (manager *LoggerManager) LogMessage(level string, message string, args ...any) {
     argList := []any{}
@@ -237,12 +236,12 @@ type ZapLogger struct {
 // NewZapLogger creates a zap logger instance with either file or memory logging.
 //
 // @Parameters
-// - logFile:  The path for the output log file
-// - logToMemory:  Boolean toggle to specify whether to log to memory or not
+//  - logFile:  The path for the output log file
+//  - logToMemory:  Boolean toggle to specify whether to log to memory or not
 //
 // @Returns
-// - Initialzed zap logging instance
-// - Error if it occurs, otherwise nil on success
+//  - Initialzed zap logging instance
+//  - Error if it occurs, otherwise nil on success
 //
 func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
     var logger *zap.Logger
@@ -292,12 +291,13 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
 // returns it be stored in memory variable.
 //
 // @Returns
-// - The string JSON log from the zap logging instance
+//  - The string JSON log from the zap logging instance
 //
 func (zapLog *ZapLogger) GetMemoryLog() string {
     if zapLog.memoryBuffer != nil {
         return zapLog.memoryBuffer.String()
     }
+
     return ""
 }
 
@@ -349,13 +349,13 @@ type CloudWatchLogger struct {
 // Creates and returns CloudWatch logger instance.
 //
 // @Parameters
-// - awsConfig:  The AWS configuration config struct
-// - group:  The CloudWatch logging group
-// - stream:  The CloudWatch logging stream
+//  - awsConfig:  The AWS configuration config struct
+//  - group:  The CloudWatch logging group
+//  - stream:  The CloudWatch logging stream
 //
 // @Returns
-// - The initializes CloudWatch logger config instance
-// - Error if it occurs, otherwise nil on success
+//  - The initializes CloudWatch logger config instance
+//  - Error if it occurs, otherwise nil on success
 //
 func NewCloudWatchLogger(awsConfig aws.Config, group string) (
                          Logger, error) {
@@ -433,9 +433,9 @@ func NewCloudWatchLogger(awsConfig aws.Config, group string) (
 // Method that packages message & fields, sends to CW, and updates token.
 //
 // @Parameters
-// - level:  The level that the log event will be set to
-// - msg:  The message of log event
-// - fields:  Any additional zap field to be added to log entry
+//  - level:  The level that the log event will be set to
+//  - msg:  The message of log event
+//  - fields:  Any additional zap field to be added to log entry
 //
 func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...zap.Field) {
     // Build log entry
@@ -454,7 +454,7 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...z
     // Format the data into JSON for transporting to CloudWatch
     payload, err := json.Marshal(entry)
     if err != nil {
-        log.Fatalf("marshal log entry: %v\n", err)
+        log.Fatalf("marshal log entry: %v", err)
     }
 
     // Set up input log event message
@@ -528,11 +528,11 @@ func (cloudWatchLog *CloudWatchLogger) Fatal(msg string, fields ...zap.Field) {
 // Takes the passed in JSON formatted string and maps into a map via unmarshal.
 //
 // @Parameters
-// - jsonStr:  The JSON string to unmarshal into map
+//  - jsonStr:  The JSON string to unmarshal into map
 //
 // @Returns
-// - The map with unmarshaled JSON data
-// - Error if it occurs, otherwise nil on success
+//  - The map with unmarshaled JSON data
+//  - Error if it occurs, otherwise nil on success
 //
 func LogToMap(jsonStr string) (map[string]any, error) {
     var logMap map[string]any

@@ -34,12 +34,12 @@ type TUI struct {
 // Creates a new TUI instance with given channel buffer sizes.
 //
 // @Parameters
-// - maxBuffer:  The max buffer size for chaneels and pannels
-// - leftPanelName:  The name of the header for the left panel
-// - redrawInterval:  The duration of time until the display panels are updated
-// - rightColOffset:  The offset used to set the position of the right column
+//  - maxBuffer:  The max buffer size for chaneels and pannels
+//  - leftPanelName:  The name of the header for the left panel
+//  - redrawInterval:  The duration of time until the display panels are updated
+//  - rightColOffset:  The offset used to set the position of the right column
 //                    (2 for split 50-50, 3 for 33.3-66.6, 4 for 25-75, 5 for 20-80)
-// - leftPanelName:  The name of the header for the left panel
+//  - leftPanelName:  The name of the header for the left panel
 //
 func NewTUI(maxBuffer int, leftPanelName string, redrawInterval time.Duration,
             rightColOffset uint16, rightPanelName string) *TUI {
@@ -61,9 +61,9 @@ func NewTUI(maxBuffer int, leftPanelName string, redrawInterval time.Duration,
 // Runs the continual ticker loop that handles TUI operations.
 //
 // @Parameters
-// - leftPanelHeaderColor:  The color of the left panel header
-// - rightPanelHeaderColor:  The color of the right panel header
-// - dividerColor:  The color of the divider used to split header and content section
+//  - leftPanelHeaderColor:  The color of the left panel header
+//  - rightPanelHeaderColor:  The color of the right panel header
+//  - dividerColor:  The color of the divider used to split header and content section
 //
 func (t *TUI) Start(leftPanelHeaderColor string, rightPanelHeaderColor string,
                     dividerColor string) {
@@ -127,9 +127,9 @@ func (t *TUI) Stop() {
 // will populate over time.
 //
 // @Parameters
-// - panel1HeaderColor:  The color of the left panel text header
-// - panel2HeaderColor:  The color of the right panel text header
-// - dividerColor:  The color of the line divider bewteen headers and dynamic text area
+//  - panel1HeaderColor:  The color of the left panel text header
+//  - panel2HeaderColor:  The color of the right panel text header
+//  - dividerColor:  The color of the line divider bewteen headers and dynamic text area
 //
 func (t *TUI) renderStaticFrame(panel1HeaderColor string, panel2HeaderColor string,
                                 dividerColor string) {
@@ -165,8 +165,8 @@ func (t *TUI) renderStaticFrame(panel1HeaderColor string, panel2HeaderColor stri
 // shared AreaPrinter (t.area).
 //
 // @Parameters
-// - bufferLeft:  The most recent content for the left panel
-// - bufferRight:  The most recent content for the right panel
+//  - bufferLeft:  The most recent content for the left panel
+//  - bufferRight:  The most recent content for the right panel
 //
 func (t *TUI) updateContent(bufferLeft []string, bufferRight []string) {
     // Get the terminal display height and width
@@ -217,11 +217,11 @@ func (t *TUI) updateContent(bufferLeft []string, bufferRight []string) {
 // accounting for ANSI color codes which do not consume visible space.
 //
 // @Parameters
-// - value:  The string to format, possibly containing ANSI escape sequences
-// - width:  The target visible width for the string in terminal columns
+//  - value:  The string to format, possibly containing ANSI escape sequences
+//  - width:  The target visible width for the string in terminal columns
 //
 // @Returns
-// - A new string exactly `width` characters wide in visible length, either
+//  - A new string exactly `width` characters wide in visible length, either
 //   padded with spaces or truncated, preserving ANSI formatting
 //
 func (t *TUI) padOrTrim(value string, width int) string {
@@ -247,10 +247,10 @@ func (t *TUI) padOrTrim(value string, width int) string {
 // used for terminal text formatting (e.g., colors).
 //
 // @Parameters
-// - s:  The string to measure, potentially containing ANSI sequences
+//  - s:  The string to measure, potentially containing ANSI sequences
 //
 // @Returns
-// - The number of visible characters, excluding ANSI control sequences
+//  - The number of visible characters, excluding ANSI control sequences
 //
 func (t *TUI) stripAnsiLength(s string) int {
     count := 0
@@ -284,11 +284,11 @@ func (t *TUI) stripAnsiLength(s string) int {
 // any overflow will be discarded.
 //
 // @Parameters
-// - buffer:  The buffer to check size to max value and trim if needed
-// - maxSize:  The maximum allowed size of the buffer
+//  - buffer:  The buffer to check size to max value and trim if needed
+//  - maxSize:  The maximum allowed size of the buffer
 //
 // @Returns
-// - The string buffer trimmed to the max value
+//  - The string buffer trimmed to the max value
 //
 func (t *TUI) trimToMax(buffer []string, maxSize int) []string {
     // If the buffer is above the max size, trim it
@@ -304,11 +304,11 @@ func (t *TUI) trimToMax(buffer []string, maxSize int) []string {
 // issues.
 //
 // @Parameters
-// - s:  The original string with optional ANSI color codes
-// - n:  The desired maximum visible character length
+//  - s:  The original string with optional ANSI color codes
+//  - n:  The desired maximum visible character length
 //
 // @Returns
-// - A new string containing at most `n` visible characters, ending with
+//  - A new string containing at most `n` visible characters, ending with
 //   an ANSI reset code to ensure consistent formatting
 //
 func (t *TUI) truncateAnsi(s string, n int) string {

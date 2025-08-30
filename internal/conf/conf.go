@@ -2,7 +2,6 @@ package conf
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
@@ -11,30 +10,8 @@ import (
 
 // AppConfig is a wrapper that ties the local and client yaml configs
 type AppConfig struct {
-    LocalConfig  LocalConfig  `yaml:"local_config"`
     ClientConfig ClientConfig `yaml:"client_config"`
-}
-
-// LocalConfig contains the yaml configuration for local server settings
-type LocalConfig struct {
-    AccountId           string   `yaml:"account_id"`
-    BucketName          string   `yaml:"bucket_name"`
-    HashFilePath        string   `yaml:"hash_file_path"`
-    IamUsername         string   `yaml:"iam_username"`
-    InstanceType        string   `yaml:"instance_type"`
-    ListenerPort        int      `yaml:"listener_port"`
-    LoadDir	   	        string   `yaml:"load_dir"`
-    LocalTesting        bool     `yaml:"local_testing"`
-    LogPath             string   `yaml:"log_path"`
-    MaxMergingSize      string   `yaml:"max_merging_size"`
-    MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
-    MaxSizeRange        float64  `yaml:"max_size_range"`
-    NumberInstances     int      `yaml:"number_instances"`
-    Region              string   `yaml:"region"`
-    RulesetPath         string   `yaml:"ruleset_path"`
-    SecurityGroupIds    []string `yaml:"security_group_ids"`
-    SecurityGroups      []string `yaml:"security_groups"`
-    SubnetId            string   `yaml:"subnet_id"`
+    LocalConfig  LocalConfig  `yaml:"local_config"`
 }
 
 // ClientConfig contains the yaml configuration for the client settings
@@ -56,150 +33,64 @@ type ClientConfig struct {
     Workload          string `yaml:"workload"`
 }
 
+// LocalConfig contains the yaml configuration for local server settings
+type LocalConfig struct {
+    CidrBlock           string   `yaml:"cidr_block"`
+    HashFilePath        string   `yaml:"hash_file_path"`
+    IamUsername         string   `yaml:"iam_username"`
+    InstanceType        string   `yaml:"instance_type"`
+    ListenerPort        int      `yaml:"listener_port"`
+    LoadDir	   	        string   `yaml:"load_dir"`
+    LocalTesting        bool     `yaml:"local_testing"`
+    LogPath             string   `yaml:"log_path"`
+    MaxMergingSize      string   `yaml:"max_merging_size"`
+    MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
+    MaxSizeRange        float64  `yaml:"max_size_range"`
+    NumberInstances     int32    `yaml:"number_instances"`
+    Region              string   `yaml:"region"`
+    RulesetPath         string   `yaml:"ruleset_path"`
+}
+
 
 // LoadConfig reads the YAML file and unmarshals it into AppConfig struct in
 // memory, then validates the parsed data from local and client sections of yaml.
 //
-// @Returns
-// - The initialized AppConfig struct loaded with validated data
+// @Parameters
+//  - filePath:  The path to the YAML file to load
 //
-func LoadConfig(filePath string) *AppConfig {
-    // Open the YAML file
-    file, err := os.Open(filePath)
-    if err != nil {
-        log.Fatalf("Could not open YAML file:  %v", err)
-    }
-    // Close file on local exit
-    defer file.Close()
-
+// @Returns
+//  - The initialized AppConfig struct loaded with validated data
+//  - Error if it occurs, otherwise nil on success
+//
+func LoadConfig(filePath string) (*AppConfig, error) {
     // Create a new AppConfig instance
     var config AppConfig
 
-    // Decode YAML into AppConfig struct
-    decoder := yaml.NewDecoder(file)
-    err = decoder.Decode(&config)
+    // Read yaml file contents into memory
+    yamlBytes, err := os.ReadFile(filePath)
     if err != nil {
-        log.Fatalf("Could not decode YAML into AppConfig:  %v", err)
+        return nil, fmt.Errorf("reading config file:  %w", err)
     }
 
-    // Validate local config section of YAML data
-    err = validateLocalConfig(&config.LocalConfig)
+    // Decode the raw bytes into AppConfig struct
+    err = yaml.Unmarshal(yamlBytes, &config)
     if err != nil {
-        log.Fatalf("Invalid local config:  %v", err)
+        return nil, fmt.Errorf("parsing YAML:  %w", err)
     }
 
     // Validate client config section of YAML data
     err = validateClientConfig(&config.ClientConfig)
     if err != nil {
-        log.Fatalf("Invalid client config:  %v", err)
+        return &config, err
     }
 
-    return &config
-}
-
-
-// Takes the parsed data in LocalConfig struct and passes each
-// struct member into its corresponding validation routine.
-//
-// @Parameters
-// - localConfig:  The LocalConfig section of the parsed yaml data
-//
-// @Returns
-// - Error if it occurs, otherwise nil on success
-//
-func validateLocalConfig(localConfig *LocalConfig) error {
-    // Ensure the account id is of proper format
-    err := validate.ValidateAccountId(localConfig.AccountId)
+    // Validate local config section of YAML data
+    err = validateLocalConfig(&config.LocalConfig)
     if err != nil {
-        return err
+        return &config, err
     }
 
-    // Ensure the S3 bucket name is of proper format if exists
-    err = validate.ValidateBucketName(localConfig.BucketName)
-    if err != nil {
-        return err
-    }
-
-    // Ensure the hash file path exists
-    err = validate.ValidateHashFile(localConfig.HashFilePath)
-    if err != nil {
-        return err
-    }
-
-    // Ensure the IAM username is valid
-    err = validate.ValidateIamUsername(localConfig.IamUsername)
-    if err != nil {
-        return err
-    }
-
-    // Ensure instance type is in supported list
-    if !validate.ValidateInstanceType(localConfig.InstanceType) {
-        return fmt.Errorf("improper instance_type - %w", err)
-    }
-
-    // If the listerner port is less than 1000
-    if !validate.ValidateListenerPort(localConfig.ListenerPort) {
-        return fmt.Errorf("listener_port must greater than 1000")
-    }
-
-    // Ensure the load directory exists and has files in it
-    err = validate.ValidateLoadDir(localConfig.LoadDir)
-    if err != nil {
-        return err
-    }
-
-    // Ensure log path is proper format and reset ruleset path with validated
-    localConfig.LogPath, err = validate.ValidatePath(localConfig.LogPath)
-    if err != nil {
-        return fmt.Errorf("improper log_path specified - %w", err)
-    }
-
-    // Parse and convert the max merging size to raw bytes from any units
-    localConfig.MaxMergingSizeInt64, err = validate.ValidateFileSize(localConfig.MaxMergingSize)
-    if err != nil {
-        return fmt.Errorf("improper max_merging_size - %w", err)
-    }
-
-    // Ensure the max size range is less or equal to 50 percent
-    if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
-        return fmt.Errorf("max_size_range greater than 50 percent")
-    }
-
-    // If the number of instances is less than one
-    if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
-        return fmt.Errorf("number_instances must be a positive integer")
-    }
-
-    // Ensure a proper region was specified in the local config
-    if !validate.ValidateRegion(localConfig.Region) {
-        return fmt.Errorf("improper region specified")
-    }
-
-    // Ensure the ruleset file path exists
-    err = validate.ValidateRulesetFile(localConfig.RulesetPath)
-    if err != nil {
-        return err
-    }
-
-    // Ensure specified security group IDs are valid
-    err = validate.ValidateSecurityGroupIds(localConfig.SecurityGroupIds)
-    if err != nil {
-        return err
-    }
-
-    // Ensure specified security group names are valid
-    err = validate.ValidateSecurityGroups(localConfig.SecurityGroups)
-    if err != nil {
-        return err
-    }
-
-    // Ensure specified subnet ID is valid
-    err = validate.ValidateSubnetId(localConfig.SubnetId)
-    if err != nil {
-        return err
-    }
-
-    return nil
+    return &config, nil
 }
 
 
@@ -207,10 +98,10 @@ func validateLocalConfig(localConfig *LocalConfig) error {
 // struct member into its corresponding validation routine.
 //
 // @Parameters
-// - clientConfig:  The ClientConfig section of the parsed yaml data
+//  - clientConfig:  The ClientConfig section of the parsed yaml data
 //
 // @Returns
-// - Error if it occurs, otherwise nil on success
+//  - Error if it occurs, otherwise nil on success
 //
 func validateClientConfig(clientConfig *ClientConfig) error {
     var err error
@@ -268,6 +159,87 @@ func validateClientConfig(clientConfig *ClientConfig) error {
     // If the workload was not in supported profiles
     if !validate.ValidateWorkload(clientConfig.Workload) {
         return fmt.Errorf("improper workload specified")
+    }
+
+    return nil
+}
+
+
+// Takes the parsed data in LocalConfig struct and passes each
+// struct member into its corresponding validation routine.
+//
+// @Parameters
+//  - localConfig:  The LocalConfig section of the parsed yaml data
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func validateLocalConfig(localConfig *LocalConfig) error {
+    // Ensure the CIDR block is of proper format if exists
+    err := validate.ValidateCidrBlock(localConfig.CidrBlock)
+    if err != nil {
+        return err
+    }
+
+    // Ensure the hash file path exists
+    err = validate.ValidateHashFile(localConfig.HashFilePath)
+    if err != nil {
+        return err
+    }
+
+    // Ensure the IAM username is valid
+    err = validate.ValidateIamUsername(localConfig.IamUsername)
+    if err != nil {
+        return err
+    }
+
+    // Ensure instance type is in supported list
+    if !validate.ValidateInstanceType(localConfig.InstanceType) {
+        return fmt.Errorf("improper instance_type - %q", localConfig.InstanceType)
+    }
+
+    // If the listerner port is less than 1000
+    if !validate.ValidateListenerPort(localConfig.ListenerPort) {
+        return fmt.Errorf("listener_port must greater than 1000")
+    }
+
+    // Ensure the load directory exists and has files in it
+    err = validate.ValidateLoadDir(localConfig.LoadDir)
+    if err != nil {
+        return err
+    }
+
+    // Ensure log path is proper format and reset ruleset path with validated
+    localConfig.LogPath, err = validate.ValidatePath(localConfig.LogPath)
+    if err != nil {
+        return fmt.Errorf("improper log_path specified - %w", err)
+    }
+
+    // Parse and convert the max merging size to raw bytes from any units
+    localConfig.MaxMergingSizeInt64, err = validate.ValidateFileSize(localConfig.MaxMergingSize)
+    if err != nil {
+        return fmt.Errorf("improper max_merging_size - %w", err)
+    }
+
+    // Ensure the max size range is less or equal to 50 percent
+    if !validate.ValidateMaxSizeRange(localConfig.MaxSizeRange) {
+        return fmt.Errorf("max_size_range greater than 50 percent")
+    }
+
+    // If the number of instances is less than one
+    if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
+        return fmt.Errorf("number_instances must be a positive integer")
+    }
+
+    // Ensure a proper region was specified in the local config
+    if !validate.ValidateRegion(localConfig.Region) {
+        return fmt.Errorf("improper region specified")
+    }
+
+    // Ensure the ruleset file path exists
+    err = validate.ValidateRulesetFile(localConfig.RulesetPath)
+    if err != nil {
+        return err
     }
 
     return nil

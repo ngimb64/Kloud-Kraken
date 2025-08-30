@@ -18,13 +18,11 @@ func TestLoadConfig(t *testing.T) {
 
     // Get the current working directory
     path, err := os.Getwd()
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
-    testDir := fmt.Sprintf("%s/testdir", path)
+    testDir := path + "/testdir"
     // Create the test directory for the data loaded by the config file
     err = os.Mkdir(testDir, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testFiles := []string{filepath.Join(testDir, "hashes"),
@@ -34,7 +32,6 @@ func TestLoadConfig(t *testing.T) {
     for _, fileName := range testFiles {
         // Create the current file
         file, err := os.Create(fileName)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Make a byte buffer based off iteration index
@@ -43,45 +40,17 @@ func TestLoadConfig(t *testing.T) {
         data.GenerateRandomBytes(buffer, 64)
         // Write the test strings to current file
         bytesWrote, err := file.Write(buffer)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
+
         // Ensure the buffer of random data matches bytes wrote
         assert.Equal(len(buffer), bytesWrote)
         // Close the file after data is written
-        file.Close()
+        err = file.Close()
+        assert.Equal(nil, err)
     }
-
-
-    // TODO:  add security_group_ids, security_groups, and subnet_id
-
 
     yamlPath := "testdata.yml"
     testData := fmt.Sprintf(`
-local_config:
-  account_id: "123456789123"
-  bucket_name: "test-bucket"
-  hash_file_path: "%s"
-  iam_username: "doug"
-  instance_type: "p4d.24xlarge"
-  listener_port: 6969
-  load_dir: "%s"
-  local_testing: true
-  log_path: "KloudKraken.log"
-  max_merging_size: "50MB"
-  max_size_range: 25.0
-  number_instances: 3
-  region: "us-east-1"
-  ruleset_path: "%s"
-  security_group_ids:
-    - "sg-01234567"
-    - "sg-0a1b2c3d4e5f6a7b8"
-    - "sg-abcdef1234567890abcdef"
-  security_groups:
-    - "my-security-group"
-    - "web.server@frontend"
-  subnet_id: "subnet-0a1b2c3d4e5f6a7b8"
-
-
 client_config:
   apply_optimization: true
   char_set1: "charset1"
@@ -97,34 +66,29 @@ client_config:
   max_transfers: 2
   region: "us-west-1"
   workload: "4"
+
+local_config:
+  cidr_block: "10.0.0.1/24"
+  hash_file_path: "%s"
+  iam_username: "doug"
+  instance_type: "p4d.24xlarge"
+  listener_port: 6969
+  load_dir: "%s"
+  local_testing: true
+  log_path: "KloudKraken.log"
+  max_merging_size: "50MB"
+  max_size_range: 25.0
+  number_instances: 3
+  region: "us-east-1"
+  ruleset_path: "%s"
 `, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
     err = os.WriteFile(yamlPath, []byte(testData), 0644)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Load the config into AppConfig struct
-    config := conf.LoadConfig(yamlPath)
-
-    // Validate local config fields to original data
-    assert.Equal("123456789123", config.LocalConfig.AccountId)
-    assert.Equal("test-bucket", config.LocalConfig.BucketName)
-    assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
-    assert.Equal("doug", config.LocalConfig.IamUsername)
-    assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
-    assert.Equal(6969, config.LocalConfig.ListenerPort)
-    assert.Equal(testDir, config.LocalConfig.LoadDir)
-    assert.True(config.LocalConfig.LocalTesting)
-    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
-    assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
-    assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
-    assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
-    assert.Equal(3, config.LocalConfig.NumberInstances)
-    assert.Equal("us-east-1", config.LocalConfig.Region)
-    assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
-    assert.Equal(3, len(config.LocalConfig.SecurityGroupIds))
-    assert.Equal(2, len(config.LocalConfig.SecurityGroups))
-    assert.Equal("subnet-0a1b2c3d4e5f6a7b8", config.LocalConfig.SubnetId)
+    config, err := conf.LoadConfig(yamlPath)
+    assert.Equal(nil, err)
 
     // Validate client config fields to original data
     assert.True(config.ClientConfig.ApplyOptimization)
@@ -143,6 +107,22 @@ client_config:
     assert.Equal("us-west-1", config.ClientConfig.Region)
     assert.Equal("4", config.ClientConfig.Workload)
 
+    // Validate local config fields to original data
+    assert.Equal("10.0.0.1/24", config.LocalConfig.CidrBlock)
+    assert.Equal(testFiles[0], config.LocalConfig.HashFilePath)
+    assert.Equal("doug", config.LocalConfig.IamUsername)
+    assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
+    assert.Equal(6969, config.LocalConfig.ListenerPort)
+    assert.Equal(testDir, config.LocalConfig.LoadDir)
+    assert.True(config.LocalConfig.LocalTesting)
+    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
+    assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
+    assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
+    assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
+    assert.Equal(3, config.LocalConfig.NumberInstances)
+    assert.Equal("us-east-1", config.LocalConfig.Region)
+    assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
+
     // Append the yaml data file to test file for deletion
     testFiles = append(testFiles, yamlPath)
 
@@ -150,12 +130,10 @@ client_config:
     for _, file := range testFiles {
         // Delete the current file
         err = os.Remove(file)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 
     // Delete the test dir where test files reside
     err = os.Remove(testDir)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }

@@ -19,12 +19,10 @@ func TestCatAndDelete(t *testing.T) {
 
     // Create a random test file
     file1, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Write the data to the file
     bytesWrote, err := file1.Write(file1Data)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the bytes wrote matches the data length
     assert.Equal(len(file1Data), bytesWrote)
@@ -33,12 +31,10 @@ func TestCatAndDelete(t *testing.T) {
 
     // Create a random test file
     file2, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Write the data to the file
     bytesWrote, err = file2.Write(file2Data)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the bytes wrote matches the data length
     assert.Equal(len(file2Data), bytesWrote)
@@ -50,23 +46,19 @@ func TestCatAndDelete(t *testing.T) {
 
     // Create output file for cat command
     catOutfile, err := os.CreateTemp("", "catout")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the file as it will be handled by cat
     catOutfile.Close()
 
     // Execute the cat command that deletes the input files
     err = wordlist.CatAndDelete(&catFiles, catOutfile.Name())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Read the output from the output file
     output, err := os.ReadFile(catOutfile.Name())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Delete the file after the data is read in memory
     err = os.Remove(catOutfile.Name())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     assert.Equal([]byte("test\nstring\nfile\nmmmk\nfoo\nbar\nsham\nshamar"), output)
@@ -81,26 +73,22 @@ func TestDuplicutAndDelete(t *testing.T) {
 
     // Create a random test file
     file1, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Write the data to the file
     bytesWrote, err := file1.Write(testData)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the bytes wrote matches the data length
     assert.Equal(len(testData), bytesWrote)
 
     // Write the same data to the file
     bytesWrote, err = file1.Write(testData)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the bytes wrote matches the data length
     assert.Equal(len(testData), bytesWrote)
 
     // Write the same data to the file
     bytesWrote, err = file1.Write(testData)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the bytes wrote matches the data length
     assert.Equal(len(testData), bytesWrote)
@@ -109,21 +97,18 @@ func TestDuplicutAndDelete(t *testing.T) {
 
     // Create output file for cat command
     duplicutOutFile, err := os.CreateTemp("", "duplicutout")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the file as it will be handled by duplicut
     duplicutOutFile.Close()
 
     // Execute the cat command that filters duplicates in files
     size, err := wordlist.DuplicutAndDelete(file1.Name(), duplicutOutFile.Name())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the size is equal to the expected data
     assert.Equal(int64(len(testData)), size)
 
     // Delete the result file after test complete
     err = os.Remove(duplicutOutFile.Name())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -134,7 +119,6 @@ func TestFileShaveDD(t *testing.T) {
 
     // Create a random test file for input data to shave
     inFile, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Set the size of random data
@@ -145,7 +129,6 @@ func TestFileShaveDD(t *testing.T) {
     data.GenerateRandomBytes(buffer, randomDataSize)
     // Write the random data to the output file
     bytesWrote, err := inFile.Write(buffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the file after data has been written
     inFile.Close()
@@ -154,30 +137,25 @@ func TestFileShaveDD(t *testing.T) {
 
     // Create a random test file for output shaved data
     shaveFile, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the output file
     shaveFile.Close()
 
     // Create a random test file for original data
     originFile, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the output file
     originFile.Close()
 
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Shave exceeding half of wordlist into new file
     shaveFileSize, err := wordlist.FileShaveDD(inFile.Name(), shaveFile.Name(),
                                                originFile.Name(), int64(4096),
                                                int64((10 * globals.MB)))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Get the file info of orgiginal data before exceeding was shaved
     originFileInfo, err := os.Stat(originFile.Name())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the input file is shaved down to half size
@@ -201,7 +179,6 @@ func TestFileShaveSplit(t *testing.T) {
 
     // Create a random test file for input data to shave
     inFile, err := os.CreateTemp("", "testfile")
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Set the size of random data
@@ -212,7 +189,6 @@ func TestFileShaveSplit(t *testing.T) {
     data.GenerateRandomBytes(buffer, randomDataSize)
     // Write the random data to the output file
     bytesWrote, err := inFile.Write(buffer)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Close the file after data has been written
     inFile.Close()
@@ -226,7 +202,6 @@ func TestFileShaveSplit(t *testing.T) {
     err = wordlist.FileShaveSplit(inFile.Name(), "/tmp/testfile",
                                   int64(2 * globals.MB),
                                   &catFiles, outFilesMap)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure proper number of output files
@@ -237,14 +212,12 @@ func TestFileShaveSplit(t *testing.T) {
     // Iterate through leftover files for cat and delete them
     for _, file := range catFiles {
         err = os.Remove(file)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 
     // Iterate through output files and delete them
     for fileName := range outFilesMap {
         err = os.Remove(fileName)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 }
@@ -255,19 +228,16 @@ func TestGetOptimalBlockSize(t *testing.T) {
     assert := assert.New(t)
 
     blockSize, err := wordlist.GetOptimalBlockSize(5 * globals.MB)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the block size is 4MB
     assert.Equal(int64(8 * globals.MB), blockSize)
 
     blockSize, err = wordlist.GetOptimalBlockSize(4 * globals.MB)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the block size is 4MB
     assert.Equal(int64(4 * globals.MB), blockSize)
 
     blockSize, err = wordlist.GetOptimalBlockSize(10 * globals.KB)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
     // Ensure the block size is 4MB
     assert.Equal(int64(16 * globals.KB), blockSize)
@@ -281,12 +251,10 @@ func TestMergeWordlistDir(t *testing.T) {
     dirPath := "testdir"
     // Create the test directory
     err := os.Mkdir(dirPath, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Copy the directory with test wordlist data to test dir
     err = os.CopyFS(dirPath, os.DirFS("../../testdata"))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     maxMergingSize := int64(20 * globals.MB)
@@ -294,11 +262,9 @@ func TestMergeWordlistDir(t *testing.T) {
     // Merge the created wordlists in the wordlist dir
     err = wordlist.MergeWordlistDir(dirPath, maxMergingSize, maxFileSize,
                                     15.0, int64(1 * globals.GB))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     dirItems, err := os.ReadDir(dirPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     fullFiles := []string{}
@@ -315,7 +281,6 @@ func TestMergeWordlistDir(t *testing.T) {
 
         // Get the current file info
         itemInfo, err := os.Stat(itemPath)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
 
         // Get the current file size and ensure it is less than max
@@ -338,7 +303,6 @@ func TestMergeWordlistDir(t *testing.T) {
 
     // Delete test directory and its contents after test
     err = os.RemoveAll(dirPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }
 
@@ -350,12 +314,10 @@ func TestRemoveMergeSubdirs(t *testing.T) {
     dirPath := "testdir"
     // Create the test directory
     err := os.Mkdir(dirPath, os.ModePerm)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Copy the directory with test wordlist data to test dir
     err = os.CopyFS(dirPath, os.DirFS("../../testdata"))
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     testDirs := []string{dirPath + "/" + "testdir1",
@@ -366,18 +328,15 @@ func TestRemoveMergeSubdirs(t *testing.T) {
     // Iterate through the test dirs and create them
     for _, testDir := range testDirs {
         err = os.Mkdir(testDir, os.ModePerm)
-        // Ensure the error is nil meaning successful operation
         assert.Equal(nil, err)
     }
 
     // Delete any subdirectories just created leaving only files
     err = wordlist.RemoveMergeSubdirs(dirPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Read the items in the wordlist merge dir
     dirItems, err := os.ReadDir(dirPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Iterate through the items in the test dir and
@@ -388,6 +347,5 @@ func TestRemoveMergeSubdirs(t *testing.T) {
 
     // Delete test directory and its contents after test
     err = os.RemoveAll(dirPath)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 }

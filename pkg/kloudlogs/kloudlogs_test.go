@@ -20,7 +20,6 @@ func TestLogToMap(t *testing.T) {
     testJsonStr := "{\"key1\":\"value1\",\"key2\":\"value2\"," +
                    "\"key3\":\"value3\",\"key4\":\"value4\"}"
     jsonMap, err := kloudlogs.LogToMap(testJsonStr)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     for counter := 1; counter <= 4; counter++ {
@@ -47,13 +46,11 @@ func TestLogMessage(t *testing.T) {
         config.WithRegion(region),
         config.WithCredentialsProvider(awsCreds),
     )
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     logFile := "testlog.log"
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager("local", logFile, awsConfig, "", false)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     logArgs := []any{zap.String("key1", "value1"), zap.String("key2", "value2"),
@@ -63,12 +60,10 @@ func TestLogMessage(t *testing.T) {
 
     // Get the file info
     fileInfo, err := os.Stat(logFile)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Delete the test log file
     err = os.Remove(logFile)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Get the file size

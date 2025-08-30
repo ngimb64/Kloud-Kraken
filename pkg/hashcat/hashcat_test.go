@@ -95,7 +95,10 @@ $
 Started: Wed Feb 12 23:01:43 2025$
 Stopped: Wed Feb 12 23:01:47 2025$
 `)
-    logArgs := hashcat.ParseHashcatOutput(hashcatOut, []byte("=>"))
+    logArgs, err := hashcat.ParseHashcatOutput(hashcatOut, []byte("=>"))
+    assert.Equal(nil, err)
+
+    // Ensure statistics were parsed
     assert.Greater(len(logArgs), 0)
 
     region := "test-region"
@@ -109,19 +112,16 @@ Stopped: Wed Feb 12 23:01:47 2025$
         config.WithRegion(region),
         config.WithCredentialsProvider(awsCreds),
     )
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, "", true)
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Log the hashcat output with kloudlogs
     logMan.LogMessage("info", "TestParseHashcatOutput test message", logArgs...)
     // Get the log message from memory and parse it as a map
     logMap, err := kloudlogs.LogToMap(logMan.GetLog())
-    // Ensure the error is nil meaning successful operation
     assert.Equal(nil, err)
 
     // Ensure the key-values were properly parsed
