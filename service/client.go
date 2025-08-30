@@ -33,9 +33,9 @@ import (
 )
 
 // Package level variables
-var BufferMutex = &sync.Mutex{}             // Mutex for message buffer synchronization
-var DataPath string                         // Path where data dirs will be stored
-var HashcatArgs = new(hashcat.HashcatArgs)  // Initialze where hashcat args are stored
+var BufferMutex = &sync.Mutex{}           // Mutex for message buffer synchronization
+var DataPath string                       // Path where data dirs will be stored
+var HashcatArgs = &hashcat.HashcatArgs{}  // Initialze where hashcat args are stored
 var HashFilePath string  // Stores hash file path when received
 var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
@@ -44,8 +44,8 @@ var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniousl
 var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
 var RulesetFilePath string     // Stores ruleset file when received
 var RulesetPath string         // Path where ruleset files are stored
-var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
-var WordlistPath string                // Path where wordlists are stored
+var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
+var WordlistPath string              // Path where wordlists are stored
 
 
 // Ensure the final cracked hashes file exists and has a message informing

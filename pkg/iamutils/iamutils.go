@@ -24,7 +24,7 @@ type IamManager struct {
 // @Returns
 //  - The initialized IAM manager with populated data
 //
-func NewIamManager(awsConfig aws.Config) *IamManager {
+func IamNewManager(awsConfig aws.Config) *IamManager {
     // Setup a new EC2 client
     iamClient := iam.NewFromConfig(awsConfig)
 
