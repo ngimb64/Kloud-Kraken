@@ -115,7 +115,7 @@ local_config:
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
-    assert.Equal(3, config.LocalConfig.NumberInstances)
+    assert.Equal(int32(3), config.LocalConfig.NumberInstances)
     assert.Equal("us-east-1", config.LocalConfig.Region)
     assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
 
