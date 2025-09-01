@@ -241,35 +241,35 @@ func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
 //  - Error if it occurs, otherwise nil on success
 //
 func ParseTransferReply(buffer []byte, prefix []byte, bytesRead int) (
-                        []byte, int64, int, error) {
+                        string, int64, int, error) {
     // Trim the delimiters around the file info
     buffer = buffer[len(prefix):bytesRead-1]
     // Split the buffer message into slice by colon delimiters
     parsedEntries := bytes.Split(buffer, []byte(":"))
     // If neither of expected number of entries were found or none
     if len(parsedEntries) != 2 && len (parsedEntries) != 3 {
-        return []byte(""), -1, -1, fmt.Errorf("unexpected number of entries" +
+        return "", -1, -1, fmt.Errorf("unexpected number of entries" +
             " parsed in transfer reply - %d", len(parsedEntries))
     }
 
     // Convert the size to bytes -> string -> integr
     fileSize, err := strconv.ParseInt(string(parsedEntries[1]), 10, 64)
     if err != nil {
-        return []byte(""), -1, -1, err
+        return "", -1, -1, err
     }
 
     // If only the the file name and size were specified
     if len(parsedEntries) == 2 {
-        return parsedEntries[0], fileSize, -1, nil
+        return string(parsedEntries[0]), fileSize, -1, nil
     }
 
     // If the network port was also specified, convert it back to int
     port, err := strconv.Atoi(string(parsedEntries[2]))
     if err != nil {
-        return []byte(""), -1, -1, err
+        return "", -1, -1, err
     }
 
-    return parsedEntries[0], fileSize, port, nil
+    return string(parsedEntries[0]), fileSize, port, nil
 }
 
 
@@ -337,7 +337,7 @@ func ReceiveFile(connection net.Conn, buffer []byte,
 
     // Receive the file from server
     filePath, err := HandleTransferRecv(connection, storePath,
-                                        string(fileName), fileSize)
+                                        fileName, fileSize)
     if err != nil {
         return "", err
     }
