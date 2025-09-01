@@ -135,7 +135,7 @@ func TestFormatAndParseTransferReply(t *testing.T) {
     assert.Equal(nil, err)
 
     // Ensure the file name and size were properly parse
-    assert.Equal("path.txt", fileName)
+    assert.Equal([]byte("path.txt"), fileName)
     assert.Equal(int64(13 * globals.MB), fileSize)
 
     // Format the transfer reply in passed in buffer with port
@@ -150,7 +150,7 @@ func TestFormatAndParseTransferReply(t *testing.T) {
     assert.Equal(nil, err)
 
     // Ensure the file name and size were properly parse
-    assert.Equal("path.txt", fileName)
+    assert.Equal([]byte("path.txt"), fileName)
     assert.Equal(int64(13 * globals.MB), fileSize)
     assert.Equal(1234, port)
 }
