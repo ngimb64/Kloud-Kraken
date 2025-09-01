@@ -414,7 +414,7 @@ func processTransfer(connection net.Conn, buffer []byte,
         } ()
 
         // Receive the file from remote server
-        _, err = netio.HandleTransferRecv(transferConn, WordlistPath, string(fileName), fileSize)
+        _, err = netio.HandleTransferRecv(transferConn, WordlistPath, fileName, fileSize)
         if err != nil {
             logMan.LogMessage("error", "Error during file transfer:  %v", err)
         }
