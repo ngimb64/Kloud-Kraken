@@ -388,7 +388,7 @@ func processTransfer(connection net.Conn, buffer []byte,
     ipAddr := strings.Split(connection.RemoteAddr().String(), ":")[0]
 
     // Make a connection to the client for file transfer
-    transferConn, err := tls.Dial("tcp", ipAddr + ":" + string(port),
+    transferConn, err := tls.Dial("tcp", ipAddr + ":" + strconv.Itoa(port),
                                   tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
     if err != nil {
         logMan.LogMessage("error", "Error connecting to remote client for transfer:  %v", err)
