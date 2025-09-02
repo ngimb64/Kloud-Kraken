@@ -39,11 +39,11 @@ var HashcatArgs = &hashcat.HashcatArgs{}  // Initialze where hashcat args are st
 var HashFilePath string  // Stores hash file path when received
 var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
-var LogPath = "KloudKraken.log"  // Stores log file to be returned to client
-var MaxTransfers atomic.Int32    // Number of file transfers allowed simultaniously
-var MaxTransfersInt32 int32      // Stores converted int maxTransfers arg
-var RulesetFilePath string       // Stores ruleset file when received
-var RulesetPath string           // Path where ruleset files are stored
+var LogPath = "/tmp/KloudKraken.log"  // Stores log file to be returned to client
+var MaxTransfers atomic.Int32         // Number of file transfers allowed simultaniously
+var MaxTransfersInt32 int32           // Stores converted int maxTransfers arg
+var RulesetFilePath string            // Stores ruleset file when received
+var RulesetPath string                // Path where ruleset files are stored
 var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
 var WordlistPath string              // Path where wordlists are stored
 
@@ -450,13 +450,6 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     var err error
     transferComplete := false
 
-    // // Upload the client TLS PEM cert to the server to be added to its cert pool
-    // _, err := netio.WriteHandler(connection, TlsMan.CertPemBlock, len(TlsMan.CertPemBlock))
-    // if err != nil {
-    //     logMan.LogMessage("error", "Error sending client PEM certificate:  %v", err)
-    //     return
-    // }
-
     // Make buffer to messaging size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
@@ -610,7 +603,7 @@ func connectRemote(ipAddrs string, port int,
         return err
     }
 
-    return errors.New("Unable to connect to any of the address, check log for more info")
+    return errors.New("unable to connect to any of the address, check log for more info")
 }
 
 

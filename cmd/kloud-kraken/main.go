@@ -237,7 +237,7 @@ func handleConnection(connection net.Conn,
     defer func () {
         // Receive log file from client
         _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
-                                globals.LOG_TRANSFER_PREFIX)
+                                   globals.LOG_TRANSFER_PREFIX)
         if err != nil {
             logMan.LogMessage("error", "Error receiving log file:  %v", err)
             return
@@ -249,29 +249,6 @@ func handleConnection(connection net.Conn,
                                              color.NeonAzure, "Log file received from client ",
                                              color.RadiantAmethyst, remoteAddr)
     } ()
-
-    // // Set buffer to receive client PEM certificate
-    // buffer = make([]byte, 2 * globals.KB)
-
-    // // Receive the client PEM certificate bytes
-    // bytesRead, err := netio.ReadHandler(connection, &buffer)
-    // if err != nil {
-    //     logMan.LogMessage("error", "Error reading client PEM cert:  %v", err)
-    //     return
-    // }
-
-    // // Add the read client PEM cert to the cert pool
-    // err = TlsMan.AddCACert(buffer[:bytesRead])
-    // if err != nil {
-    //     logMan.LogMessage("error", "Error adding PEM cert to pool:  %v", err)
-    //     return
-    // }
-
-    // // Notify TLS cerificate has been received in the tui right panel
-    // t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-    //                                                          color.LightCyan, "$"), "",
-    //                                      color.NeonAzure, "TLS certificate received from client ",
-    //                                      color.RadiantAmethyst, remoteAddr)
 
     // Reset buffer to messaging size
     buffer = make([]byte, globals.MESSAGE_BUFFER_SIZE)
@@ -780,7 +757,7 @@ func parseArgs() *conf.AppConfig {
     // Load the YAML data into AppConfig struct
     appConfig, err := conf.LoadConfig(configFilePath)
     if err != nil {
-        log.Fatal("Error loading YAML data:  %v", err)
+        log.Fatalf("Error loading YAML data:  %v", err)
     }
 
     // Load the configuration from the YAML file
