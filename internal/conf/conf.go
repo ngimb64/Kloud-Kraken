@@ -25,7 +25,6 @@ type ClientConfig struct {
     HashMask          string `yaml:"hash_mask"`
     HashType          string `yaml:"hash_type"`
     LogMode           string `yaml:"log_mode"`
-    LogPath           string `yaml:"log_path"`
     MaxFileSize       string `yaml:"max_file_size"`
     MaxFileSizeInt64  int64  `yaml:"-"`              // Parsed later
     MaxTransfers      int32  `yaml:"max_transfers"`
@@ -42,7 +41,6 @@ type LocalConfig struct {
     ListenerPort        int      `yaml:"listener_port"`
     LoadDir	   	        string   `yaml:"load_dir"`
     LocalTesting        bool     `yaml:"local_testing"`
-    LogPath             string   `yaml:"log_path"`
     MaxMergingSize      string   `yaml:"max_merging_size"`
     MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
     MaxSizeRange        float64  `yaml:"max_size_range"`
@@ -134,12 +132,6 @@ func validateClientConfig(clientConfig *ClientConfig) error {
         return fmt.Errorf("improper log_mode specified")
     }
 
-    // Ensure log path is of proper format
-    clientConfig.LogPath, err = validate.ValidatePath(clientConfig.LogPath)
-    if err != nil {
-        return fmt.Errorf("improper log_path specified - %w", err)
-    }
-
     // Parse and convert the max file size to raw bytes from any units
     clientConfig.MaxFileSizeInt64, err = validate.ValidateFileSize(clientConfig.MaxFileSize)
     if err != nil {
@@ -207,12 +199,6 @@ func validateLocalConfig(localConfig *LocalConfig) error {
     err = validate.ValidateLoadDir(localConfig.LoadDir)
     if err != nil {
         return err
-    }
-
-    // Ensure log path is proper format and reset ruleset path with validated
-    localConfig.LogPath, err = validate.ValidatePath(localConfig.LogPath)
-    if err != nil {
-        return fmt.Errorf("improper log_path specified - %w", err)
     }
 
     // Parse and convert the max merging size to raw bytes from any units

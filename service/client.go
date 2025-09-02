@@ -39,11 +39,11 @@ var HashcatArgs = &hashcat.HashcatArgs{}  // Initialze where hashcat args are st
 var HashFilePath string  // Stores hash file path when received
 var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
-var LogPath string       // Stores log file to be returned to client
-var MaxTransfers atomic.Int32  // Number of file transfers allowed simultaniously
-var MaxTransfersInt32 int32    // Stores converted int maxTransfers arg
-var RulesetFilePath string     // Stores ruleset file when received
-var RulesetPath string         // Path where ruleset files are stored
+var LogPath = "KloudKraken.log"  // Stores log file to be returned to client
+var MaxTransfers atomic.Int32    // Number of file transfers allowed simultaniously
+var MaxTransfersInt32 int32      // Stores converted int maxTransfers arg
+var RulesetFilePath string       // Stores ruleset file when received
+var RulesetPath string           // Path where ruleset files are stored
 var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
 var WordlistPath string              // Path where wordlists are stored
 
@@ -68,7 +68,7 @@ func createFailureResult(lootPath string) error {
     defer func() {
         cerr := hashesHandle.Close()
         if cerr != nil {
-            err = errors.Join(err, fmt.Errorf("closing final hashes file:  %w", cerr))
+            err = errors.Join(err, fmt.Errorf("closing final hashes file - %w", cerr))
         }
     }()
 
@@ -447,21 +447,22 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
+    var err error
     transferComplete := false
 
-    // Upload the client TLS PEM cert to the server to be added to its cert pool
-    _, err := netio.WriteHandler(connection, TlsMan.CertPemBlock, len(TlsMan.CertPemBlock))
-    if err != nil {
-        logMan.LogMessage("error", "Error sending client PEM certificate:  %v", err)
-        return
-    }
+    // // Upload the client TLS PEM cert to the server to be added to its cert pool
+    // _, err := netio.WriteHandler(connection, TlsMan.CertPemBlock, len(TlsMan.CertPemBlock))
+    // if err != nil {
+    //     logMan.LogMessage("error", "Error sending client PEM certificate:  %v", err)
+    //     return
+    // }
 
     // Make buffer to messaging size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Receive the hash file from the server
     HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
-                                          globals.HASHES_TRANSFER_PREFIX)
+                                           globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error receiving hash file:  %v", err)
         return
@@ -597,7 +598,7 @@ func connectRemote(ipAddrs string, port int,
             // Close connection to remote server
             cerr := connection.Close()
             if cerr != nil {
-                err = errors.Join(err, fmt.Errorf("closing client connection:  %w", cerr))
+                err = errors.Join(err, fmt.Errorf("closing client connection - %w", cerr))
             }
         } ()
 
@@ -609,7 +610,7 @@ func connectRemote(ipAddrs string, port int,
         return err
     }
 
-    return fmt.Errorf("Unable to connect to any of the address, check log for more info")
+    return errors.New("Unable to connect to any of the address, check log for more info")
 }
 
 
@@ -665,7 +666,6 @@ func main() {
     flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
-    flag.StringVar(&LogPath, "logPath", "/tmp/KloudKraken.log", "Path to the log file")
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
                   "The max size for file to be transmitted at once")
     flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
@@ -703,22 +703,20 @@ func main() {
     if !isTesting {
         // If parameter for SSM param store is not present
         if certSsmParam == "" {
-            log.Fatalf("Missing parameter to retrieve TLS from SSM param store")
+            log.Fatal("Missing parameter to retrieve TLS from SSM param store")
         }
 
         // Load default config, which will include the instance-profile credentials
-        awsConfig, err := config.LoadDefaultConfig(
-            context.TODO(),
-            config.WithRegion(awsRegion),
-        )
+        awsConfig, err := config.LoadDefaultConfig(context.TODO(),
+                                                   config.WithRegion(awsRegion))
         if err != nil {
-            log.Fatalf("Error loading AWS config: %v", err)
+            log.Fatalf("Error loading AWS config:  %v", err)
         }
 
         // Establish client to SSM
         ssmMan := ssmutils.SsmNewManager(awsConfig)
         // Retrieve the server TLS cert from SSM param store
-        certPemString, err := ssmMan.SsmGetParameter(certSsmParam, 1*time.Minute)
+        certPemString, err := ssmMan.SsmGetParameter(1 * time.Minute, certSsmParam)
         if err != nil {
             log.Fatalf("Error getting server TLS cert via SSM Param Store:  %v", err)
         }

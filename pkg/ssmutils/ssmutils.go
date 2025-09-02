@@ -43,8 +43,8 @@ func SsmNewManager(config aws.Config) *SsmManager {
 //  - The retrieved parameter from param store
 //  - Error if it occurs, otherwise nil on success
 //
-func (SsmMan *SsmManager) SsmGetParameter(parameter string,
-                                          callTime time.Duration) (
+func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
+                                          parameter string) (
                                           string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -75,8 +75,9 @@ func (SsmMan *SsmManager) SsmGetParameter(parameter string,
 //  - The path where the parameter is stored in param store
 //  - Error if it occurs, otherwise nil on success
 //
-func (SsmMan *SsmManager) SsmPutParameter(parameter string, data string,
-                                          callTime time.Duration) (
+func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
+                                          parameter string,
+                                          data string) (
                                           string, error) {
     var existsErr *ssmtypes.ParameterAlreadyExists
 

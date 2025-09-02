@@ -22,7 +22,7 @@
             "program": "${workspaceFolder}/service/client.go",
             "args": [
                 "-ipAddrs=10.0.0.17",
-                "-port=6969",
+                "-port=7003",
                 "-awsRegion=us-east-1",
                 "-maxFileSizeInt64=17179869184",
                 "-crackingMode=0",
@@ -31,7 +31,6 @@
                 "-workload=3",
                 "-maxTransfers=2",
                 "-logMode=local",
-                "-logPath=/tmp/KloudKraken.log",
                 "-isTesting=true",
                 "-testPemCert=/tmp/tls-cert.pem"
             ],

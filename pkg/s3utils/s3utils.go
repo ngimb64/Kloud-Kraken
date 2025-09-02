@@ -136,16 +136,16 @@ func (S3Man *S3Manager) S3BucketExists(callTime time.Duration,
 // Retrieve object from S3 bucket.
 //
 // @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
 //  - bucketName:  The name of the bucket where the object will be retrieved
 //  - key:  The key in bucket used to identify the object to retrieve
-//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
 //  - The retrieved S3 object as a byte slice
 //  - Error if it occurs, otherwise nil on success
 //
-func (S3Man *S3Manager) S3GetObject(bucketName string, key string,
-                                    callTime time.Duration) (
+func (S3Man *S3Manager) S3GetObject(callTime time.Duration,
+                                    bucketName string, key string) (
                                     _ []byte, err error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -205,10 +205,8 @@ func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
         }
     }
 
-    // If no bucket name is present, use the default one passed in
-    bucketName = defaultBucketName
-    // Create S3 bucket by passed in name
-    return S3Man.s3BucketCreate(callTime, bucketName)
+    // Create S3 bucket with default name
+    return S3Man.s3BucketCreate(callTime, defaultBucketName)
 }
 
 // Put an object into a S3 bucket.
@@ -223,8 +221,10 @@ func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
 //  - The final key name that is used
 //  - Error if it occurs, otherwise nil on success
 //
-func (S3Man *S3Manager) S3PutObject(bucketName string, key string, data []byte,
-                                    callTime time.Duration) (string, error) {
+func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
+                                    bucketName string,
+                                    key string, data []byte) (
+                                    string, error) {
     // Keep attemping key with number added until unused is found
     for i := 1; ; i++ {
         // Add number to end of key name
