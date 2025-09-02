@@ -20,8 +20,8 @@ var AzIndex = 0
 // Attempts to load AWS access and secret keys from the default keychain.
 //
 // @Parameters
-//  - region:  The AWS region wherer the API credential are to be utilized
 //  - callTime:  The length of time the API call is allowed to execute
+//  - region:  The AWS region wherer the API credential are to be utilized
 //
 // @Returns
 //  - The AWS credentials config
@@ -29,7 +29,7 @@ var AzIndex = 0
 //  - The AWS API secret access key
 //  - Boolean indicating whether the credentials exist or not in default keychain
 //
-func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
+func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
                                  aws.Config, string, string, bool) {
     // Load the local credential chain (env, ~/.aws, etc.)
     cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
@@ -54,8 +54,8 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 // Set up the AWS config with credentials and region stored in passed in app config.
 //
 // @Paramters
-//  - region:  The AWS region wherer the API credential are to be utilized
 //  - callTime:  The length of time the API call is allowed to execute
+//  - region:  The AWS region wherer the API credential are to be utilized
 //
 // @Returns:
 //  - The initialized AWS credentials config
@@ -63,10 +63,10 @@ func AttemptLoadDefaultCredChain(region string, callTime time.Duration) (
 //  - The AWS secret access key
 //  - Error if it occurs, otherwise nil on success
 //
-func AwsConfigSetup(region string, callTime time.Duration) (
+func AwsConfigSetup(callTime time.Duration, region string) (
                     aws.Config, string, string, error) {
     // Attempt to load credentials from default credential chain
-    cfg, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(region, callTime)
+    cfg, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(callTime, region)
     if exists {
         return cfg, accessKey, secretKey, nil
     }

@@ -2,6 +2,7 @@ package netio
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -450,7 +451,7 @@ func UploadFile(connection net.Conn, buffer []byte,
 
     // If the transfer initiated message format is invalid
     if !bytes.Contains(buffer[:bytesRead], globals.TRANSFER_INITIATED_MARKER) {
-        return fmt.Errorf("transfer initiated message format invalid")
+        return errors.New("transfer initiated message format invalid")
     }
 
     // Transfer the file to client

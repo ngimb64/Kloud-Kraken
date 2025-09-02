@@ -61,7 +61,6 @@ client_config:
   hash_mask: "?u?l?l?l?l?l?l?l?d"
   hash_type: "1000"
   log_mode: "local"
-  log_path: "KloudKraken.log"
   max_file_size: "100MB"
   max_transfers: 2
   region: "us-west-1"
@@ -75,7 +74,6 @@ local_config:
   listener_port: 6969
   load_dir: "%s"
   local_testing: true
-  log_path: "KloudKraken.log"
   max_merging_size: "50MB"
   max_size_range: 25.0
   number_instances: 3
@@ -100,7 +98,6 @@ local_config:
     assert.Equal("?u?l?l?l?l?l?l?l?d", config.ClientConfig.HashMask)
     assert.Equal("1000", config.ClientConfig.HashType)
     assert.Equal("local", config.ClientConfig.LogMode)
-    assert.Equal("KloudKraken.log", config.ClientConfig.LogPath)
     assert.Equal("100MB", config.ClientConfig.MaxFileSize)
     assert.Equal(int64(100 * globals.MB), config.ClientConfig.MaxFileSizeInt64)
     assert.Equal(int32(2), config.ClientConfig.MaxTransfers)
@@ -115,7 +112,6 @@ local_config:
     assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(testDir, config.LocalConfig.LoadDir)
     assert.True(config.LocalConfig.LocalTesting)
-    assert.Equal("KloudKraken.log", config.LocalConfig.LogPath)
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)

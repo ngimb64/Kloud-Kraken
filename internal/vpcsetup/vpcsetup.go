@@ -223,7 +223,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     outStruct.PrivSubnetId = privSubnetId
 
     // Create NAT gateway in public subnet if it does not exist
-    natGatewayId, err := ec2Client.NatGatewayProvision(10*time.Minute,
+    natGatewayId, err := ec2Client.NatGatewayProvision(10 * time.Minute,
                                                        stateConfig.NatGatewayId,
                                                        pubSubnetId, eipId,
                                                        "Kloud-Kraken-NAT-Gateway")

@@ -41,9 +41,9 @@ import (
 )
 
 // Package level variables
-var CurrentConnections atomic.Int32	   // Tracks current active connections
-var ReceivedDir = "/tmp/received"      // Path where cracked hashes & client logs are stored
-var TlsMan = new(tlsutils.TlsManager)  // Struct for managing TLS certs, keys, etc.
+var CurrentConnections atomic.Int32	 // Tracks current active connections
+var ReceivedDir = "/tmp/received"    // Path where cracked hashes & client logs are stored
+var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
 
 
 // Select next available file for transfer, if there are no more available send the end transfer
@@ -237,7 +237,7 @@ func handleConnection(connection net.Conn,
     defer func () {
         // Receive log file from client
         _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
-                                globals.LOG_TRANSFER_PREFIX)
+                                   globals.LOG_TRANSFER_PREFIX)
         if err != nil {
             logMan.LogMessage("error", "Error receiving log file:  %v", err)
             return
@@ -249,29 +249,6 @@ func handleConnection(connection net.Conn,
                                              color.NeonAzure, "Log file received from client ",
                                              color.RadiantAmethyst, remoteAddr)
     } ()
-
-    // Set buffer to receive client PEM certificate
-    buffer = make([]byte, 2 * globals.KB)
-
-    // Receive the client PEM certificate bytes
-    bytesRead, err := netio.ReadHandler(connection, &buffer)
-    if err != nil {
-        logMan.LogMessage("error", "Error reading client PEM cert:  %v", err)
-        return
-    }
-
-    // Add the read client PEM cert to the cert pool
-    err = TlsMan.AddCACert(buffer[:bytesRead])
-    if err != nil {
-        logMan.LogMessage("error", "Error adding PEM cert to pool:  %v", err)
-        return
-    }
-
-    // Notify TLS cerificate has been received in the tui right panel
-    t.RightPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                             color.LightCyan, "$"), "",
-                                         color.NeonAzure, "TLS certificate received from client ",
-                                         color.RadiantAmethyst, remoteAddr)
 
     // Reset buffer to messaging size
     buffer = make([]byte, globals.MESSAGE_BUFFER_SIZE)
@@ -449,8 +426,8 @@ func startServer(appConfig *conf.AppConfig,
 //  - The generated EC2 user data with args formatted into it
 //  - Error if it occurs, otherwise nil on success
 //
-func ec2UserDataGen(appConf *conf.AppConfig, bucketName string,
-                    keyName string, ipAddrs []string, ssmParam string) (
+func ec2UserDataGen(appConf *conf.AppConfig, bucketName string, keyName string,
+                    ipAddrs []string, ssmParam string) (
                     string, error) {
     var hasRuleset bool
     // Convert the slice of IP addresses to CSV string
@@ -530,7 +507,6 @@ $CWD/client -applyOptimization=%t \
             -ipAddrs=%s \
             -isTesting=%t \
             -logMode=%s \
-            -logPath=%s \
             -maxFileSizeInt64=%d \
             -maxTransfers=%d \
             -port=%d \
@@ -542,9 +518,9 @@ $CWD/client -applyOptimization=%t \
    appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
    appConf.ClientConfig.CrackingMode, appConf.ClientConfig.HashMask,
    appConf.ClientConfig.HashType, hasRuleset, ipAddrsCsv, false,
-   appConf.ClientConfig.LogMode, appConf.ClientConfig.LogPath,
-   appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
-   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
+   appConf.ClientConfig.LogMode, appConf.ClientConfig.MaxFileSizeInt64,
+   appConf.ClientConfig.MaxTransfers, appConf.LocalConfig.ListenerPort,
+   appConf.ClientConfig.Workload)
 
     return data, nil
 }
@@ -569,8 +545,8 @@ $CWD/client -applyOptimization=%t \
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               awsConfig aws.Config, ec2Client *ec2utils.Ec2Manger, err error) {
     // Set up the AWS credentials based on local chain or environment variables
-    awsConfig, _, _, err = awsutils.AwsConfigSetup(appConfig.LocalConfig.Region,
-                                                   1 * time.Minute)
+    awsConfig, _, _, err = awsutils.AwsConfigSetup(1 * time.Minute,
+                                                   appConfig.LocalConfig.Region)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -640,9 +616,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Setup client to SSM
     ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
-    param, err := ssmClient.SsmPutParameter("/kloud-kraken/tls-cert",
-                                            string(TlsMan.CertPemBlock),
-                                            1 * time.Minute)
+    param, err := ssmClient.SsmPutParameter(1 * time.Minute,
+                                            "/kloud-kraken/tls-cert",
+                                            string(TlsMan.CertPemBlock))
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -662,8 +638,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     s3Client := s3utils.S3NewManager(awsConfig)
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Client.S3PutObject(bootstrapOut.BucketName, "client",
-                                         binData, 1 * time.Minute)
+    keyName, err := s3Client.S3PutObject(1 * time.Minute,
+                                         bootstrapOut.BucketName,
+                                         "client", binData)
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -764,7 +741,7 @@ func parseArgs() *conf.AppConfig {
         // Check to see if the input path exists and is a file or dir
         exists, isDir, hasData, err := disk.PathExists(configFilePath)
         if err != nil {
-            log.Fatal("Error checking config file path existence: ", err)
+            log.Fatalf("Error checking config file path existence:  %v", err)
         }
 
         // If the path does not exist OR is a dir OR does not have data OR is not YAML file
@@ -780,7 +757,7 @@ func parseArgs() *conf.AppConfig {
     // Load the YAML data into AppConfig struct
     appConfig, err := conf.LoadConfig(configFilePath)
     if err != nil {
-        log.Fatal("Error loading YAML data: ", err)
+        log.Fatalf("Error loading YAML data:  %v", err)
     }
 
     // Load the configuration from the YAML file
@@ -911,8 +888,8 @@ func main() {
                                    "and server certifcate added to pool"))
 
     // Initialize the LoggerManager based on the flags
-    logMan, err = kloudlogs.NewLoggerManager("local", appConfig.LocalConfig.LogPath,
-                                             awsConfig, "Kloud-Kraken", false)
+    logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log", awsConfig,
+                                             "Kloud-Kraken", false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
