@@ -21,7 +21,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
-	"github.com/ngimb64/Kloud-Kraken/internal/policies"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
@@ -210,8 +209,9 @@ func handleConnection(connection net.Conn,
                       remoteAddr string, t *tui.TUI) {
     var buffer []byte
     var err error
-    // Close the connection on local exit
+
     defer func() {
+        // Close the connection
         err = connection.Close()
         if err != nil {
             logMan.LogMessage("Error", "Error closing client connection %s:  %v",
@@ -230,7 +230,7 @@ func handleConnection(connection net.Conn,
         logMan.LogMessage("info", "Connection processing handled",
                         zap.Int32("remaining connections", CurrentConnections.Load()))
 
-        // Decrement waitGroup counter on local exit
+        // Decrement waitGroup counter
         waitGroup.Done()
     } ()
 
@@ -373,7 +373,7 @@ func startServer(appConfig *conf.AppConfig,
                       appConfig.LocalConfig.ListenerPort)
 
     for {
-        // If current number of connection is greater than or equal to number of instances
+        // If number of connection is greater than or equal to number of instances
         if CurrentConnections.Load() >= appConfig.LocalConfig.NumberInstances {
             logMan.LogMessage("info", "All remote clients are connected")
             break
@@ -551,55 +551,20 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-	// Establish clients to various servicesservice
+	// Establish clients to various services
 	ec2Client = ec2utils.Ec2NewManager(awsConfig)
 	iamClient := iamutils.IamNewManager(awsConfig)
 	stsClient := sts.NewFromConfig(awsConfig)
 
-    // Set up the entire VPC and it associated components
+    // Set up the kloud kraken VPC and its associated components
     bootstrapOut, err := vpcsetup.VpcBootstrap(*appConfig, awsConfig, *ec2Client,
                                                *iamClient, *stsClient)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // Generate the EC2 clients trust and permissions policy templates
-    trustPolicy := policies.ClientTrustPolicyGen()
-    permissionsPolicy := policies.ClientPermPolicyGen(bootstrapOut.BucketName,
-                                                      appConfig.ClientConfig.Region,
-                                                      bootstrapOut.AccountId,
-                                                      "/kloud-kraken/tls-cert",
-                                                      "Kloud-Kraken")
-    // Create and apply the EC2 client role
-    _, err = iamClient.IamRoleCreation(5 * time.Minute, "ClientRole",
-                                       trustPolicy, "ClientPermissions",
-                                       permissionsPolicy, true)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    // Generate the servers trust and permissions policy templates
-    trustPolicy = policies.ServerTrustPolicyGen(bootstrapOut.AccountId,
-                                                appConfig.LocalConfig.IamUsername)
-    permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
-                                                     bootstrapOut.AccountId,
-                                                     "/kloud-kraken/tls-cert",
-                                                     bootstrapOut.BucketName,
-                                                     "ClientRole")
-    // Create and apply role for local server permissions
-    serverArn, err := iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
-                                                trustPolicy, "ServerPermissions",
-                                                permissionsPolicy, false)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "IAM server and client roles created"))
-
     // Format role ARN from created role
-    roleArn := "arn:aws:iam::" + serverArn + ":role/ServerRole"
+    roleArn := "arn:aws:iam::" + bootstrapOut.ServerArn + ":role/ServerRole"
     // Create a provider that will call STS AssumeRole under the covers
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
 
@@ -770,6 +735,15 @@ func parseArgs() *conf.AppConfig {
 // instance, set up EC2 code passing command line args via user data, and start server.
 //
 func main() {
+    // Begin recording program timing
+    startTime := time.Now()
+    // Display the total execution time when program exits
+    defer fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "$"), "",
+                                         color.NeonAzure, "Total runtime:  ",
+                                         color.KrakenGlowGreen,
+                                         time.Since(startTime).String()))
+
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
@@ -780,8 +754,8 @@ func main() {
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Wordlist merging started, time varies " +
-                                   "greatly depending on how much data"))
+                                   color.NeonAzure, "Wordlist merging started, time" +
+                                   " varies greatly depending on how much data"))
 
     // Merge the wordlists in the load dir based on max file size
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,

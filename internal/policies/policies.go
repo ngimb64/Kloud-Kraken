@@ -2,7 +2,7 @@ package policies
 
 import "fmt"
 
-// Generates permission policy for the client.
+// Generates permission policy for the client EC2.
 //
 // @Parameters
 //  - bucketName:  The name of the S3 bucket where actions will be performed
@@ -72,7 +72,7 @@ func ClientTrustPolicyGen() string {
 }
 
 
-// Generates permission policy for the server.
+// Generates permission policy for the local server.
 //
 // @Parameters
 //  - region:  The AWS region where actions will be performed
@@ -172,7 +172,9 @@ func VpcFlowLogsPermPolicyGen() string {
   "Version": "2012-10-17",
   "Statement": [{
     "Effect": "Allow",
-    "Principal": { "Service": "vpc-flow-logs.amazonaws.com" },
+    "Principal": {
+      "Service": "vpc-flow-logs.amazonaws.com"
+    },
     "Action": "sts:AssumeRole"
   }]
 }`
@@ -202,4 +204,85 @@ func VpcFlowLogsTrustPolicyGen() string {
     "Resource":"*"
   }]
 }`
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func VpcS3EndpointPolicyGen(bucketName string, vpcId string) string {
+    return fmt.Sprintf(`{
+  "Statement": [
+    {
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "arn:aws:s3:::%s",
+        "arn:aws:s3:::%s/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceVpc": "%s"
+        }
+      }
+    },
+    {
+      "Principal": "*",
+      "Action": "s3:*",
+      "Effect": "Deny",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:SourceVpc": "%s"
+        }
+      }
+    }
+  ]
+}`, bucketName, bucketName, vpcId, vpcId)
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func VpcSsmEndpointPolicyGen(accountId string, region string,
+                             vpcId string) string {
+    return fmt.Sprintf(`{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::%s:root"
+      },
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter"
+      ],
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceVpc": "%s"
+        }
+      }
+    }
+  ]
+}`, accountId, region, accountId, vpcId)
 }

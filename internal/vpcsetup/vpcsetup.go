@@ -45,6 +45,7 @@ type VpcBootstrapOutput struct {
     BucketName   string
     Ec2SgId	     string
     PrivSubnetId string
+    ServerArn    string
 }
 
 
@@ -62,11 +63,11 @@ func VpcBootstrap(appConfig conf.AppConfig,
                   iamClient iamutils.IamManager,
                   stsClient sts.Client) (
                   *VpcBootstrapOutput, error) {
-    stateFilePath := "../.kraken-state.yml"
+    outStruct := &VpcBootstrapOutput{}
     var stateConfig StateConfig
     var stateData []byte
+    stateFilePath := "../.kraken-state.yml"
     var yamlUpdates map[string]string
-    outStruct := &VpcBootstrapOutput{}
 
     // Check to see if the yaml state file exists
     exists, isDir, hasData, err := disk.PathExists(stateFilePath)
@@ -110,7 +111,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }()
 
     // Check to see if the VPC exists, otherwise create one
-    vpcId, err := ec2Client.VpcProvision(20*time.Minute,
+    vpcId, err := ec2Client.VpcProvision(20 * time.Minute,
                                          stateConfig.VpcId,
                                          appConfig.LocalConfig.CidrBlock,
                                          "Kloud-Kraken-VPC")
@@ -127,7 +128,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Check to see if IGW exists, otherwise create & attach one
-    igwId, err := ec2Client.InternetGatewayProvision(10*time.Minute,
+    igwId, err := ec2Client.InternetGatewayProvision(10 * time.Minute,
                                                      stateConfig.IgwId, vpcId,
                                                      "Kloud-Kraken-IGW")
     if err != nil {
@@ -176,7 +177,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     // Allocate first available subnet in CIDR block for public subnet
     pubCidr, err := cidrutils.AllocateNextSubnet(appConfig.LocalConfig.CidrBlock,
-                                                 alloc, prefixLength+1)
+                                                 alloc, prefixLength + 1)
     if err != nil {
         return outStruct, err
     }
@@ -199,7 +200,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     // Allocate next available subnet in CIDR block for private subnet
     privCidr, err := cidrutils.AllocateNextSubnet(appConfig.LocalConfig.CidrBlock,
-                                                  alloc, prefixLength+1)
+                                                  alloc, prefixLength + 1)
     if err != nil {
         return outStruct, err
     }
@@ -387,44 +388,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         return outStruct, err
     }
 
-    // Create VPC endpoint for S3 if it does not exist
-    s3VpcEndPointId, err := ec2Client.S3EndpointProvision(5 * time.Minute,
-                                                          stateConfig.S3VpcEndpointId,
-                                                          appConfig.LocalConfig.Region,
-                                                          vpcId, []string{privateRouteId})
-    if err != nil {
-        return outStruct, err
-    }
-
-    // If S3 VPC endpoint created, add name to yaml updates map
-    if s3VpcEndPointId != "" {
-        yamlUpdates["aws_env.s3_vpc_endpoint"] = s3VpcEndPointId
-    // Otherwise use the one from YAML since it was found
-    } else {
-        s3VpcEndPointId = stateConfig.S3VpcEndpointId
-    }
-
-    // Create VPC endpoint for SSM if it does not exist
-    ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(5 * time.Minute,
-                                                            stateConfig.SsmVpcEndpointId,
-                                                            appConfig.LocalConfig.Region,
-                                                            vpcId, []string{privSubnetId},
-                                                            []string{ssmSgId})
-    if err != nil {
-        return outStruct, err
-    }
-
-    // If SSM VPC endpoint was created, add name to yaml updates map
-    if ssmVpcEndpointId != "" {
-        yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ssmVpcEndpointId
-    // Otherwise use the one from YAML since it was found
-    } else {
-        ssmVpcEndpointId = stateConfig.SsmVpcEndpointId
-    }
-
     // Set up client to S3 service
     s3Client := s3utils.S3NewManager(awsConfig)
-
+    // Create a S3 bucket if it does not exist
     bucketName, err := s3Client.S3BucketProvision(5 * time.Minute,
                                                   stateConfig.S3BucketName,
                                                   "Kloud-Kraken-S3")
@@ -441,6 +407,51 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     outStruct.BucketName = bucketName
+
+    // Generate policy document for S3 VPC Endpoint
+    policyDocument := policies.VpcS3EndpointPolicyGen(bucketName, vpcId)
+
+    // Create VPC endpoint for S3 if it does not exist
+    s3VpcEndPointId, err := ec2Client.S3EndpointProvision(5 * time.Minute,
+                                                          stateConfig.S3VpcEndpointId,
+                                                          appConfig.LocalConfig.Region,
+                                                          vpcId, policyDocument,
+                                                          []string{privateRouteId})
+    if err != nil {
+        return outStruct, err
+    }
+
+    // If S3 VPC endpoint created, add name to yaml updates map
+    if s3VpcEndPointId != "" {
+        yamlUpdates["aws_env.s3_vpc_endpoint"] = s3VpcEndPointId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        s3VpcEndPointId = stateConfig.S3VpcEndpointId
+    }
+
+    // Generate policy document for SSM VPC Endpoint
+    policyDocument = policies.VpcSsmEndpointPolicyGen(outStruct.AccountId,
+                                                      appConfig.LocalConfig.Region,
+                                                      vpcId)
+
+    // Create VPC endpoint for SSM if it does not exist
+    ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(5 * time.Minute,
+                                                            stateConfig.SsmVpcEndpointId,
+                                                            appConfig.LocalConfig.Region,
+                                                            vpcId, policyDocument,
+                                                            []string{privSubnetId},
+                                                            []string{ssmSgId})
+    if err != nil {
+        return outStruct, err
+    }
+
+    // If SSM VPC endpoint was created, add name to yaml updates map
+    if ssmVpcEndpointId != "" {
+        yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ssmVpcEndpointId
+    // Otherwise use the one from YAML since it was found
+    } else {
+        ssmVpcEndpointId = stateConfig.SsmVpcEndpointId
+    }
 
     // Get the account ID associated with API credentials
     outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
@@ -480,6 +491,36 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Otherwise use the one from YAML since it was found
     } else {
         flowLogId = stateConfig.FlowLogId
+    }
+
+    // Generate the EC2 clients trust and permissions policy templates
+    trustPolicy = policies.ClientTrustPolicyGen()
+    permissionsPolicy = policies.ClientPermPolicyGen(bucketName,
+                                                     appConfig.ClientConfig.Region,
+                                                     outStruct.AccountId,
+                                                     "/kloud-kraken/tls-cert",
+                                                     "Kloud-Kraken")
+    // Create and apply the EC2 client role
+    _, err = iamClient.IamRoleCreation(5 * time.Minute, "ClientRole",
+                                       trustPolicy, "ClientPermissions",
+                                       permissionsPolicy, true)
+    if err != nil {
+        return outStruct, err
+    }
+
+    // Generate the servers trust and permissions policy templates
+    trustPolicy = policies.ServerTrustPolicyGen(outStruct.AccountId,
+                                                appConfig.LocalConfig.IamUsername)
+    permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
+                                                     outStruct.AccountId,
+                                                     "/kloud-kraken/tls-cert",
+                                                     bucketName, "ClientRole")
+    // Create and apply role for local server permissions
+    outStruct.ServerArn, err = iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
+                                                         trustPolicy, "ServerPermissions",
+                                                         permissionsPolicy, false)
+    if err != nil {
+        return outStruct, err
     }
 
     return outStruct, nil

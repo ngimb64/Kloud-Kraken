@@ -21,6 +21,7 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
+                                               policyDocument string,
                                                vpcId string,
                                                serviceName string,
                                                routeTableIds []string) (
@@ -30,6 +31,7 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
     defer cancel()
 
     callInput := &ec2.CreateVpcEndpointInput{
+        PolicyDocument:  aws.String(policyDocument),
         RouteTableIds:   routeTableIds,
         ServiceName:     aws.String(serviceName),
         VpcEndpointType: ec2types.VpcEndpointTypeGateway,
@@ -62,6 +64,7 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
 //
 //
 func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
+                                                 policyDocument string,
                                                  vpcId string,
                                                  serviceName string,
                                                  subnetIds []string,
@@ -72,6 +75,7 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
     defer cancel()
 
     callInput := &ec2.CreateVpcEndpointInput{
+        PolicyDocument:    aws.String(policyDocument),
         PrivateDnsEnabled: aws.Bool(true),
         SecurityGroupIds:  securityGroupIds,
         ServiceName:       aws.String(serviceName),
@@ -108,11 +112,12 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
 func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
                                              endpointId string,
                                              region string, vpcId string,
+                                             policyDocument string,
                                              routeTableIds []string) (
                                              string, error) {
     // Ensure required args are present
-    if vpcId == "" || region == "" {
-        return "", fmt.Errorf("vpcId or region is missing")
+    if vpcId == "" || region == "" || policyDocument == "" {
+        return "", fmt.Errorf("vpcId or region or policyDocument is missing")
     }
 
     // Ensure a route table ID was passed in
@@ -138,8 +143,8 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
         }
     }
 
-    return Ec2Man.gatewayEndpointCreate(callTime, vpcId, serviceName,
-                                        routeTableIds)
+    return Ec2Man.gatewayEndpointCreate(callTime, policyDocument, vpcId,
+                                        serviceName, routeTableIds)
 }
 
 // SSM provisioner: tiny function that reuses vpcEndpointExists + interfaceEndpointCreate.
@@ -152,12 +157,13 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
                                               endpointId string, region string,
-                                              vpcId string, subnetIds []string,
+                                              vpcId string, policyDocument string,
+                                              subnetIds []string,
                                               securityGroupIds []string) (
                                               string, error) {
     // Ensure required args are present
-    if region == "" || vpcId == "" {
-        return "", fmt.Errorf("region or vpcId is missing")
+    if region == "" || vpcId == "" || policyDocument == "" {
+        return "", fmt.Errorf("region or vpcId or policyDocument is missing")
     }
 
     // Ensure Subnet IDs and Security Group IDs have entries
@@ -184,8 +190,9 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
     }
 
     // Private DNS enabled for SSM
-    return Ec2Man.interfaceEndpointCreate(callTime, vpcId, serviceName,
-                                          subnetIds, securityGroupIds)
+    return Ec2Man.interfaceEndpointCreate(callTime, policyDocument, vpcId,
+                                          serviceName, subnetIds,
+                                          securityGroupIds)
 }
 
 // Generic existence checker usable by S3, SSM, etc.

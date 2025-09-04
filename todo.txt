@@ -1,8 +1,10 @@
 - After AWS code logic is update do extensive permissions review and make sure all policies are updated
 
-- Research tips of calculating cost of resources and which should persist & which should be deleted per execution
+- Ensure KMS encryption is applied to SSM operations and check security features of other resources
 
-- Look into adding benchmarking and cost estimation logic
+- Research how long AWS operations will take and that timeouts are long enough and waiters are utilized when possible
+
+- Research and implement tips of calculating cost of resources and which should persist & which should be deleted per execution
 
 - Finish documentation for AWS code
 
@@ -10,7 +12,7 @@
 
 - Rerun system testing locally and in AWS environment
 
-- Implement unit tests for tlsutils, awsutils, & kloudlogs
+- Implement unit tests for packages that need them
 
 - Try improving tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os
