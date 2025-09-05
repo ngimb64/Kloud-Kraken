@@ -563,10 +563,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-    // Format role ARN from created role
-    roleArn := "arn:aws:iam::" + bootstrapOut.ServerArn + ":role/ServerRole"
     // Create a provider that will call STS AssumeRole under the covers
-    assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
+    assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
 
     // Create fresh AWS config from new STS provider
     awsConfig, err = config.LoadDefaultConfig(
@@ -630,7 +628,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,
                                        appConfig.LocalConfig.NumberInstances,
-                                       "ClientRole", "Kloud-Kraken-EC2-Client",
+                                       "client-role", "kloud-kraken-ec2-client",
                                        []string{bootstrapOut.Ec2SgId},
                                        bootstrapOut.PrivSubnetId)
     if err != nil {

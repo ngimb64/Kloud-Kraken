@@ -25,6 +25,9 @@ type StateConfig struct {
     Ec2SecurityGroupId   string `yaml:"ec2_security_group_id"`
     EipId                string `yaml:"eip_id"`
     FlowLogId            string `yaml:"flow_log_id"`
+    IamArnClient         string `yaml:"iam_arn_client"`
+    IamArnServer         string `yaml:"iam_arn_server"`
+    IamArnVpcFlowLogs    string `yaml:"iam_arn_vpc_flow_logs"`
     IgwId                string `yaml:"igw_id"`
     NatGatewayId         string `yaml:"nat_gateway_id"`
     PrivateAssociationId string `yaml:"private_association_id"`
@@ -114,7 +117,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     vpcId, err := ec2Client.VpcProvision(20 * time.Minute,
                                          stateConfig.VpcId,
                                          appConfig.LocalConfig.CidrBlock,
-                                         "Kloud-Kraken-VPC")
+                                         "kloud-kraken-vpc")
     if err != nil {
         return outStruct, err
     }
@@ -130,7 +133,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Check to see if IGW exists, otherwise create & attach one
     igwId, err := ec2Client.InternetGatewayProvision(10 * time.Minute,
                                                      stateConfig.IgwId, vpcId,
-                                                     "Kloud-Kraken-IGW")
+                                                     "kloud-kraken-internet-gateway")
     if err != nil {
         return outStruct, err
     }
@@ -227,7 +230,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     natGatewayId, err := ec2Client.NatGatewayProvision(10 * time.Minute,
                                                        stateConfig.NatGatewayId,
                                                        pubSubnetId, eipId,
-                                                       "Kloud-Kraken-NAT-Gateway")
+                                                       "kloud-kraken-nat-gateway")
     if err != nil {
         return outStruct, err
     }
@@ -245,7 +248,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                         stateConfig.PublicRouteId,
                                                         vpcId, igwId, "",
                                                         pubSubnetId, "0.0.0.0/0",
-                                                        "Kloud-Kraken-Public-Route")
+                                                        "kloud-kraken-public-route-table")
     if err != nil {
         return outStruct, err
     }
@@ -263,7 +266,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                          stateConfig.PrivateRouteId,
                                                          vpcId, "", natGatewayId,
                                                          privSubnetId, "0.0.0.0/0",
-                                                         "Kloud-Kraken-Private-Route")
+                                                         "kloud-kraken-private-route-table")
     if err != nil {
         return outStruct, err
     }
@@ -310,8 +313,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     // Create EC2 security group if it does not exist
     ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
-                                                     stateConfig.Ec2SecurityGroupId,
-                                                     vpcId, "Kloud-Kraken-EC2-SG",
+                                                     stateConfig.Ec2SecurityGroupId, vpcId,
+                                                     "kloud-kraken-ec2-security-group",
                                                      "Security group for Kloud" +
                                                      " Kraken EC2 instances")
     if err != nil {
@@ -364,8 +367,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     // Create SSM Parameter Store security group if it does not exist
     ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
-                                                     stateConfig.SsmSecurityGroupId,
-                                                     vpcId, "Kloud-Kraken-SSM-SG",
+                                                     stateConfig.SsmSecurityGroupId, vpcId,
+                                                     "kloud-kraken-ssm-security-group",
                                                      "Security group for Kloud " +
                                                      "Kraken SSM parameter store" +
                                                      " VPC endpoint")
@@ -393,7 +396,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Create a S3 bucket if it does not exist
     bucketName, err := s3Client.S3BucketProvision(5 * time.Minute,
                                                   stateConfig.S3BucketName,
-                                                  "Kloud-Kraken-S3")
+                                                  "kloud-kraken-s3")
     if err != nil {
         return outStruct, err
     }
@@ -463,13 +466,22 @@ func VpcBootstrap(appConfig conf.AppConfig,
     trustPolicy := policies.VpcFlowLogsTrustPolicyGen()
     permissionsPolicy := policies.VpcFlowLogsPermPolicyGen()
     // Create and appy the VPC flow logs role
-    vpcFlowLogArn, err := iamClient.IamRoleCreation(5 * time.Minute,
-                                                    "VpcFlowLogsRole",
-                                                    trustPolicy,
-                                                    "VpcFlowLogPermissions",
-                                                    permissionsPolicy, false)
+    vpcFlowLogArn, err := iamClient.IamRoleProvision(5 * time.Minute,
+                                                     stateConfig.IamArnVpcFlowLogs,
+                                                     "vpc-flow-logs-role",
+                                                     trustPolicy,
+                                                     "vpc-flow-log-permissions",
+                                                     permissionsPolicy, false)
     if err != nil {
         return outStruct, err
+    }
+
+    // If IAM ARN for VPC Flow Logs was created, add name to yaml updates map
+    if vpcFlowLogArn != "" {
+        yamlUpdates["aws_env.iam_arn_vpc_flow_logs"] = vpcFlowLogArn
+    // Otherwise use the one from YAML since it was found
+    } else {
+        vpcFlowLogArn = stateConfig.IamArnVpcFlowLogs
     }
 
     // Set up client to CloudWatch Logs
@@ -479,7 +491,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     flowLogId, err := ec2Client.VpcFlowLogProvision(5 * time.Minute,
                                                     stateConfig.FlowLogId,
                                                     vpcId, cwlClient,
-                                                    "Kloud-Kraken-VPC-Flow-Logs",
+                                                    "kloud-kraken-vpc-flow-logs",
                                                     vpcFlowLogArn)
     if err != nil {
         return outStruct, err
@@ -499,13 +511,23 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                      appConfig.ClientConfig.Region,
                                                      outStruct.AccountId,
                                                      "/kloud-kraken/tls-cert",
-                                                     "Kloud-Kraken")
+                                                     "kloud-kraken")
     // Create and apply the EC2 client role
-    _, err = iamClient.IamRoleCreation(5 * time.Minute, "ClientRole",
-                                       trustPolicy, "ClientPermissions",
-                                       permissionsPolicy, true)
+    clientArn, err := iamClient.IamRoleProvision(5 * time.Minute,
+                                                 stateConfig.IamArnClient,
+                                                 "client-role", trustPolicy,
+                                                 "client-permissions",
+                                                 permissionsPolicy, true)
     if err != nil {
         return outStruct, err
+    }
+
+    // If IAM ARN for client was created, add name to yaml updates map
+    if clientArn != "" {
+        yamlUpdates["aws_env.iam_arn_client"] = clientArn
+    // Otherwise use the one from YAML since it was found
+    } else {
+        clientArn = stateConfig.IamArnClient
     }
 
     // Generate the servers trust and permissions policy templates
@@ -514,13 +536,23 @@ func VpcBootstrap(appConfig conf.AppConfig,
     permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
                                                      outStruct.AccountId,
                                                      "/kloud-kraken/tls-cert",
-                                                     bucketName, "ClientRole")
+                                                     bucketName, "client-role")
     // Create and apply role for local server permissions
-    outStruct.ServerArn, err = iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
-                                                         trustPolicy, "ServerPermissions",
-                                                         permissionsPolicy, false)
+    outStruct.ServerArn, err = iamClient.IamRoleProvision(5 * time.Minute,
+                                                          stateConfig.IamArnServer,
+                                                          "server-role", trustPolicy,
+                                                          "server-permissions",
+                                                          permissionsPolicy, false)
     if err != nil {
         return outStruct, err
+    }
+
+    // If IAM ARN for server was created, add name to yaml updates map
+    if outStruct.ServerArn != "" {
+        yamlUpdates["aws_env.iam_arn_server"] = outStruct.ServerArn
+    // Otherwise use the one from YAML since it was found
+    } else {
+        outStruct.ServerArn = stateConfig.IamArnServer
     }
 
     return outStruct, nil

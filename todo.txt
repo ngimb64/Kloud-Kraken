@@ -1,6 +1,6 @@
-- After AWS code logic is update do extensive permissions review and make sure all policies are updated
+- Ensure KMS encryption is applied to S3 & SSM operations
 
-- Ensure KMS encryption is applied to SSM operations and check security features of other resources
+- After AWS code logic is update do extensive permissions review and make sure all policies are updated
 
 - Research how long AWS operations will take and that timeouts are long enough and waiters are utilized when possible
 

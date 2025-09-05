@@ -147,7 +147,7 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
         }
     }
 
-    // Create and wait until VPC is created
+    // Wait until VPC is created
     return Ec2Man.vpcCreate(callTime, cidrBlock, tagName)
 }
 
