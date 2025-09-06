@@ -28,7 +28,7 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
                                                  maxPort int32) error {
 	// Ensure required args are present
 	if sgId == "" || cidr == "" {
-		return fmt.Errorf("sgId or cidr is missing")
+		return errors.New("sgId or cidr is missing")
 	}
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -66,11 +66,11 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
         // Add new ingress rule to security group
         _, err := Ec2Man.client.AuthorizeSecurityGroupIngress(ctx, callInput)
         if err != nil {
-            return fmt.Errorf("authorize security group egress - %w", err)
+            return fmt.Errorf("authorize security group ingress - %w", err)
         }
 
     default:
-        return fmt.Errorf("improper direction specified, use egress or ingress")
+        return errors.New("improper direction specified, use egress or ingress")
     }
 
     return nil
@@ -92,7 +92,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
                                                  bool, error) {
     // Ensure required args are present
     if sgId == "" || cidr == "" || proto == "" {
-        return false, fmt.Errorf("sgId or cidr or proto is missing")
+        return false, errors.New("sgId or cidr or proto is missing")
     }
 
     // Ensure protocol is all lowercase
@@ -208,7 +208,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleProvision(callTime time.Duration,
                                                     maxPort int32) error {
     // Ensure required args are present
     if cidr == "" || proto == "" || direction == "" {
-        return fmt.Errorf("sgId or cidr or proto is missing")
+        return errors.New("sgId or cidr or proto is missing")
     }
 
     // If Security Group ID is present in YAML

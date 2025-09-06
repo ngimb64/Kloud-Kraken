@@ -31,11 +31,11 @@ func (Ec2Man *Ec2Manger) createFlowLogToCloudWatch(callTime time.Duration,
     defer cancel()
 
     callInput := &ec2.CreateFlowLogsInput{
-        ResourceType:           ec2types.FlowLogsResourceTypeVpc,
-        ResourceIds:            []string{vpcID},
-        TrafficType:            ec2types.TrafficTypeAll,
-        LogDestinationType:     ec2types.LogDestinationTypeCloudWatchLogs,
-        LogGroupName:           aws.String(logGroupName),
+        ResourceType:             ec2types.FlowLogsResourceTypeVpc,
+        ResourceIds:              []string{vpcID},
+        TrafficType:              ec2types.TrafficTypeAll,
+        LogDestinationType:       ec2types.LogDestinationTypeCloudWatchLogs,
+        LogGroupName:             aws.String(logGroupName),
         DeliverLogsPermissionArn: aws.String(roleArn),
     }
 
@@ -106,7 +106,7 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
                                              string, error) {
     // Ensure required args are present
     if vpcId == "" || cwl == nil || logGroupName == "" || roleArn == "" {
-        return "", fmt.Errorf("vpcId or cwl or logGroupName or roleArn is missing")
+        return "", errors.New("vpcId or cwl or logGroupName or roleArn is missing")
     }
 
     // If the flow log Id is present in state file

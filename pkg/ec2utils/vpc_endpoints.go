@@ -117,12 +117,12 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
                                              string, error) {
     // Ensure required args are present
     if vpcId == "" || region == "" || policyDocument == "" {
-        return "", fmt.Errorf("vpcId or region or policyDocument is missing")
+        return "", errors.New("vpcId or region or policyDocument is missing")
     }
 
     // Ensure a route table ID was passed in
     if len(routeTableIds) == 0 {
-        return "", fmt.Errorf("routeTableIds is missing entries")
+        return "", errors.New("routeTableIds is missing entries")
     }
 
     // Set the service name for VPC Endpoint
@@ -163,12 +163,12 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
                                               string, error) {
     // Ensure required args are present
     if region == "" || vpcId == "" || policyDocument == "" {
-        return "", fmt.Errorf("region or vpcId or policyDocument is missing")
+        return "", errors.New("region or vpcId or policyDocument is missing")
     }
 
     // Ensure Subnet IDs and Security Group IDs have entries
     if len(subnetIds) == 0 || len(securityGroupIds) == 0 {
-        return "", fmt.Errorf("subnetIds or securityGroupIds is missing entries")
+        return "", errors.New("subnetIds or securityGroupIds is missing entries")
     }
 
     // Set the service name for VPC Endpoint
@@ -209,7 +209,7 @@ func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
                                            bool, string, error) {
     // Ensure required args are present
     if endpointId == "" || vpcId == "" || serviceName == "" {
-        return false, "", fmt.Errorf("endpointId or vpcId or serviceName is missing")
+        return false, "", errors.New("endpointId or vpcId or serviceName is missing")
     }
 
     // Ensure API calls do not hang for than longer specified timeout

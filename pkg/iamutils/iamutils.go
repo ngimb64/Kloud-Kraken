@@ -191,7 +191,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
     // Ensure required args are present
     if defaultRoleName == "" || trustPolicyJson == "" ||
     permPolicyName == "" || permPolicyJson == "" {
-        return "", fmt.Errorf("defaultRoleName or trustPolicyJson or" +
+        return "", errors.New("defaultRoleName or trustPolicyJson or" +
                               " permPolicyName or permPolicyJson is missing")
     }
 
@@ -200,7 +200,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
         // Parse the role name from ARN to check existence
         roleName, err := roleNameFromArn(roleArn)
         if err != nil {
-            return "", fmt.Errorf("parsing role arn: %w", err)
+            return "", fmt.Errorf("parsing role arn - %w", err)
         }
 
         // Check to see if the IAM role already exists
@@ -234,7 +234,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
 func roleNameFromArn(roleArn string) (string, error) {
     // Ensure required arg is present
     if roleArn == "" {
-        return "", fmt.Errorf("roleArn is missing")
+        return "", errors.New("roleArn is missing")
     }
 
     // ARN should contain ":role/" and the role name is after the last '/'

@@ -28,12 +28,12 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
                                                    string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
-        return "", fmt.Errorf("vpcId or destCidr is missing")
+        return "", errors.New("vpcId or destCidr is missing")
     }
 
     // Ensure either one of the two args are set
     if (igwId == "") == (natId == "") {
-        return "", fmt.Errorf("either igwId or natId must be provided")
+        return "", errors.New("either igwId or natId must be provided")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -52,7 +52,7 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
 
     if createOut == nil || createOut.RouteTable == nil ||
     createOut.RouteTable.RouteTableId == nil {
-        return "", fmt.Errorf("create route table failed to return route table id")
+        return "", errors.New("create route table failed to return route table id")
     }
 
     rtID := aws.ToString(createOut.RouteTable.RouteTableId)
@@ -120,7 +120,7 @@ func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
                                           bool, error) {
     // Ensure required args are present
     if rtId == "" {
-        return false, fmt.Errorf("rtId is missing")
+        return false, errors.New("rtId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -182,12 +182,12 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
                                              string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
-        return "", fmt.Errorf("vpcId or destCidr is missing")
+        return "", errors.New("vpcId or destCidr is missing")
     }
 
     // Ensure either one of the two args are set
     if (igwId == "") == (natId == "") {
-        return "", fmt.Errorf("either igwId or natId must be provided")
+        return "", errors.New("either igwId or natId must be provided")
     }
 
     // If route_table_id is present in state file

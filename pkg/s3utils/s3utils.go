@@ -82,6 +82,17 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
         return "", errors.New("S3 bucket failed to create")
     }
 
+    waiterCallInput := s3.HeadBucketInput{
+        Bucket: &bucketName,
+    }
+
+    // Allocate waiter and wait until the VPC exists
+    waiter := s3.NewBucketExistsWaiter(S3Man.client)
+    err = waiter.Wait(ctx, &waiterCallInput, callTime)
+    if err != nil {
+        return bucketName, err
+    }
+
     return bucketName, nil
 }
 

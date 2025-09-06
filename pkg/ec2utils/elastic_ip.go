@@ -37,17 +37,17 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
 
     // If the Elastic IP creation call failed to return output
     if out == nil {
-        return "", fmt.Errorf("elastic IP creation call returned nil")
+        return "", errors.New("elastic IP creation call returned nil")
     }
 
     // If the output does not contain a Puclic IP
     if out.PublicIp == nil {
-        return "", fmt.Errorf("elastic IP creation call missing public IP")
+        return "", errors.New("elastic IP creation call missing public IP")
     }
 
     // If the output is missing a Allocation ID
     if out.AllocationId == nil {
-        return "", fmt.Errorf("elastic IP creation call missing allocation ID")
+        return "", errors.New("elastic IP creation call missing allocation ID")
     }
 
     return *out.AllocationId, nil
@@ -66,7 +66,7 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
                                          bool, error) {
     // Ensure required args are present
     if eipId == "" {
-        return false, fmt.Errorf("eipId is missing")
+        return false, errors.New("eipId is missing")
     }
 
     // Ensure API calls do not hang for than longer specified timeout

@@ -50,10 +50,21 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     // If the create internet gateway call failed to return an ID
     if createOut.InternetGateway == nil ||
     createOut.InternetGateway.InternetGatewayId == nil {
-        return "", fmt.Errorf("create internet gateway returned empty id")
+        return "", errors.New("create internet gateway returned empty id")
     }
 
     igwId := *createOut.InternetGateway.InternetGatewayId
+
+    waiterCallInput := &ec2.DescribeInternetGatewaysInput{
+      InternetGatewayIds: []string{igwId},
+    }
+
+    // Allocate waiter and wait until the Internet Gateway is available
+    waiter := ec2.NewInternetGatewayExistsWaiter(Ec2Man.client)
+    err = waiter.Wait(ctx, waiterCallInput, callTime)
+    if err != nil {
+        return igwId, err
+    }
 
     attachCallInput := &ec2.AttachInternetGatewayInput{
         InternetGatewayId: aws.String(igwId),
@@ -83,7 +94,7 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
                                                bool, error) {
     // Ensure required args are present
     if vpcId == "" || igwId == "" {
-        return false, fmt.Errorf("vpcId or igwId is missing")
+        return false, errors.New("vpcId or igwId is missing")
     }
 
     // Ensure API calls do not hang for longer specified timeout
@@ -149,7 +160,7 @@ func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
                                                   string, error) {
     // Ensure required args are present
     if vpcId == "" {
-        return "", fmt.Errorf("vpcId is missing")
+        return "", errors.New("vpcId is missing")
     }
 
     // If IGW ID is present in state file

@@ -623,7 +623,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
-    err = ec2Client.Ec2CreateInstances(20 * time.Minute, []byte(userData),
+    err = ec2Client.Ec2CreateInstances(15 * time.Minute, []byte(userData),
                                        "ami-0eb94e3d16a6eea5f",
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,

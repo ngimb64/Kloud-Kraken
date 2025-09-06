@@ -29,7 +29,7 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    input := &ec2.CreateSecurityGroupInput{
+    createCallInput := &ec2.CreateSecurityGroupInput{
         GroupName:   aws.String(groupName),
         Description: aws.String(description),
         VpcId:       aws.String(vpcId),
@@ -37,7 +37,7 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
 
     // Optionally attach a Name tag if specified
     if groupName != "" {
-        input.TagSpecifications = []ec2types.TagSpecification{
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeSecurityGroup,
                 Tags: []ec2types.Tag{
@@ -50,18 +50,31 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     }
 
     // Create the Security Group
-    out, err := Ec2Man.client.CreateSecurityGroup(ctx, input)
+    out, err := Ec2Man.client.CreateSecurityGroup(ctx, createCallInput)
     if err != nil {
         return "", fmt.Errorf("create security group - %w", err)
     }
 
     // If the call is missing output or a Security Group ID
     if out == nil || out.GroupId == nil {
-        return "", fmt.Errorf("create security group failed to return GroupId")
+        return "", errors.New("create security group failed to return GroupId")
     }
 
-    callInput := &ec2.RevokeSecurityGroupEgressInput{
-        GroupId: aws.String(*out.GroupId),
+    sgId := *out.GroupId
+
+    waiterCallInput := &ec2.DescribeSecurityGroupsInput{
+        GroupIds: []string{sgId},
+    }
+
+    // Allocate waiter and wait until the Security Group exists
+    waiter := ec2.NewSecurityGroupExistsWaiter(Ec2Man.client)
+    err = waiter.Wait(ctx, waiterCallInput, callTime)
+    if err != nil {
+        return sgId, err
+    }
+
+    revokeCallInput := &ec2.RevokeSecurityGroupEgressInput{
+        GroupId: aws.String(sgId),
         IpPermissions: []ec2types.IpPermission{
             {
                 IpProtocol: aws.String("-1"),
@@ -75,12 +88,12 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     }
 
     // Revoke all outbound traffic access
-    _, err = Ec2Man.client.RevokeSecurityGroupEgress(ctx, callInput)
+    _, err = Ec2Man.client.RevokeSecurityGroupEgress(ctx, revokeCallInput)
     if err != nil {
-        return *out.GroupId, fmt.Errorf("revoking inital outbound traffic - %w", err)
+        return sgId, fmt.Errorf("revoking inital outbound traffic - %w", err)
     }
 
-    return *out.GroupId, nil
+    return sgId, nil
 }
 
 //
@@ -96,7 +109,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupExists(callTime time.Duration,
                                              bool, error) {
     // Ensure required args are present
     if sgId == "" {
-        return false, fmt.Errorf("sgId is missing")
+        return false, errors.New("sgId is missing")
     }
 
     // Ensure API calls do not hang for longer than specified timeout
@@ -145,7 +158,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
                                                 string, error) {
     // Ensure required args are present
     if vpcId == "" || groupName == "" || description == "" {
-        return "", fmt.Errorf("vpcId or groupName or description is missing")
+        return "", errors.New("vpcId or groupName or description is missing")
     }
 
     // If Securityy Group IP ID is present in YAML

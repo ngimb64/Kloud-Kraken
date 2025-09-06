@@ -56,9 +56,9 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
         VpcIds: []string{vpcId},
     }
 
-    // Allocate waiter and wait until the VPC is available
+    // Allocate waiter and wait until the VPC exists
     waiter := ec2.NewVpcExistsWaiter(Ec2Man.client)
-    err = waiter.Wait(ctx, waiterCallInput, 5 * time.Minute)
+    err = waiter.Wait(ctx, waiterCallInput, callTime)
     if err != nil {
         return vpcId, err
     }
@@ -80,7 +80,7 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
                                    bool, error) {
     // Ensure required arg is present
     if vpcId == "" {
-        return false, fmt.Errorf("vpcId is missing")
+        return false, errors.New("vpcId is missing")
     }
 
     // Ensure API calls do not hang for than longer specified timeout
@@ -130,7 +130,7 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
                                       string, error) {
     // Ensure required args are present
     if cidrBlock == "" || tagName == "" {
-        return "", fmt.Errorf("cidrBlock or tagName is missing")
+        return "", errors.New("cidrBlock or tagName is missing")
     }
 
     // If VPC ID is present in state file
