@@ -1,6 +1,3 @@
-- Ensure all AWS resources are properly tagged and functions support optional tagging
-    - Also ensure function call used members are in alphabetical order
-
 - Research and implement tips of calculating cost of resources and which should persist & which should be deleted per execution
 
 - Make sure all policies are updated based on review
@@ -29,21 +26,25 @@ NOTE:  below list is reference for research item in list
 
 Server Bootstrap role:
     - Create VPC with CIDR block
+        - CreateTags
         - CreateVpc
         - DescribeVpcs
         - NewVpcExistsWaiter
     - Create and attach Internet Gateway (IGW) to the VPC
         - AttachInternetGateway
         - CreateInternetGateway
+        - CreateTags
         - DescribeInternetGateways
         - NewInternetGatewayExistsWaiter
     - Allocate Elastic IP for NAT Gateway
         - AllocateAddress
+        - CreateTags
         - DescribeAddresses
     - Get the availability zones for the region
         - DescribeAvailabilityZones
     - Create public and private subnets within the VPC
         - CreateSubnet
+        - CreateTags
         - DescribeSubnets
         - ModifySubnetAttribute
         - NewSubnetAvailableWaiter
@@ -67,6 +68,7 @@ Server Bootstrap role:
         - Same as above
     - Create security groups for EC2
         - CreateSecurityGroup
+        - CreateTags
         - DescribeSecurityGroups
         - NewSecurityGroupExistsWaiter
         - RevokeSecurityGroupEgress
@@ -85,22 +87,27 @@ Server Bootstrap role:
     - Create VPC endpoints (e.g., S3, SSM) for private access
         - DescribeVpcEndpoints
         - CreateVpcEndpoint
+        - CreateTags
     - Create IAM role and trust policy for VPC flow logs
         - CreateRole
+        - CreateTags
         - GetRole
         - PutRolePolicy
     - Enable VPC Flow Logs for traffic monitoring and auditing
         - CreateFlowLogs
         - CreateLogGroup
+        - CreateTags
         - DescribeFlowLogs
     - Create IAM role for client
         - AddRoleToInstanceProfile
         - CreateInstanceProfile
         - CreateRole
+        - CreateTags
         - GetRole
         - PutRolePolicy
     - Create IAM role for server
         - CreateRole
+        - CreateTags
         - GetRole
         - PutRolePolicy
     - Assume Server role after bootstrap is complete
@@ -109,9 +116,11 @@ Server Bootstrap role:
 Server role:
     - Put the generated TLS certificate SSM parameter store
         - PutParameter
+        - CreateTags
     - Put client binary into S3 bucket
         - PutObject
     - Setup EC2 instances
+        - CreateTags
         - NewInstanceExistsWaiter
         - RunInstances
     - Terminate EC2 instances
@@ -125,6 +134,7 @@ Client role:
     - Logging system with cloudwatch integration
         - CreateLogGroup
         - CreateLogStream
+        - CreateTags
         - DescribeLogStreams
         - GetMetadata
         - PutLogEvents

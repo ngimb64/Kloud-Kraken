@@ -114,7 +114,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }()
 
     // Check to see if the VPC exists, otherwise create one
-    vpcId, err := ec2Client.VpcProvision(20 * time.Minute,
+    vpcId, err := ec2Client.VpcProvision(10 * time.Minute,
                                          stateConfig.VpcId,
                                          appConfig.LocalConfig.CidrBlock,
                                          "kloud-kraken-vpc")
@@ -131,7 +131,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Check to see if IGW exists, otherwise create & attach one
-    igwId, err := ec2Client.InternetGatewayProvision(10 * time.Minute,
+    igwId, err := ec2Client.InternetGatewayProvision(5 * time.Minute,
                                                      stateConfig.IgwId, vpcId,
                                                      "kloud-kraken-internet-gateway")
     if err != nil {
@@ -147,7 +147,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Check to see if Elastic IP exists, otherwise create one
-    eipId, err := ec2Client.ElasticIpProvision(10*time.Minute, stateConfig.EipId)
+    eipId, err := ec2Client.ElasticIpProvision(1 * time.Minute,
+                                               "kloud-kraken-elastic-ip",
+                                               stateConfig.EipId)
     if err != nil {
         return outStruct, err
     }
@@ -161,7 +163,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Get the slice of availability zones based on region
-    azs, err := ec2Client.FetchAvailableAZs(5 * time.Minute)
+    azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
     if err != nil {
         return outStruct, err
     }
@@ -188,7 +190,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Create public subnet if it does not exist
     pubSubnetId, err := ec2Client.SubnetProvision(5 * time.Minute,
                                                   stateConfig.PublicSubnetId,
-                                                  vpcId, pubCidr, az, true)
+                                                  vpcId, pubCidr, az,
+                                                  "kloud-kraken-public-subnet",
+                                                  true)
     if err != nil {
         return outStruct, err
     }
@@ -211,7 +215,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Create private subnet if it does not exist
     privSubnetId, err := ec2Client.SubnetProvision(5 * time.Minute,
                                                    stateConfig.PrivateSubnetId,
-                                                   vpcId, privCidr, az, false)
+                                                   vpcId, privCidr, az,
+                                                   "kloud-kraken-private-subnet",
+                                                   false)
     if err != nil {
         return outStruct, err
     }
@@ -227,7 +233,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     outStruct.PrivSubnetId = privSubnetId
 
     // Create NAT gateway in public subnet if it does not exist
-    natGatewayId, err := ec2Client.NatGatewayProvision(10 * time.Minute,
+    natGatewayId, err := ec2Client.NatGatewayProvision(15 * time.Minute,
                                                        stateConfig.NatGatewayId,
                                                        pubSubnetId, eipId,
                                                        "kloud-kraken-nat-gateway")
@@ -244,7 +250,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Create route table for subnets to internet gateway if does not exist
-    publicRouteId, err := ec2Client.RouteTableProvision(5 * time.Minute,
+    publicRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
                                                         stateConfig.PublicRouteId,
                                                         vpcId, igwId, "",
                                                         pubSubnetId, "0.0.0.0/0",
@@ -262,7 +268,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Create route table for subnets to NAT Gateway if it does not exist
-    privateRouteId, err := ec2Client.RouteTableProvision(5 * time.Minute,
+    privateRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
                                                          stateConfig.PrivateRouteId,
                                                          vpcId, "", natGatewayId,
                                                          privSubnetId, "0.0.0.0/0",
@@ -280,7 +286,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Ensure public route tables are associated to subnet
-    publicAssocId, err := ec2Client.RouteTableAssociationProvision(5 * time.Minute,
+    publicAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
                                                                    stateConfig.PublicAssociationId,
                                                                    publicRouteId, pubSubnetId)
     if err != nil {
@@ -296,7 +302,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Ensure private route tables are associated to subnet
-    privateAssocId, err := ec2Client.RouteTableAssociationProvision(5 * time.Minute,
+    privateAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
                                                                     stateConfig.PrivateAssociationId,
                                                                     privateRouteId, privSubnetId)
     if err != nil {
@@ -316,7 +322,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                      stateConfig.Ec2SecurityGroupId, vpcId,
                                                      "kloud-kraken-ec2-security-group",
                                                      "Security group for Kloud" +
-                                                     " Kraken EC2 instances")
+                                                     " Kraken EC2 instances",
+                                                     "kloud-kraken-ec2-security-group")
     if err != nil {
         return outStruct, err
     }
@@ -338,28 +345,28 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Configure UDP rule in security group for DNS
-    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, dnsAddr,
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, dnsAddr,
                                                "udp", "egress", 53, 53)
     if err != nil {
         return outStruct, err
     }
 
     // Configure TCP rule in security group for DNS
-    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, dnsAddr,
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, dnsAddr,
                                                "tcp", "egress", 53, 53)
     if err != nil {
         return outStruct, err
     }
 
     // Configure TCP rule in security group for HTTP
-    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, "0.0.0.0/0",
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, "0.0.0.0/0",
                                                "tcp", "egress", 80, 80)
     if err != nil {
         return outStruct, err
     }
 
     // Configure TCP rule in security group for HTTPS
-    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ec2SgId, "0.0.0.0/0",
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, "0.0.0.0/0",
                                                "tcp", "egress", 443, 443)
     if err != nil {
         return outStruct, err
@@ -371,7 +378,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                      "kloud-kraken-ssm-security-group",
                                                      "Security group for Kloud " +
                                                      "Kraken SSM parameter store" +
-                                                     " VPC endpoint")
+                                                     " VPC endpoint",
+                                                     "kloud-kraken-ssm-security-group")
     if err != nil {
         return outStruct, err
     }
@@ -385,7 +393,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Configure TCP rule in security group for HTTPS
-    err = ec2Client.SecurityGroupRuleProvision(5 * time.Minute, ssmSgId, "0.0.0.0/0",
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ssmSgId, "0.0.0.0/0",
                                                "tcp", "ingress", 443, 443)
     if err != nil {
         return outStruct, err
@@ -415,11 +423,12 @@ func VpcBootstrap(appConfig conf.AppConfig,
     policyDocument := policies.VpcS3EndpointPolicyGen(bucketName, vpcId)
 
     // Create VPC endpoint for S3 if it does not exist
-    s3VpcEndPointId, err := ec2Client.S3EndpointProvision(5 * time.Minute,
+    s3VpcEndPointId, err := ec2Client.S3EndpointProvision(10 * time.Minute,
                                                           stateConfig.S3VpcEndpointId,
                                                           appConfig.LocalConfig.Region,
                                                           vpcId, policyDocument,
-                                                          []string{privateRouteId})
+                                                          []string{privateRouteId},
+                                                          "kloud-kraken-s3-vpc-endpoint")
     if err != nil {
         return outStruct, err
     }
@@ -438,12 +447,13 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                       vpcId)
 
     // Create VPC endpoint for SSM if it does not exist
-    ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(5 * time.Minute,
+    ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(10 * time.Minute,
                                                             stateConfig.SsmVpcEndpointId,
                                                             appConfig.LocalConfig.Region,
                                                             vpcId, policyDocument,
                                                             []string{privSubnetId},
-                                                            []string{ssmSgId})
+                                                            []string{ssmSgId},
+                                                            "kloud-kraken-ssm-vpc-endpoint")
     if err != nil {
         return outStruct, err
     }
@@ -471,7 +481,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                      "vpc-flow-logs-role",
                                                      trustPolicy,
                                                      "vpc-flow-log-permissions",
-                                                     permissionsPolicy, false)
+                                                     permissionsPolicy,
+                                                     "kloud-kraken-iam-vpc-flow-logs",
+                                                     false)
     if err != nil {
         return outStruct, err
     }
@@ -492,7 +504,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                     stateConfig.FlowLogId,
                                                     vpcId, cwlClient,
                                                     "kloud-kraken-vpc-flow-logs",
-                                                    vpcFlowLogArn)
+                                                    vpcFlowLogArn,
+                                                    "kloud-kraken-vpc-flow-logs")
     if err != nil {
         return outStruct, err
     }
@@ -517,7 +530,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                  stateConfig.IamArnClient,
                                                  "client-role", trustPolicy,
                                                  "client-permissions",
-                                                 permissionsPolicy, true)
+                                                 permissionsPolicy,
+                                                 "kloud-kraken-iam-client",
+                                                 true)
     if err != nil {
         return outStruct, err
     }
@@ -542,7 +557,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                           stateConfig.IamArnServer,
                                                           "server-role", trustPolicy,
                                                           "server-permissions",
-                                                          permissionsPolicy, false)
+                                                          permissionsPolicy,
+                                                          "kloud-kraken-iam-server",
+                                                          false)
     if err != nil {
         return outStruct, err
     }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
@@ -19,7 +20,8 @@ import (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
+func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
+                                         tagName string) (
                                          string, error) {
     // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -27,6 +29,20 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
 
     callInput := &ec2.AllocateAddressInput{
         Domain: ec2types.DomainTypeVpc,
+    }
+
+    if tagName != "" {
+        callInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeElasticIp,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
+                    },
+                },
+            },
+        }
     }
 
     // Allocate Elastic IP Address
@@ -109,7 +125,8 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
 //
 //
 func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
-                                            eipId string) (
+                                            eipId string,
+                                            tagName string) (
                                             string, error) {
     // If Elastic IP ID is present in state file
     if eipId != "" {
@@ -126,5 +143,5 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
     }
 
     // Create and wait until VPC is created
-    return Ec2Man.elasticIPCreate(callTime)
+    return Ec2Man.elasticIPCreate(callTime, tagName)
 }

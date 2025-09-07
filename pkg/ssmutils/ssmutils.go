@@ -67,9 +67,10 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 // Put value into AWS SSM Parameter Store.
 //
 // @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
 //  - parameter:  name of the parameter to retrieve
 //  - data:  The data to store with associated parameter
-//  - callTime:  The length of time the API call is allowed to execute
+//  - tagName:  Name to tag the AWS resource
 //
 // @Returns
 //  - The path where the parameter is stored in param store
@@ -77,7 +78,8 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //
 func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
                                           parameter string,
-                                          data string) (
+                                          data string,
+                                          tagName string) (
                                           string, error) {
     var existsErr *ssmtypes.ParameterAlreadyExists
 
@@ -93,6 +95,16 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
             Value:     aws.String(data),
             Type:      ssmtypes.ParameterTypeSecureString,
             Overwrite: aws.Bool(false),
+        }
+
+        // If tag was specified, add it to input
+        if tagName != "" {
+            callInput.Tags = []ssmtypes.Tag{
+                {
+                    Key: aws.String("Name"),
+                    Value: aws.String(tagName),
+                },
+            }
         }
 
         // Put parameter into AWS SSM Parameter Store

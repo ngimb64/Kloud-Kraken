@@ -581,7 +581,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Push the servers certificate PEM into SSM parameter store
     param, err := ssmClient.SsmPutParameter(1 * time.Minute,
                                             "/kloud-kraken/tls-cert",
-                                            string(TlsMan.CertPemBlock))
+                                            string(TlsMan.CertPemBlock),
+                                            "kloud-kraken-ssm-tls-cert")
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -601,7 +602,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     s3Client := s3utils.S3NewManager(awsConfig)
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Client.S3PutObject(1 * time.Minute,
+    keyName, err := s3Client.S3PutObject(5 * time.Minute,
                                          bootstrapOut.BucketName,
                                          "client", binData)
     if err != nil {
@@ -813,7 +814,7 @@ func main() {
 
         defer func() {
             // Terminate the EC2 instances when processing is complete
-            termOutput, err := ec2Man.Ec2TerminateInstances(time.Minute * 10)
+            termOutput, err := ec2Man.Ec2TerminateInstances(5 * time.Minute)
             if err != nil {
                 log.Printf("Error terminating EC2 instances:  %v", err)
             }
@@ -860,8 +861,8 @@ func main() {
                                    "and server certifcate added to pool"))
 
     // Initialize the LoggerManager based on the flags
-    logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log", awsConfig,
-                                             "Kloud-Kraken", false)
+    logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log",
+                                             awsConfig, "", "", false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

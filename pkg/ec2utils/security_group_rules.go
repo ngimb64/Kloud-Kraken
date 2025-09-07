@@ -37,11 +37,11 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
 
     ipPerm := ec2types.IpPermission{
         IpProtocol: aws.String("tcp"),
-        FromPort:   aws.Int32(minPort),
-        ToPort:     aws.Int32(maxPort),
         IpRanges: []ec2types.IpRange{
             {CidrIp: aws.String(cidr)},
         },
+        FromPort:   aws.Int32(minPort),
+        ToPort:     aws.Int32(maxPort),
     }
 
     switch direction {

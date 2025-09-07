@@ -34,13 +34,28 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    createIn := &ec2.CreateNatGatewayInput{
+    createCallInput := &ec2.CreateNatGatewayInput{
         SubnetId:     aws.String(subnetID),
         AllocationId: aws.String(eipId),
     }
 
+    // Tag the NAT gateway name if provided
+    if nameTag != "" {
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeNatgateway,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(nameTag),
+                    },
+                },
+            },
+        }
+    }
+
     // Create the NAT Gateway
-    createOut, err := Ec2Man.client.CreateNatGateway(ctx, createIn)
+    createOut, err := Ec2Man.client.CreateNatGateway(ctx, createCallInput)
     if err != nil {
         return "", fmt.Errorf("create nat gateway - %w", err)
     }
@@ -53,21 +68,6 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
     }
 
     newNatID := aws.ToString(createOut.NatGateway.NatGatewayId)
-
-    // Tag the NAT gateway name if provided
-    if nameTag != "" {
-        createCallInput := &ec2.CreateTagsInput{
-            Resources: []string{newNatID},
-            Tags: []ec2types.Tag{
-                {
-                    Key: aws.String("Name"), Value: aws.String(nameTag),
-                },
-            },
-        }
-
-        // Create tags for the resource with created resource ID
-        _, _ = Ec2Man.client.CreateTags(ctx, createCallInput)
-    }
 
     waitCallInput := &ec2.DescribeNatGatewaysInput{
         NatGatewayIds: []string{newNatID},
@@ -108,7 +108,8 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
     describeCallInput := &ec2.DescribeNatGatewaysInput{
         Filter: []ec2types.Filter{
             {
-                Name: aws.String("nat-gateway-id"), Values: []string{natId},
+                Name: aws.String("nat-gateway-id"),
+                Values: []string{natId},
             },
         },
     }

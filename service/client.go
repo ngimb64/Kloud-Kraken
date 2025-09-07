@@ -747,7 +747,9 @@ func main() {
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig,
-                                              "Kloud-Kraken", false)
+                                              "kloud-kraken-logs",
+                                              "kloud-kraken-logs",
+                                              false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

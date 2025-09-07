@@ -23,26 +23,28 @@ import (
 func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
                                              vpcId string,
                                              groupName string,
-                                             description string) (
+                                             description string,
+                                             tagName string) (
                                              string, error) {
     // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     createCallInput := &ec2.CreateSecurityGroupInput{
-        GroupName:   aws.String(groupName),
         Description: aws.String(description),
+        GroupName:   aws.String(groupName),
         VpcId:       aws.String(vpcId),
     }
 
     // Optionally attach a Name tag if specified
-    if groupName != "" {
+    if tagName != "" {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeSecurityGroup,
                 Tags: []ec2types.Tag{
                     {
-                        Key: aws.String("Name"), Value: aws.String(groupName),
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
                     },
                 },
             },
@@ -154,7 +156,8 @@ func (Ec2Man *Ec2Manger) SecurityGroupExists(callTime time.Duration,
 func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
                                                 sgId string, vpcId string,
                                                 groupName string,
-                                                description string) (
+                                                description string,
+                                                tagName string) (
                                                 string, error) {
     // Ensure required args are present
     if vpcId == "" || groupName == "" || description == "" {
@@ -175,5 +178,6 @@ func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
     }
 
     // Create a new Security Group
-    return Ec2Man.securityGroupCreate(callTime, vpcId, groupName, description)
+    return Ec2Man.securityGroupCreate(callTime, vpcId, groupName,
+                                      description, tagName)
 }

@@ -19,6 +19,7 @@ import (
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//  - tagName:  Name to tag the AWS resource
 //
 // @Returns
 //  - The ID of the created VPC
@@ -30,18 +31,22 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Format input for CreateVpc call
     createCallInput := &ec2.CreateVpcInput{
         CidrBlock: aws.String(cidrBlock),
-        TagSpecifications: []ec2types.TagSpecification{
+    }
+
+    if tagName != "" {
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeVpc,
                 Tags: []ec2types.Tag{
-                {
-                    Key: aws.String("Name"), Value: aws.String(tagName),
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
+                    },
                 },
             },
-        }},
+        }
     }
 
     // Create a new VPC since no valid ID was provided

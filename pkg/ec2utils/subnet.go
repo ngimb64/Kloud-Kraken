@@ -21,7 +21,7 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
-                                      cidrBlock string, az string,
+                                      cidrBlock string, az string, tagName string,
                                       isPublic bool) (string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -31,6 +31,20 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
         AvailabilityZone: aws.String(az),
         CidrBlock:        aws.String(cidrBlock),
         VpcId:            aws.String(vpcId),
+    }
+
+    if tagName != "" {
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeSubnet,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
+                    },
+                },
+            },
+        }
     }
 
     // Create the subnet
@@ -92,7 +106,8 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
     describeInput := &ec2.DescribeSubnetsInput{
         Filters: []ec2types.Filter{
             {
-                Name: aws.String("subnet-id"), Values: []string{subnetId},
+                Name: aws.String("subnet-id"),
+                Values: []string{subnetId},
             },
         },
     }
@@ -130,7 +145,8 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string,
                                          vpcID string, cidrBlock string,
-                                         az string, isPublic bool) (
+                                         az string, tagName string,
+                                         isPublic bool) (
                                          string, error) {
     // Ensure required args are present
     if vpcID == "" || cidrBlock == "" || az == "" {
@@ -152,5 +168,6 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
     }
 
     // Create new subnet
-    return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
+    return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock,
+                               az, tagName, isPublic)
 }

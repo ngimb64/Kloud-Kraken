@@ -45,6 +45,7 @@ type LoggerManager struct {
 //  - localLogFile:  Path where the logs will be stored locally on file
 //  - awsConfig:  The initialized AWS configuration instance
 //  - group:  The CloudWatch logging group
+//  - tagName:  Name to tag the AWS resource
 //  - logToMemory:  Boolean toggler whether to log to memory or not
 //
 // @Returns
@@ -52,7 +53,8 @@ type LoggerManager struct {
 //  - Error if it occurs, otherwise nil on success
 //
 func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
-                      group string, logToMemory bool) (*LoggerManager, error) {
+                      group string, tagName string, logToMemory bool) (
+                      *LoggerManager, error) {
     var localLogger Logger
     var cloudLogger Logger
     var err error
@@ -67,7 +69,7 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 
     // Initialize CloudWatch logger if needed
     if logDestination == "cloudwatch" || logDestination == "both" {
-        cloudLogger, err = NewCloudWatchLogger(awsConfig, group)
+        cloudLogger, err = NewCloudWatchLogger(awsConfig, group, tagName)
         if err != nil {
             return nil, err
         }
@@ -351,18 +353,20 @@ type CloudWatchLogger struct {
 // @Parameters
 //  - awsConfig:  The AWS configuration config struct
 //  - group:  The CloudWatch logging group
-//  - stream:  The CloudWatch logging stream
+//  - tagName:  Name to tag the AWS resource
 //
 // @Returns
 //  - The initializes CloudWatch logger config instance
 //  - Error if it occurs, otherwise nil on success
 //
-func NewCloudWatchLogger(awsConfig aws.Config, group string) (
+func NewCloudWatchLogger(awsConfig aws.Config, group string, tagName string) (
                          Logger, error) {
     var stream string
     // Establish CloudWatch client and set to run in background
     client := cwl.NewFromConfig(awsConfig)
-    ctx := context.Background()
+    // Ensure API calls do not hang for than longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Minute)
+    defer cancel()
 
     // Set up client to the EC2 instance metadata service
     metaDataService := imds.NewFromConfig(awsConfig)
@@ -384,10 +388,18 @@ func NewCloudWatchLogger(awsConfig aws.Config, group string) (
         stream = string(streamData)
     }
 
-    // Create the CloudWatch log group
-    _, err = client.CreateLogGroup(ctx, &cwl.CreateLogGroupInput{
+    createLogGroupInput := &cwl.CreateLogGroupInput{
         LogGroupName: aws.String(group),
-    })
+    }
+
+    if tagName != "" {
+        createLogGroupInput.Tags = map[string]string{
+            "Name": tagName,
+        }
+    }
+
+    // Create the CloudWatch log group
+    _, err = client.CreateLogGroup(ctx, createLogGroupInput)
     if err != nil {
         var ae *cwlTypes.ResourceAlreadyExistsException
 

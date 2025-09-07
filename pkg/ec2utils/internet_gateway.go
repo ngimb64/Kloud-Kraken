@@ -22,23 +22,26 @@ import (
 //
 func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
                                                         vpcId string,
-                                                        nameTag string) (
+                                                        tagName string) (
                                                         string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    createCallInput := &ec2.CreateInternetGatewayInput{
-        TagSpecifications: []ec2types.TagSpecification{
+    createCallInput := &ec2.CreateInternetGatewayInput{}
+
+    if tagName != "" {
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInternetGateway,
                 Tags: []ec2types.Tag{
                     {
-                        Key: aws.String("Name"), Value: aws.String(nameTag),
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
                     },
                 },
             },
-        },
+        }
     }
 
     // Create the internet gateway

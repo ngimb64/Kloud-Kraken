@@ -115,7 +115,7 @@ Stopped: Wed Feb 12 23:01:47 2025$
     assert.Equal(nil, err)
 
     // Initialize the LoggerManager based on the flags
-    logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, "", true)
+    logMan, err := kloudlogs.NewLoggerManager("local", "", awsConfig, "", "", true)
     assert.Equal(nil, err)
 
     // Log the hashcat output with kloudlogs

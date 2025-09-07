@@ -44,13 +44,23 @@ func IamNewManager(awsConfig aws.Config) *IamManager {
 //  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
-                                                roleName string) error {
+                                                roleName string,
+                                                tagName string) error {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     createCallInput := &iam.CreateInstanceProfileInput{
         InstanceProfileName: aws.String(roleName),
+    }
+
+    if tagName != "" {
+        createCallInput.Tags = []iamtypes.Tag{
+            {
+                Key: aws.String("Name"),
+                Value: aws.String(tagName + "-instance-profile"),
+            },
+        }
     }
 
     // Create the instance profile
@@ -95,17 +105,29 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
 //
 func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName string,
                                           trustPolicyJson string, permPolicyName string,
-                                          permPolicyJson string, createProfile bool) (
+                                          permPolicyJson string, tagName string,
+                                          createProfile bool) (
                                           string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Create the IAM role
-    createOut, err := IamMan.client.CreateRole(ctx, &iam.CreateRoleInput{
-        RoleName:                 aws.String(roleName),
+    createCallInput := &iam.CreateRoleInput{
         AssumeRolePolicyDocument: aws.String(trustPolicyJson),
-    })
+        RoleName:                 aws.String(roleName),
+    }
+
+    if tagName != "" {
+        createCallInput.Tags = []iamtypes.Tag{
+            {
+                Key: aws.String("Name"),
+                Value: aws.String(tagName),
+            },
+        }
+    }
+
+    // Create the IAM role
+    createOut, err := IamMan.client.CreateRole(ctx,createCallInput )
     if err != nil {
         return "", fmt.Errorf("CreateRole failed - %w", err)
     }
@@ -115,9 +137,9 @@ func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName strin
 
     // Attach or overwrite the inline permissions policy
     _, err = IamMan.client.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
-        RoleName:       aws.String(roleName),
-        PolicyName:     aws.String(permPolicyName),
         PolicyDocument: aws.String(permPolicyJson),
+        PolicyName:     aws.String(permPolicyName),
+        RoleName:       aws.String(roleName),
     })
     if err != nil {
         return roleArn, fmt.Errorf("PutRolePolicy failed -  %w", err)
@@ -125,7 +147,7 @@ func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName strin
 
     // If specified, create instance profile and attach role to it
     if createProfile {
-        err = IamMan.createInstanceProfile(callTime, roleName)
+        err = IamMan.createInstanceProfile(callTime, roleName, tagName)
         if err != nil {
             return roleArn, fmt.Errorf("creating EC2 instace profile - %w", err)
         }
@@ -186,6 +208,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
                                            trustPolicyJson string,
                                            permPolicyName string,
                                            permPolicyJson string,
+                                           tagName string,
                                            createProfile bool) (
                                            string, error) {
     // Ensure required args are present
@@ -216,8 +239,10 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
     }
 
     // Create the IAM role using the default assigned name
-    return IamMan.iamRoleCreation(callTime, defaultRoleName, trustPolicyJson,
-                                  permPolicyName, permPolicyJson, createProfile)
+    return IamMan.iamRoleCreation(callTime, defaultRoleName,
+                                  trustPolicyJson, permPolicyName,
+                                  permPolicyJson, tagName,
+                                  createProfile)
 }
 
 // Extracts the role name from a role ARN.
