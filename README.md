@@ -25,17 +25,27 @@
 - Easy configuration with YAML templates
 - Built-in wordlist merging with flexibility to skip larger files
   - Merging process using `cat` -> `deduplicut`
-  - If the file goes over max file size, excess data is shaved with `cut` or `dd` depending on its size
+  - If the file goes over max file size, excess data is shaved with `cut` into a new file
 <br>
 
 - Custom TLS based file transfer service using SSM Parameter Store to transfer certificates
   - Service continually transfers data requested by clients based on allowed max file size until the load directory has been completely processed
-  - Files are transferred directly to the local EC2 instance-store which features multiple NVMe drives combined in a RAID 0 configuration for performance
+  - Files are transferred directly to the local EC2 instance-store
   - Facilitates multiple file transfers per EC2 client simultaneously
 <br>
 
+- Designed to setup isolated VPC in AWS environment
+  - Feature public/private subnet setup with NAT gateway for EC2 internet access
+  - Security groups for ensuring only outbound traffic occurs on EC2
+  - Minimalist IAM role utilization featuring bootstrap role for creating AWS resources
+  - Automatically assumes role for server operations with the Security Token Service
+  - Client IAM role is created with associated instance profile
+<br>
+
+- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for performance
 - Supports hash cracking distributed workloads among multiple EC2
 - CLI features colorized TUI interface
+- Custom logging system with CloudWatch and local backup
 <br>
 
 
@@ -45,6 +55,7 @@
 - EC2
 - IAM
 - S3 Buckets
+- Security Token Service
 - SSM Parameter Store
 <br>
 
@@ -79,7 +90,6 @@
 ```
 - Create a user and assign them to the created user group with IAM permissions
 - Generate access keys for the newly created user
-- Remain logged into account as information will be needed when filling out the YAML configuration file
 
 ### Local Setup
 
@@ -108,11 +118,20 @@
     - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY
 <br>
 
+- Before running the program it is also incredibly important to prepare wordlist data ahead of time
+    - Smaller wordlists easily merge but larger ones slow the process down **substantially**
+    - In the YAML config it is best to set a reasonable `max_merging_size` (ex: 500MB) to prevent bottlenecks from merging large wordlists
+    - It is also ideal to set a reasonable `max_file_size` (ex: 2GB) to prevent extensive delays in network latency as smaller files transfer quicker and distribute better among EC2 clients
+    - The following example splits crackstation's 15GB wordlist into 400MB files:
+      `split -C 400m -d --additional-suffix=.txt crackstation.txt ./crack_station_`
+    - It is also important the `max_size_range` is at a decent percent as lower percentage will results feeding the same wordlist into the merging process until it is within that range or meets the `max_merging_size`
+<br>
+
 
 ## Usage
 
 - Make a copy of the `config.yml` file in the config folder to
-- Ensure there is wordlist data in the load_dir, a hash_file_path for the hash file to crack, an account_id is added and any other needed components specified in the config.yml file (ensure to use `instructions.yml` as a reference)
+- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in the `config.yml` file (ensure to use `instructions.yml` as a reference when configuring)
 
 Make sure the server and client binaries are compiled:
 ```

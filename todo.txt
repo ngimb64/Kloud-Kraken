@@ -1,3 +1,11 @@
+- Implement different disk checking reserve threshold based on percentage based on disk size
+
+- Remove dd usage from wordlist package and just stick with split as is (save in code graveyard)
+
+- Update example YAML config file as well as the instructions one
+
+- Write simple build script to automate installation
+
 - Research and implement tips of calculating cost of resources and which should persist & which should be deleted per execution
 
 - Make sure all policies are updated based on review
