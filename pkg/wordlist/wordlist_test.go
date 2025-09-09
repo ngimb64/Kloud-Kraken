@@ -113,66 +113,6 @@ func TestDuplicutAndDelete(t *testing.T) {
 }
 
 
-func TestFileShaveDD(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    // Create a random test file for input data to shave
-    inFile, err := os.CreateTemp("", "testfile")
-    assert.Equal(nil, err)
-
-    // Set the size of random data
-    randomDataSize := 20 * globals.MB
-    // Make a byte buffer based off random data size
-    buffer := make([]byte, randomDataSize)
-    // Fill the buffer up with random data
-    data.GenerateRandomBytes(buffer, randomDataSize)
-    // Write the random data to the output file
-    bytesWrote, err := inFile.Write(buffer)
-    assert.Equal(nil, err)
-    // Close the file after data has been written
-    inFile.Close()
-    // Ensure the bytes wrote matches the buffer size
-    assert.Equal(bytesWrote, randomDataSize)
-
-    // Create a random test file for output shaved data
-    shaveFile, err := os.CreateTemp("", "testfile")
-    assert.Equal(nil, err)
-    // Close the output file
-    shaveFile.Close()
-
-    // Create a random test file for original data
-    originFile, err := os.CreateTemp("", "testfile")
-    assert.Equal(nil, err)
-    // Close the output file
-    originFile.Close()
-
-    assert.Equal(nil, err)
-    // Shave exceeding half of wordlist into new file
-    shaveFileSize, err := wordlist.FileShaveDD(inFile.Name(), shaveFile.Name(),
-                                               originFile.Name(), int64(4096),
-                                               int64((10 * globals.MB)))
-    assert.Equal(nil, err)
-
-    // Get the file info of orgiginal data before exceeding was shaved
-    originFileInfo, err := os.Stat(originFile.Name())
-    assert.Equal(nil, err)
-
-    // Ensure the input file is shaved down to half size
-    assert.Equal(originFileInfo.Size(), int64(10 * globals.MB))
-    // Ensure the input and output file sizes are equal
-    assert.Equal(originFileInfo.Size(), shaveFileSize)
-
-    deleteFiles := []string{shaveFile.Name(), originFile.Name()}
-
-    // Iterate through resulting files and delete them
-    for _, file := range deleteFiles {
-        err = os.Remove(file)
-        assert.Equal(nil, err)
-    }
-}
-
-
 func TestFileShaveSplit(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
@@ -260,8 +200,7 @@ func TestMergeWordlistDir(t *testing.T) {
     maxMergingSize := int64(20 * globals.MB)
     maxFileSize := int64(30 * globals.MB)
     // Merge the created wordlists in the wordlist dir
-    err = wordlist.MergeWordlistDir(dirPath, maxMergingSize, maxFileSize,
-                                    15.0, int64(1 * globals.GB))
+    err = wordlist.MergeWordlistDir(dirPath, maxMergingSize, maxFileSize, 15.0)
     assert.Equal(nil, err)
 
     dirItems, err := os.ReadDir(dirPath)

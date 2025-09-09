@@ -3,6 +3,7 @@ package disk
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 
@@ -65,6 +66,55 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     }
 
     return nil
+}
+
+
+// CalcReserveBytes returns how many bytes should be reserved on a disk
+// to avoid filling it completely.
+//
+// @Parameters
+// - diskSize:  The total size of the entire disk in bytes
+//
+// @Returns
+// - The calulcated reserved bytes size based on disk size
+//
+func CalcReserveBytes(diskSize int64) int64 {
+    if diskSize <= 0 {
+        return 0
+    }
+
+    const (
+        gb         = 1024 * 1024 * 1024
+        smallGB    = 50.0                // <= this size → 10%
+        largeGB    = 500.0               // >= this size → 1%
+        maxPct     = 0.10                // 10%
+        minPct     = 0.01                // 1%
+        minReserve = 100 * 1024 * 1024   // 100 MB
+    )
+
+    var pct float64
+    totalGB := float64(diskSize) / float64(gb)
+
+    switch {
+    case totalGB <= smallGB:
+        pct = maxPct
+    case totalGB >= largeGB:
+        pct = minPct
+    default:
+        // Perform linear interpolation
+        ratio := (totalGB - smallGB) / (largeGB - smallGB) // 0..1
+        pct = maxPct - ratio*(maxPct-minPct)
+    }
+
+    // Get the reserve size
+    reserve := int64(math.Ceil(pct * float64(diskSize)))
+
+    // If the reserve is less than the minimum, set the minimum
+    if reserve < minReserve {
+        reserve = minReserve
+    }
+
+    return reserve
 }
 
 
@@ -199,7 +249,7 @@ func CreateRandFile(dirPath string, nameLen int, baseName string, extension stri
 //  - the available free space
 //  - Error if it occurs, otherwise nil on success
 //
-func GetDiskSpace(path string, reservedSpace int) (
+func GetDiskSpace(path string) (
                   total int64, free int64, err error) {
     var statfs unix.Statfs_t
 
@@ -214,7 +264,7 @@ func GetDiskSpace(path string, reservedSpace int) (
     // Free space is (free blocks * block size)
     free = int64(statfs.Bfree) * statfs.Bsize
     // Subtract the reserved  OS space from from available
-    remaining := free - int64(reservedSpace)
+    remaining := free - CalcReserveBytes(total)
 
     return remaining, total, nil
 }

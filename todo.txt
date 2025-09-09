@@ -1,7 +1,3 @@
-- Implement different disk checking reserve threshold based on percentage based on disk size
-
-- Remove dd usage from wordlist package and just stick with split as is (save in code graveyard)
-
 - Update example YAML config file as well as the instructions one
 
 - Write simple build script to automate installation

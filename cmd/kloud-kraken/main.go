@@ -760,8 +760,7 @@ func main() {
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
                                      appConfig.LocalConfig.MaxMergingSizeInt64,
                                      appConfig.ClientConfig.MaxFileSizeInt64,
-                                     appConfig.LocalConfig.MaxSizeRange,
-                                     int64(1 * globals.GB))
+                                     appConfig.LocalConfig.MaxSizeRange)
     if err != nil {
         log.Fatalf("Error merging wordlists:  %v", err)
     }

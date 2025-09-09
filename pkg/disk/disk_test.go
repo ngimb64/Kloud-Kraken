@@ -107,7 +107,7 @@ func TestGetDiskSpace(t *testing.T) {
     assert := assert.New(t)
 
     // Get the total and free disk space
-    total, free, err := disk.GetDiskSpace("/", 20 * (1024 * 1024 * 1024))
+    total, free, err := disk.GetDiskSpace("/")
     assert.Equal(nil, err)
     // Ensure the total size is greater than 0
     assert.Less(int64(0), total)
