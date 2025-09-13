@@ -29,7 +29,8 @@
 <br>
 
 - Custom TLS based file transfer service using SSM Parameter Store to transfer certificates
-  - Service continually transfers data requested by clients based on allowed max file size until the load directory has been completely processed
+  - Service continually transfers data requested by clients based on allowed max file size
+    - This process continues until the load directory has been completely processed
   - Files are transferred directly to the local EC2 instance-store
   - Facilitates multiple file transfers per EC2 client simultaneously
 <br>
@@ -123,7 +124,7 @@
     - In the YAML config it is best to set a reasonable `max_merging_size` (ex: 500MB) to prevent bottlenecks from merging large wordlists
     - It is also ideal to set a reasonable `max_file_size` (ex: 2GB) to prevent extensive delays in network latency as smaller files transfer quicker and distribute better among EC2 clients
     - The following example splits crackstation's 15GB wordlist into 400MB files:
-      `split -C 400m -d --additional-suffix=.txt crackstation.txt ./crack_station_`
+      `split -C 400M -d --additional-suffix=.txt crackstation.txt ./crack_station_`
     - It is also important the `max_size_range` is at a decent percent as lower percentage will results feeding the same wordlist into the merging process until it is within that range or meets the `max_merging_size`
 <br>
 
