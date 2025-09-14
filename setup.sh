@@ -79,7 +79,9 @@ done
 
 # Reload rc file for this script
 echo "[->] Sourcing $rcfile to update environment for this script"
+set +u
 eval "$(sed -n '/esac/,$p' "$rcfile" | sed '1d')"
+set -u
 
 # Ensure GOPATH directories exist
 mkdir -p "$USER_HOME/go"/{bin,src,pkg}
@@ -93,20 +95,22 @@ if [[ ! -f "go.mod" ]]; then
     error_exit "Required go.mod missing from project, try redownloading project" 4
 fi
 
-echo "[->] Ensuring dependencies are installed & resolved:  go get ./... && go mod tidy -e"
-(go get ./... && go mod tidy -e ) || error_exit "Failed to resolve Go dependencies" 5
+echo "[->] Ensuring dependencies are installed & resolved"
+go get -u || error_exit "Failed to update dependencies" 5
+go mod tidy || error_exit "Failed resolving Go dependencies" 6
+go get ./... || error_exit "Failed downloading Go packages" 7
 
 # Executing test cases
 echo "[->] Running unit tests:  go test ./..."
-go test ./... || error_exit "Test case failue" 6
+go test ./... || error_exit "Test case failue" 8
 
 # Building binaries with make
-echo "[->] Building binaries:  make all"
+echo "[->] Building binaries with make"
 if ! command -v make >/dev/null 2>&1; then
     echo "[-] make not found .. installing build-essential"
-    apt-get install -y build-essential || error_exit "Failed to install build-essential" 7
+    apt-get install -y build-essential || error_exit "Failed to install build-essential" 9
 fi
 
-make all || error_exit "Make command failed" 8
+make all || error_exit "Make command failed" 10
 
 echo "===== Build script finished successfully ====="
