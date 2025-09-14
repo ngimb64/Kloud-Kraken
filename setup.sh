@@ -8,12 +8,19 @@ echo "===== Build script started ====="
 # Ensure the system is updated
 apt-get update && apt-get upgrade -y
 
+# Detect original users home
+if [[ -n "$SUDO_USER" ]]; then
+    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+    USER_HOME="$HOME"
+fi
+
 # Detect user shell rc file
 shell_name="$(basename "${SHELL:-}")"
 case "$shell_name" in
-    zsh) rcfile="$HOME/.zshrc" ;;
-    bash) rcfile="$HOME/.bashrc" ;;
-    *) rcfile="$HOME/.profile" ;;
+    zsh) rcfile="$USER_HOME/.zshrc" ;;
+    bash) rcfile="$USER_HOME/.bashrc" ;;
+    *) rcfile="$USER_HOME/.profile" ;;
 esac
 
 echo "[->] Using shell rc file:  $rcfile"
@@ -45,13 +52,6 @@ echo "[->] Ensuring Go environment variables are present in $rcfile"
 if [[ ! -f "$rcfile" ]]; then
     echo "[-] RC file $rcfile not found, creating it."
     touch "$rcfile"
-fi
-
-# Detect original users home
-if [ -n "$SUDO_USER" ]; then
-    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
-    USER_HOME="$HOME"
 fi
 
 # Go environment lines
@@ -100,5 +100,4 @@ fi
 
 make all
 
-echo
 echo "===== Build script finished successfully ====="
