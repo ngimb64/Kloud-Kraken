@@ -28,63 +28,64 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
                                                    string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
-        return "", fmt.Errorf("vpcId or destCidr is missing")
+        return "", errors.New("vpcId or destCidr is missing")
     }
 
     // Ensure either one of the two args are set
     if (igwId == "") == (natId == "") {
-        return "", fmt.Errorf("either igwId or natId must be provided")
+        return "", errors.New("either igwId or natId must be provided")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    createRouteCallInput := &ec2.CreateRouteTableInput{
+    createRouteTableCallInput := &ec2.CreateRouteTableInput{
         VpcId: aws.String(vpcId),
     }
 
+    // Tag the route table name if provided
+    if nameTag != "" {
+        createRouteTableCallInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeRouteTable,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(nameTag),
+                    },
+                },
+            },
+        }
+    }
+
     // Create route table in passed in VPC ID
-    createOut, err := Ec2Man.client.CreateRouteTable(ctx, createRouteCallInput)
+    createOut, err := Ec2Man.client.CreateRouteTable(ctx, createRouteTableCallInput)
     if err != nil {
         return "", fmt.Errorf("create route table - %w", err)
     }
 
     if createOut == nil || createOut.RouteTable == nil ||
     createOut.RouteTable.RouteTableId == nil {
-        return "", fmt.Errorf("create route table failed to return route table id")
+        return "", errors.New("create route table failed to return route table id")
     }
 
     rtID := aws.ToString(createOut.RouteTable.RouteTableId)
 
-    routeIn := &ec2.CreateRouteInput{
-        RouteTableId:         aws.String(rtID),
+    createRouteCallInput := &ec2.CreateRouteInput{
         DestinationCidrBlock: aws.String(destCidr),
+        RouteTableId:         aws.String(rtID),
     }
     if igwId != "" {
-        routeIn.GatewayId = aws.String(igwId)
+        createRouteCallInput.GatewayId = aws.String(igwId)
     } else {
-        routeIn.NatGatewayId = aws.String(natId)
+        createRouteCallInput.NatGatewayId = aws.String(natId)
     }
 
     // Create route to the chosen target
-    _, err = Ec2Man.client.CreateRoute(ctx, routeIn)
+    _, err = Ec2Man.client.CreateRoute(ctx, createRouteCallInput)
     if err != nil {
         return "", fmt.Errorf("create route to target on rt %s - %w", rtID, err)
-    }
-
-    // Tag the route table name if provided
-    if nameTag != "" {
-        createTagsCallInput := &ec2.CreateTagsInput{
-            Resources: []string{rtID},
-            Tags: []ec2types.Tag{
-                {
-                    Key: aws.String("Name"), Value: aws.String(nameTag),
-                },
-            },
-        }
-
-        _, _ = Ec2Man.client.CreateTags(ctx, createTagsCallInput)
     }
 
     // Associate the route table to the provided subnet if given
@@ -120,7 +121,7 @@ func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
                                           bool, error) {
     // Ensure required args are present
     if rtId == "" {
-        return false, fmt.Errorf("rtId is missing")
+        return false, errors.New("rtId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -130,7 +131,8 @@ func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
     callInput := &ec2.DescribeRouteTablesInput{
         Filters: []ec2types.Filter{
             {
-                Name: aws.String("route-table-id"), Values: []string{rtId},
+                Name: aws.String("route-table-id"),
+                Values: []string{rtId},
             },
         },
     }
@@ -182,12 +184,12 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
                                              string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
-        return "", fmt.Errorf("vpcId or destCidr is missing")
+        return "", errors.New("vpcId or destCidr is missing")
     }
 
     // Ensure either one of the two args are set
     if (igwId == "") == (natId == "") {
-        return "", fmt.Errorf("either igwId or natId must be provided")
+        return "", errors.New("either igwId or natId must be provided")
     }
 
     // If route_table_id is present in state file

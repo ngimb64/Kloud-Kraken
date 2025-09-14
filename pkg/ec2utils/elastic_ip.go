@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
@@ -19,7 +20,8 @@ import (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
+func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
+                                         tagName string) (
                                          string, error) {
     // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -27,6 +29,20 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
 
     callInput := &ec2.AllocateAddressInput{
         Domain: ec2types.DomainTypeVpc,
+    }
+
+    if tagName != "" {
+        callInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeElasticIp,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
+                    },
+                },
+            },
+        }
     }
 
     // Allocate Elastic IP Address
@@ -37,17 +53,17 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration) (
 
     // If the Elastic IP creation call failed to return output
     if out == nil {
-        return "", fmt.Errorf("elastic IP creation call returned nil")
+        return "", errors.New("elastic IP creation call returned nil")
     }
 
     // If the output does not contain a Puclic IP
     if out.PublicIp == nil {
-        return "", fmt.Errorf("elastic IP creation call missing public IP")
+        return "", errors.New("elastic IP creation call missing public IP")
     }
 
     // If the output is missing a Allocation ID
     if out.AllocationId == nil {
-        return "", fmt.Errorf("elastic IP creation call missing allocation ID")
+        return "", errors.New("elastic IP creation call missing allocation ID")
     }
 
     return *out.AllocationId, nil
@@ -66,7 +82,7 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
                                          bool, error) {
     // Ensure required args are present
     if eipId == "" {
-        return false, fmt.Errorf("eipId is missing")
+        return false, errors.New("eipId is missing")
     }
 
     // Ensure API calls do not hang for than longer specified timeout
@@ -109,7 +125,8 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
 //
 //
 func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
-                                            eipId string) (
+                                            eipId string,
+                                            tagName string) (
                                             string, error) {
     // If Elastic IP ID is present in state file
     if eipId != "" {
@@ -126,5 +143,5 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
     }
 
     // Create and wait until VPC is created
-    return Ec2Man.elasticIPCreate(callTime)
+    return Ec2Man.elasticIPCreate(callTime, tagName)
 }

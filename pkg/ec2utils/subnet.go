@@ -21,16 +21,30 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
-                                      cidrBlock string, az string,
+                                      cidrBlock string, az string, tagName string,
                                       isPublic bool) (string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     createCallInput := &ec2.CreateSubnetInput{
-        VpcId:            aws.String(vpcId),
-        CidrBlock:        aws.String(cidrBlock),
         AvailabilityZone: aws.String(az),
+        CidrBlock:        aws.String(cidrBlock),
+        VpcId:            aws.String(vpcId),
+    }
+
+    if tagName != "" {
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeSubnet,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(tagName),
+                    },
+                },
+            },
+        }
     }
 
     // Create the subnet
@@ -40,6 +54,17 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
     }
 
     subnetID := aws.ToString(createOut.Subnet.SubnetId)
+
+    waiterCallInput := &ec2.DescribeSubnetsInput{
+        SubnetIds: []string{subnetID},
+    }
+
+    // Allocate waiter and wait until the subnet is available
+    waiter := ec2.NewSubnetAvailableWaiter(Ec2Man.client)
+    err = waiter.Wait(ctx, waiterCallInput, callTime)
+    if err != nil {
+        return subnetID, err
+    }
 
     modifyCallInput := &ec2.ModifySubnetAttributeInput{
         SubnetId: aws.String(subnetID),
@@ -70,7 +95,7 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
                                       bool, error) {
     // Ensure required args are present
     if subnetId == "" {
-        return false, fmt.Errorf("subnetId is missing")
+        return false, errors.New("subnetId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -81,7 +106,8 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
     describeInput := &ec2.DescribeSubnetsInput{
         Filters: []ec2types.Filter{
             {
-                Name: aws.String("subnet-id"), Values: []string{subnetId},
+                Name: aws.String("subnet-id"),
+                Values: []string{subnetId},
             },
         },
     }
@@ -119,11 +145,12 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string,
                                          vpcID string, cidrBlock string,
-                                         az string, isPublic bool) (
+                                         az string, tagName string,
+                                         isPublic bool) (
                                          string, error) {
     // Ensure required args are present
     if vpcID == "" || cidrBlock == "" || az == "" {
-        return "", fmt.Errorf("vpcId or cidrBlock or az is missing")
+        return "", errors.New("vpcId or cidrBlock or az is missing")
     }
 
     // If subnet ID is present in YAML
@@ -141,5 +168,6 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
     }
 
     // Create new subnet
-    return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock, az, isPublic)
+    return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock,
+                               az, tagName, isPublic)
 }

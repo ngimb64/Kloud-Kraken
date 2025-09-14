@@ -97,68 +97,6 @@ func DuplicutAndDelete(srcPath string, destPath string) (int64, error) {
 
 
 // Takes the file that is over the max allowed size and move
-// any data over that max into a new file via dd command.
-//
-// @Parameters
-//  - filterPath:  The source file that is over the max size that needs
-//                excess data to be filtered
-//  - shavePath:  The destination file there the excess data is written to
-//  - originalPath:  Path to original file data after excess filtered
-//  - blockSize:  The size of the block of data for dd to send at a time
-//  - maxFileSize:  The max allowed size for wordlist file
-//
-// @Returns
-//  - The size of resulting file where extra data is shaved
-//  - Error if it occurs, otherwise nil on success
-//
-func FileShaveDD(filterPath string, shavePath string,
-                 originalPath string, blockSize int64,
-                 maxFileSize int64) (int64, error) {
-    // Divide the max file size by the block size to get
-    // the number of blocks to skip
-    skipSize := float64(maxFileSize) / float64(blockSize)
-    countSize := skipSize
-    blockSizeStr := strconv.FormatInt(blockSize, 10)
-    // If the max file size divided by the block size has a remainder
-    if maxFileSize % blockSize != 0 {
-        skipSize += 1
-    }
-
-    // Format the dd command to copy exceeding data to new file
-    cmd := exec.Command("dd", "if=" + filterPath, "of=" + shavePath, "bs=" + blockSizeStr,
-                        "skip=" + strconv.FormatFloat(skipSize, 'f', -1, 64))
-    // Execute the dd command
-    err := cmd.Run()
-    if err != nil {
-        return -1, err
-    }
-
-    // Format the dd command to copy original data to new file
-    cmd = exec.Command("dd", "if=" + filterPath, "of=" + originalPath, "bs=" + blockSizeStr,
-                       "count=" + strconv.FormatFloat(countSize, 'f', -1, 64))
-    // Execute the dd command
-    err = cmd.Run()
-    if err != nil {
-        return -1, err
-    }
-
-    // Delete the original file once process is complete
-    err = os.Remove(filterPath)
-    if err != nil {
-        return -1, err
-    }
-
-    // Get the file info for the shave path
-    fileInfo, err := os.Stat(shavePath)
-    if err != nil {
-        return -1, err
-    }
-
-    return fileInfo.Size(), nil
-}
-
-
-// Takes the file that is over the max allowed size and move
 // any data over that max into a new file via cut command.
 //
 // @Parameters
@@ -198,7 +136,9 @@ func FileShaveSplit(filterPath string, shavePath string,
 
     for {
         // Format the current count on the end of the output path
-        outPath := shavePath + strconv.FormatUint(innerCount, 10) + strconv.FormatUint(outerCount, 10)
+        outPath := shavePath +
+                   strconv.FormatUint(innerCount, 10) +
+                   strconv.FormatUint(outerCount, 10)
 
         // Get the current file info
         fileInfo, err := os.Stat(outPath)
@@ -276,13 +216,13 @@ func GetOptimalBlockSize(fileSize int64) (int64, error) {
 //
 func MergeWordlistDir(dirPath string, maxMergingSize int64,
                       maxFileSize int64, maxRange float64,
-                      maxCutSize int64) error {
+                      ) error {
     catFiles := []string{}
     outFilesMap := make(map[string]struct{})
 
     // Iterate through the contents of the directory and any subdirectories, merging wordlists
     err := filepath.Walk(dirPath, func(path string, itemInfo os.FileInfo, walkErr error) error {
-        return MergeWordlists(dirPath, maxMergingSize, maxFileSize, maxRange, maxCutSize,
+        return MergeWordlists(dirPath, maxMergingSize, maxFileSize, maxRange,
                               &catFiles, outFilesMap, path, itemInfo, walkErr)
     })
 
@@ -309,7 +249,6 @@ func MergeWordlistDir(dirPath string, maxMergingSize int64,
 //  - maxMergingSize:  The maximum allowed size until merging process is skipped
 //  - maxFileSize:  The maximum allowed size a wordlist that can be sent
 //  - maxRange:  The range within the max that makes a file register as full
-//  - maxCutSize:  The max size threshold where dd is utilized instead of cut
 //  - catFiles:  The slice of file paths to pass into CatAndDelete()
 //  - outFilesMap:  The map used to ensure only files that have not been
 //                 processed are selected
@@ -322,9 +261,10 @@ func MergeWordlistDir(dirPath string, maxMergingSize int64,
 //
 func MergeWordlists(dirPath string, maxMergingSize int64,
                     maxFileSize int64, maxRange float64,
-                    maxCutSize int64, catFiles *[]string,
-                    outFilesMap map[string]struct{}, path string,
-                    itemInfo os.FileInfo, err error) error {
+                    catFiles *[]string,
+                    outFilesMap map[string]struct{},
+                    path string, itemInfo os.FileInfo,
+                    err error) error {
     if err != nil {
         return err
     }
@@ -412,71 +352,11 @@ func MergeWordlists(dirPath string, maxMergingSize int64,
         return err
     }
 
-    // For file greater than threshold, dd is optimal for resource scalability
-    if destFileSize > maxCutSize {
-        // Get the optimal block size for file shaving operation based on the file size
-        blockSize, err := GetOptimalBlockSize(destFileSize)
-        if err != nil {
-            return err
-        }
-
-        for {
-            // Create a new file for original file data after excess filtered
-            originalPath, _, err := disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                                        "kloudkraken-data-", "txt", false)
-            if err != nil {
-                return err
-            }
-
-            // Shaves any data large than excess size into new file
-            shaveFileSize, err := FileShaveDD(filterPath, shavePath, originalPath,
-                                              blockSize, maxFileSize)
-            if err != nil {
-                return err
-            }
-
-            // Add the maxed out file to the out files map
-            outFilesMap[originalPath] = struct{}{}
-
-            // If the shaved file still exceeds max file size
-            if shaveFileSize > maxFileSize {
-                // Set result path as input and make new shave path for next iteration
-                filterPath = shavePath
-                shavePath, _, err = disk.CreateRandFile(dirPath, globals.RAND_STRING_SIZE,
-                                                        "kloudkraken-data-", "txt", false)
-                if err != nil {
-                    return err
-                }
-
-                // Reset the optimal block size based on size of result of first dd operation
-                blockSize, err = GetOptimalBlockSize(shaveFileSize)
-                if err != nil {
-                    return err
-                }
-
-                continue
-
-            // If the shaved file is within or above the max merging range
-            } else if (shaveFileSize >= maxMergingSize ||
-            data.IsInPercentRange(float64(maxMergingSize), float64(shaveFileSize), maxRange)) &&
-            shaveFileSize <= maxFileSize {
-                // Add the shaved file to the out files map
-                outFilesMap[shavePath] = struct{}{}
-                break
-            }
-
-            // Add the file with extra shaved data to cat files slice
-            *catFiles = append(*catFiles, shavePath)
-            break
-        }
-    // For files less than threshold, split is optimal parsing entries line by line
-    } else {
-        // Shaves any data large than excess size into new file
-        err = FileShaveSplit(filterPath, shavePath, maxFileSize,
-                             catFiles, outFilesMap)
-        if err != nil {
-            return err
-        }
+    // Shaves any data large than excess size into new file
+    err = FileShaveSplit(filterPath, shavePath, maxFileSize,
+                            catFiles, outFilesMap)
+    if err != nil {
+        return err
     }
 
     return nil

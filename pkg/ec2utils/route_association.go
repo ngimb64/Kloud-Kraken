@@ -2,6 +2,7 @@ package ec2utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,7 +25,7 @@ func (Ec2Man *Ec2Manger) associateRouteTableToSubnet(callTime time.Duration,
                                                      string, error) {
     // Ensure required args are present
     if routeTableId == "" || subnetId == "" {
-        return "", fmt.Errorf("routeTableId or subnetId is missing")
+        return "", errors.New("routeTableId or subnetId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -45,7 +46,7 @@ func (Ec2Man *Ec2Manger) associateRouteTableToSubnet(callTime time.Duration,
 
     // If there was not output or it is missing Association ID
     if out == nil || out.AssociationId == nil {
-        return "", fmt.Errorf("associate route table failed to return association id")
+        return "", errors.New("associate route table failed to return association id")
     }
 
     return aws.ToString(out.AssociationId), nil
@@ -67,7 +68,7 @@ func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
                                            bool, error) {
     // Ensure required args are present
     if associationId == "" || routeTableId == "" || subnetId == "" {
-        return false, fmt.Errorf("associationId or routeTableId or " +
+        return false, errors.New("associationId or routeTableId or " +
                                  "subnetId is missing")
     }
 
@@ -133,7 +134,7 @@ func (Ec2Man *Ec2Manger) RouteTableAssociationProvision(callTime time.Duration,
                                                         string, error) {
     // Ensure required args are present
     if routeTableId == "" || subnetId == "" {
-        return "", fmt.Errorf("routeTableId or subnetId is missing")
+        return "", errors.New("routeTableId or subnetId is missing")
     }
 
     // If the route table associate ID is present in state file

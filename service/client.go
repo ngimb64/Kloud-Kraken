@@ -488,7 +488,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
     for {
         // Get the remaining available and total disk space
-        remainingSpace, total, err := disk.GetDiskSpace(diskPath, globals.OS_RESERVED_SPACE)
+        remainingSpace, total, err := disk.GetDiskSpace(diskPath)
         if err != nil {
             logMan.LogMessage("error", "Error checking disk space on client:  %v", err)
             return
@@ -747,7 +747,9 @@ func main() {
 
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig,
-                                              "Kloud-Kraken", false)
+                                              "kloud-kraken-logs",
+                                              "kloud-kraken-logs",
+                                              false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

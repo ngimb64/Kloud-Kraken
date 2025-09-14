@@ -21,7 +21,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
-	"github.com/ngimb64/Kloud-Kraken/internal/policies"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
@@ -210,8 +209,9 @@ func handleConnection(connection net.Conn,
                       remoteAddr string, t *tui.TUI) {
     var buffer []byte
     var err error
-    // Close the connection on local exit
+
     defer func() {
+        // Close the connection
         err = connection.Close()
         if err != nil {
             logMan.LogMessage("Error", "Error closing client connection %s:  %v",
@@ -230,7 +230,7 @@ func handleConnection(connection net.Conn,
         logMan.LogMessage("info", "Connection processing handled",
                         zap.Int32("remaining connections", CurrentConnections.Load()))
 
-        // Decrement waitGroup counter on local exit
+        // Decrement waitGroup counter
         waitGroup.Done()
     } ()
 
@@ -373,7 +373,7 @@ func startServer(appConfig *conf.AppConfig,
                       appConfig.LocalConfig.ListenerPort)
 
     for {
-        // If current number of connection is greater than or equal to number of instances
+        // If number of connection is greater than or equal to number of instances
         if CurrentConnections.Load() >= appConfig.LocalConfig.NumberInstances {
             logMan.LogMessage("info", "All remote clients are connected")
             break
@@ -551,57 +551,20 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, ec2Client, err
     }
 
-	// Establish clients to various servicesservice
+	// Establish clients to various services
 	ec2Client = ec2utils.Ec2NewManager(awsConfig)
 	iamClient := iamutils.IamNewManager(awsConfig)
 	stsClient := sts.NewFromConfig(awsConfig)
 
-    // Set up the entire VPC and it associated components
+    // Set up the kloud kraken VPC and its associated components
     bootstrapOut, err := vpcsetup.VpcBootstrap(*appConfig, awsConfig, *ec2Client,
                                                *iamClient, *stsClient)
     if err != nil {
         return awsConfig, ec2Client, err
     }
 
-    // Generate the EC2 clients trust and permissions policy templates
-    trustPolicy := policies.ClientTrustPolicyGen()
-    permissionsPolicy := policies.ClientPermPolicyGen(bootstrapOut.BucketName,
-                                                      appConfig.ClientConfig.Region,
-                                                      bootstrapOut.AccountId,
-                                                      "/kloud-kraken/tls-cert",
-                                                      "Kloud-Kraken")
-    // Create and apply the EC2 client role
-    _, err = iamClient.IamRoleCreation(5 * time.Minute, "ClientRole",
-                                       trustPolicy, "ClientPermissions",
-                                       permissionsPolicy, true)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    // Generate the servers trust and permissions policy templates
-    trustPolicy = policies.ServerTrustPolicyGen(bootstrapOut.AccountId,
-                                                appConfig.LocalConfig.IamUsername)
-    permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
-                                                     bootstrapOut.AccountId,
-                                                     "/kloud-kraken/tls-cert",
-                                                     bootstrapOut.BucketName,
-                                                     "ClientRole")
-    // Create and apply role for local server permissions
-    serverArn, err := iamClient.IamRoleCreation(2 * time.Minute, "ServerRole",
-                                                trustPolicy, "ServerPermissions",
-                                                permissionsPolicy, false)
-    if err != nil {
-        return awsConfig, ec2Client, err
-    }
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "IAM server and client roles created"))
-
-    // Format role ARN from created role
-    roleArn := "arn:aws:iam::" + serverArn + ":role/ServerRole"
     // Create a provider that will call STS AssumeRole under the covers
-    assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, roleArn)
+    assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
 
     // Create fresh AWS config from new STS provider
     awsConfig, err = config.LoadDefaultConfig(
@@ -618,7 +581,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Push the servers certificate PEM into SSM parameter store
     param, err := ssmClient.SsmPutParameter(1 * time.Minute,
                                             "/kloud-kraken/tls-cert",
-                                            string(TlsMan.CertPemBlock))
+                                            string(TlsMan.CertPemBlock),
+                                            "kloud-kraken-ssm-tls-cert")
     if err != nil {
         return awsConfig, ec2Client, err
     }
@@ -638,7 +602,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     s3Client := s3utils.S3NewManager(awsConfig)
 
     // Upload the client binary to S3 Bucket
-    keyName, err := s3Client.S3PutObject(1 * time.Minute,
+    keyName, err := s3Client.S3PutObject(5 * time.Minute,
                                          bootstrapOut.BucketName,
                                          "client", binData)
     if err != nil {
@@ -660,12 +624,12 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
-    err = ec2Client.Ec2CreateInstances(20 * time.Minute, []byte(userData),
+    err = ec2Client.Ec2CreateInstances(15 * time.Minute, []byte(userData),
                                        "ami-0eb94e3d16a6eea5f",
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,
                                        appConfig.LocalConfig.NumberInstances,
-                                       "ClientRole", "Kloud-Kraken-EC2-Client",
+                                       "client-role", "kloud-kraken-ec2-client",
                                        []string{bootstrapOut.Ec2SgId},
                                        bootstrapOut.PrivSubnetId)
     if err != nil {
@@ -770,6 +734,15 @@ func parseArgs() *conf.AppConfig {
 // instance, set up EC2 code passing command line args via user data, and start server.
 //
 func main() {
+    // Begin recording program timing
+    startTime := time.Now()
+    // Display the total execution time when program exits
+    defer fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                             color.LightCyan, "$"), "",
+                                         color.NeonAzure, "Total runtime:  ",
+                                         color.KrakenGlowGreen,
+                                         time.Since(startTime).String()))
+
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
@@ -780,15 +753,14 @@ func main() {
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Wordlist merging started, time varies " +
-                                   "greatly depending on how much data"))
+                                   color.NeonAzure, "Wordlist merging started, time" +
+                                   " varies greatly depending on how much data"))
 
     // Merge the wordlists in the load dir based on max file size
     err := wordlist.MergeWordlistDir(appConfig.LocalConfig.LoadDir,
                                      appConfig.LocalConfig.MaxMergingSizeInt64,
                                      appConfig.ClientConfig.MaxFileSizeInt64,
-                                     appConfig.LocalConfig.MaxSizeRange,
-                                     int64(1 * globals.GB))
+                                     appConfig.LocalConfig.MaxSizeRange)
     if err != nil {
         log.Fatalf("Error merging wordlists:  %v", err)
     }
@@ -841,7 +813,7 @@ func main() {
 
         defer func() {
             // Terminate the EC2 instances when processing is complete
-            termOutput, err := ec2Man.Ec2TerminateInstances(time.Minute * 10)
+            termOutput, err := ec2Man.Ec2TerminateInstances(5 * time.Minute)
             if err != nil {
                 log.Printf("Error terminating EC2 instances:  %v", err)
             }
@@ -888,8 +860,8 @@ func main() {
                                    "and server certifcate added to pool"))
 
     // Initialize the LoggerManager based on the flags
-    logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log", awsConfig,
-                                             "Kloud-Kraken", false)
+    logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log",
+                                             awsConfig, "", "", false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

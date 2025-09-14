@@ -27,20 +27,35 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
                                                  string, error) {
     // Ensure required args are present
     if subnetID == ""  || eipId == "" {
-        return "", fmt.Errorf("subnetID or eipId is missing")
+        return "", errors.New("subnetID or eipId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer than the provided timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    createIn := &ec2.CreateNatGatewayInput{
+    createCallInput := &ec2.CreateNatGatewayInput{
         SubnetId:     aws.String(subnetID),
         AllocationId: aws.String(eipId),
     }
 
+    // Tag the NAT gateway name if provided
+    if nameTag != "" {
+        createCallInput.TagSpecifications = []ec2types.TagSpecification{
+            {
+                ResourceType: ec2types.ResourceTypeNatgateway,
+                Tags: []ec2types.Tag{
+                    {
+                        Key: aws.String("Name"),
+                        Value: aws.String(nameTag),
+                    },
+                },
+            },
+        }
+    }
+
     // Create the NAT Gateway
-    createOut, err := Ec2Man.client.CreateNatGateway(ctx, createIn)
+    createOut, err := Ec2Man.client.CreateNatGateway(ctx, createCallInput)
     if err != nil {
         return "", fmt.Errorf("create nat gateway - %w", err)
     }
@@ -49,32 +64,17 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
     // Gateway or it's corresponding ID are missing
     if createOut == nil || createOut.NatGateway == nil ||
     createOut.NatGateway.NatGatewayId == nil {
-        return "", fmt.Errorf("create nat gateway failed to return gateway id")
+        return "", errors.New("create nat gateway failed to return gateway id")
     }
 
     newNatID := aws.ToString(createOut.NatGateway.NatGatewayId)
-
-    // Tag the NAT gateway name if provided
-    if nameTag != "" {
-        createCallInput := &ec2.CreateTagsInput{
-            Resources: []string{newNatID},
-            Tags: []ec2types.Tag{
-                {
-                    Key: aws.String("Name"), Value: aws.String(nameTag),
-                },
-            },
-        }
-
-        // Create tags for the resource with created resource ID
-        _, _ = Ec2Man.client.CreateTags(ctx, createCallInput)
-    }
 
     waitCallInput := &ec2.DescribeNatGatewaysInput{
         NatGatewayIds: []string{newNatID},
     }
 
+    // Allocate waiter and wait until the NAT Gateway is available
     waiter := ec2.NewNatGatewayAvailableWaiter(Ec2Man.client)
-    // Wait until the NAT gateway becomes available
     err = waiter.Wait(ctx, waitCallInput, callTime)
     if err != nil {
         return newNatID, fmt.Errorf("waiting for nat gateway %s available status - %w",
@@ -98,7 +98,7 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
                                           bool, error) {
     // Ensure required args are present
     if natId == "" {
-        return false, fmt.Errorf("natId is missing")
+        return false, errors.New("natId is missing")
     }
 
     // Ensure AWS API calls do not hang for longer than the provided timeout
@@ -107,7 +107,10 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
 
     describeCallInput := &ec2.DescribeNatGatewaysInput{
         Filter: []ec2types.Filter{
-            {Name: aws.String("nat-gateway-id"), Values: []string{natId}},
+            {
+                Name: aws.String("nat-gateway-id"),
+                Values: []string{natId},
+            },
         },
     }
 
@@ -147,7 +150,7 @@ func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId strin
                                              nameTag string) (string, error) {
     // Ensure required args are present
     if subnetId == "" || eipId == "" {
-        return "", fmt.Errorf("subnetId or eipId is missing")
+        return "", errors.New("subnetId or eipId is missing")
     }
 
     // If nat_id is present in state file

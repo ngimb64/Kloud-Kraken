@@ -1,16 +1,17 @@
-- After AWS code logic is update do extensive permissions review and make sure all policies are updated
+- Research and implement tips of calculating cost of resources and which should persist & which should be deleted per execution
 
-- Research tips of calculating cost of resources and which should persist & which should be deleted per execution
-
-- Look into adding benchmarking and cost estimation logic
-
-- Finish documentation for AWS code
+- Make sure all policies are updated based on review
+    - Update README with bootstrap policy
 
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
 - Rerun system testing locally and in AWS environment
 
-- Implement unit tests for tlsutils, awsutils, & kloudlogs
+- Look into using custom generated key for KMS encryption utilized with S3 and SSM
+
+- Finish documentation for AWS code
+
+- Implement unit tests for packages that need them
 
 - Try improving tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os
@@ -21,24 +22,119 @@
 
 
 
-
 NOTE:  below list is reference for research item in list
 
-VPC network setup:
-    X Create VPC with CIDR block
-    X Create and attach Internet Gateway (IGW) to the VPC
-    X Allocate Elastic IP for NAT Gateway
-    X Create public and private subnets within the VPC
-    X Create NAT Gateway in public subnet (uses Elastic IP)
-    X Create route table for public subnets: 0.0.0.0/0 → IGW
-    X Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
-    X Associate **public** subnets to public route table
-    X Associate **private** subnets to private route tables
-    X Create security groups for EC2
-    X Add rules to EC2 security group to allow updates and package installation
-    X Create security group for SSM Parameter Store
-    X Add rules to SSM parameter store for allowing storing and grabbing TLS certs
-    X Create VPC endpoints (e.g., S3, SSM) for private access
-    X Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
-    X Generate role and trust policy for VPC Flow Logs
-    X Enable VPC Flow Logs for traffic monitoring and auditing
+Server Bootstrap role:
+    - Create VPC with CIDR block
+        - CreateTags
+        - CreateVpc
+        - DescribeVpcs
+        - NewVpcExistsWaiter
+    - Create and attach Internet Gateway (IGW) to the VPC
+        - AttachInternetGateway
+        - CreateInternetGateway
+        - CreateTags
+        - DescribeInternetGateways
+        - NewInternetGatewayExistsWaiter
+    - Allocate Elastic IP for NAT Gateway
+        - AllocateAddress
+        - CreateTags
+        - DescribeAddresses
+    - Get the availability zones for the region
+        - DescribeAvailabilityZones
+    - Create public and private subnets within the VPC
+        - CreateSubnet
+        - CreateTags
+        - DescribeSubnets
+        - ModifySubnetAttribute
+        - NewSubnetAvailableWaiter
+    - Create NAT Gateway in public subnet (uses Elastic IP)
+        - CreateNatGateway
+        - CreateTags
+        - DescribeNatGateways
+        - NewNatGatewayAvailableWaiter
+    - Create route table for public subnets: 0.0.0.0/0 → IGW
+        - AssociateRouteTable
+        - CreateRouteTable
+        - CreateRoute
+        - CreateTags
+        - DescribeRouteTables
+    - Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
+        - Same as above
+    - Associate **public** subnets to public route table
+        - AssociateRouteTable
+        - DescribeRouteTables
+    - Associate **private** subnets to private route tables
+        - Same as above
+    - Create security groups for EC2
+        - CreateSecurityGroup
+        - CreateTags
+        - DescribeSecurityGroups
+        - NewSecurityGroupExistsWaiter
+        - RevokeSecurityGroupEgress
+    - Add rules to EC2 security group to allow updates and package installation
+        - AuthorizeSecurityGroupEgress
+        - AuthorizeSecurityGroupIngress
+        - DescribeSecurityGroups
+    - Create security group for SSM Parameter Store
+        - Same as above
+    - Add rules to SSM parameter store for allowing storing and grabbing TLS certs
+        - Same as above
+    - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
+        - CreateBucket
+        - HeadBucket
+        - NewBucketExistsWaiter
+    - Create VPC endpoints (e.g., S3, SSM) for private access
+        - DescribeVpcEndpoints
+        - CreateVpcEndpoint
+        - CreateTags
+    - Create IAM role and trust policy for VPC flow logs
+        - CreateRole
+        - CreateTags
+        - GetRole
+        - PutRolePolicy
+    - Enable VPC Flow Logs for traffic monitoring and auditing
+        - CreateFlowLogs
+        - CreateLogGroup
+        - CreateTags
+        - DescribeFlowLogs
+    - Create IAM role for client
+        - AddRoleToInstanceProfile
+        - CreateInstanceProfile
+        - CreateRole
+        - CreateTags
+        - GetRole
+        - PutRolePolicy
+    - Create IAM role for server
+        - CreateRole
+        - CreateTags
+        - GetRole
+        - PutRolePolicy
+    - Assume Server role after bootstrap is complete
+        - NewAssumeRoleProvider
+
+Server role:
+    - Put the generated TLS certificate SSM parameter store
+        - PutParameter
+        - CreateTags
+    - Put client binary into S3 bucket
+        - PutObject
+    - Setup EC2 instances
+        - CreateTags
+        - NewInstanceExistsWaiter
+        - RunInstances
+    - Terminate EC2 instances
+        - TerminateInstances
+
+Client role:
+    - Get the client binary from s3 in user data script using aws s3 cp command
+        - GetObject
+    - Get the TLS certificate from SSM parameter store
+        - GetParameter
+    - Logging system with cloudwatch integration
+        - CreateLogGroup
+        - CreateLogStream
+        - CreateTags
+        - DescribeLogStreams
+        - GetMetadata
+        - PutLogEvents
