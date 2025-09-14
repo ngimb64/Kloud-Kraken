@@ -15,7 +15,7 @@ error_exit() {
 echo "===== Build script started ====="
 
 # Ensure the system is updated
-apt-get update && apt-get upgrade -y || error_exit "APT update/upgrade failed" 1
+(apt-get update && apt-get upgrade -y) || error_exit "APT update/upgrade failed" 1
 
 # Detect original users home
 if [[ -n "$SUDO_USER" ]]; then
@@ -79,8 +79,7 @@ done
 
 # Reload rc file for this script
 echo "[->] Sourcing $rcfile to update environment for this script"
-# shellcheck disable=SC1090
-source "$rcfile"
+eval "$(sed -n '/esac/,$p' "$rcfile" | sed '1d')"
 
 # Ensure GOPATH directories exist
 mkdir -p "$USER_HOME/go"/{bin,src,pkg}
