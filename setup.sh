@@ -96,21 +96,20 @@ if [[ ! -f "go.mod" ]]; then
 fi
 
 echo "[->] Ensuring dependencies are installed & resolved"
-go get -u || error_exit "Failed to update dependencies" 5
-go mod tidy || error_exit "Failed resolving Go dependencies" 6
-go get ./... || error_exit "Failed downloading Go packages" 7
+go mod tidy || error_exit "Failed resolving Go dependencies" 5
+go get -u ./... || error_exit "Failed downloading Go packages" 6
 
 # Executing test cases
 echo "[->] Running unit tests:  go test ./..."
-go test ./... || error_exit "Test case failue" 8
+go test ./... || error_exit "Test case failue" 7
 
 # Building binaries with make
 echo "[->] Building binaries with make"
 if ! command -v make >/dev/null 2>&1; then
     echo "[-] make not found .. installing build-essential"
-    apt-get install -y build-essential || error_exit "Failed to install build-essential" 9
+    apt-get install -y build-essential || error_exit "Failed to install build-essential" 8
 fi
 
-make all || error_exit "Make command failed" 10
+make all || error_exit "Make command failed" 9
 
 echo "===== Build script finished successfully ====="
