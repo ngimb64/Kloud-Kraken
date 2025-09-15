@@ -15,21 +15,14 @@ error_exit() {
 echo "===== Build script started ====="
 
 # Ensure the system is updated
-(apt-get update && apt-get upgrade -y) || error_exit "APT update/upgrade failed" 1
-
-# Detect original users home
-if [[ -n "$SUDO_USER" ]]; then
-    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-else
-    USER_HOME="$HOME"
-fi
+(sudo apt-get update && sudo apt-get upgrade -y) || error_exit "APT update/upgrade failed" 1
 
 # Detect user shell rc file
 shell_name="$(basename "${SHELL:-}")"
 case "$shell_name" in
-    zsh) rcfile="$USER_HOME/.zshrc" ;;
-    bash) rcfile="$USER_HOME/.bashrc" ;;
-    *) rcfile="$USER_HOME/.profile" ;;
+    zsh) rcfile="$HOME/.zshrc" ;;
+    bash) rcfile="$HOME/.bashrc" ;;
+    *) rcfile="$HOME/.profile" ;;
 esac
 
 echo "[->] Using shell rc file:  $rcfile"
@@ -50,7 +43,7 @@ fi
 # If Go is not installed, install it
 if ! command -v go >/dev/null 2>&1; then
     echo "[-] Go not found .. installing golang via apt"
-    apt-get install -y golang || error_exit "Failed to install golang" 3
+    sudo apt-get install -y golang || error_exit "Failed to install golang" 3
 fi
 
 echo "[->] Go version: $(go version)"
@@ -65,7 +58,7 @@ fi
 # Go environment lines
 go_env_lines=(
     'export GOROOT=/usr/lib/go'
-    "export GOPATH=$USER_HOME/go"
+    "export GOPATH=$HOME/go"
     "export PATH=\$GOPATH/bin:\$GOROOT/bin:\$PATH"
 )
 
@@ -84,10 +77,8 @@ eval "$(sed -n '/esac/,$p' "$rcfile" | sed '1d')"
 set -u
 
 # Ensure GOPATH directories exist
-mkdir -p "$USER_HOME/go"/{bin,src,pkg}
-echo "GOPATH set to: ${GOPATH:-$USER_HOME/go}"
-
-echo "[->] GOPATH: $GOPATH"
+mkdir -p "$HOME/go"/{bin,src,pkg}
+echo "[->] GOPATH : ${GOPATH:-$HOME/go}"
 echo "[->] GOROOT: $GOROOT"
 
 # Ensure project dependencies are installed and resolved
@@ -107,7 +98,7 @@ go test ./... || error_exit "Test case failue" 7
 echo "[->] Building binaries with make"
 if ! command -v make >/dev/null 2>&1; then
     echo "[-] make not found .. installing build-essential"
-    apt-get install -y build-essential || error_exit "Failed to install build-essential" 8
+    sudo apt-get install -y build-essential || error_exit "Failed to install build-essential" 8
 fi
 
 make all || error_exit "Make command failed" 9
