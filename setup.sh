@@ -56,8 +56,8 @@ if [[ ! -f "$rcfile" ]]; then
 fi
 
 # If the GOROOT & GOPATH are not set, set them
-[[ -z "$GOROOT" ]] && GOROOT='/usr/lib/go'
-[[ -z "$GOPATH" ]] && GOPATH="$HOME/go"
+[[ -z "${GOROOT:-}" ]] && GOROOT='/usr/lib/go'
+[[ -z "${GOPATH:-}" ]] && GOPATH="$HOME/go"
 PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 
 # Go environment lines
@@ -77,8 +77,9 @@ done
 
 # Ensure GOPATH directories exist
 mkdir -p "$HOME/go"/{bin,src,pkg}
-echo "[->] GOPATH : ${GOPATH:-$HOME/go}"
+echo "[->] GOPATH : $GOPATH"
 echo "[->] GOROOT: $GOROOT"
+echo "[->] PATH: $PATH"
 
 # Ensure project dependencies are installed and resolved
 if [[ ! -f "go.mod" ]]; then
@@ -87,19 +88,20 @@ fi
 
 echo "[->] Ensuring dependencies are installed & resolved"
 go mod tidy || error_exit "Failed resolving Go dependencies" 5
-go get -u ./... || error_exit "Failed downloading Go packages" 6
+go mod download || error_exit "Failed ensuring dependencies are up to date" 6
+go get -u ./... || error_exit "Failed downloading Go packages" 7
 
 # Executing test cases
 echo "[->] Running unit tests:  go test ./..."
-go test ./... || error_exit "Test case failue" 7
+go test ./... || error_exit "Test case failue" 8
 
 # Building binaries with make
 echo "[->] Building binaries with make"
 if ! command -v make >/dev/null 2>&1; then
     echo "[-] make not found .. installing build-essential"
-    sudo apt-get install -y build-essential || error_exit "Failed to install build-essential" 8
+    sudo apt-get install -y build-essential || error_exit "Failed to install build-essential" 9
 fi
 
-make all || error_exit "Make command failed" 9
+make all || error_exit "Make command failed" 10
 
 echo "===== Build script finished successfully ====="
