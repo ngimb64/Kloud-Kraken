@@ -4,7 +4,7 @@
 
 **NOTE:** This project is still a work in progress but at least 90-95% finished so expect it to be completed around late summer or early fall 2025
 
-> A cloud based hash cracking beast that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
+> A cloud based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenTextLogo.jpeg?raw=true)
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenLogo.jpeg?raw=true)
@@ -94,29 +94,14 @@
 
 ### Local Setup
 
-- This project uses duplicut for de-duplicating wordlists
-    - Ensure the binary has executable permissions with `ls -la duplicut`
-        - If not set them with `chmod +x duplicut/duplicut`
-<br>
-
-- Ensure Go is installed `sudo apt install -y golang`
-    - Add these to shell rc file (usually .zshrc or .bashrc, echo $SHELL to find out)
-        ```
-        export GOROOT=/usr/lib/go
-        export GOPATH=$HOME/go
-        export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
-        ```
-    - Reload rc file `source ~/.zshrc` (zsh example)
-<br>
-
-- Install Go packages with `go get ./...`
-- Ensure any missing external dependencies are resolved `go mod tidy -e`
-- Run the test cases in root directory of project `go test ./...`
+- Run the installation script
+	- `./setup.sh`
 <br>
 
 - When running the program in full mode with AWS environment there are two options for credential setup
-    - Configure API access credentials locally before running with `aws configure`
+    - Configure API access credentials locally before running with `aws configure` (prefered)
     - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY
+    	- Keep in mind these will be stored in command line history unless configuration is done prior
 <br>
 
 - Before running the program it is also incredibly important to prepare wordlist data ahead of time
@@ -131,22 +116,17 @@
 
 ## Usage
 
-- Make a copy of the `config.yml` file in the config folder to
+- Make a copy of the `config.yml` file in the config folder to avoid modifying original
 - Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in the `config.yml` file (ensure to use `instructions.yml` as a reference when configuring)
 
-Make sure the server and client binaries are compiled:
+Run the project:
 ```
-make all
+./bin/kloud-kraken-server ./config/<yaml_config>
 ```
 
 If at any point the project needs to be rebuilt:
 ```
 make clean && make all
-```
-
-Run the project:
-```
-./bin/kloud-kraken-server ./config/<yaml_config>
 ```
 <br>
 
