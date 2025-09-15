@@ -55,11 +55,16 @@ if [[ ! -f "$rcfile" ]]; then
     touch "$rcfile"
 fi
 
+# If the GOROOT & GOPATH are not set, set them
+[[ -z "$GOROOT" ]] && GOROOT='/usr/lib/go'
+[[ -z "$GOPATH" ]] && GOPATH="$HOME/go"
+PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+
 # Go environment lines
 go_env_lines=(
-    'export GOROOT=/usr/lib/go'
-    "export GOPATH=$HOME/go"
-    "export PATH=\$GOPATH/bin:\$GOROOT/bin:\$PATH"
+    "export GOROOT=$GOROOT"
+    "export GOPATH=$GOPATH"
+    "export PATH=$PATH"
 )
 
 # Iterate through each line in go env lines list
@@ -69,12 +74,6 @@ for line in "${go_env_lines[@]}"; do
         printf '%s\n' "$line" >> "$rcfile"
     fi
 done
-
-# Reload rc file for this script
-echo "[->] Sourcing $rcfile to update environment for this script"
-set +u
-eval "$(sed -n '/esac/,$p' "$rcfile" | sed '1d')"
-set -u
 
 # Ensure GOPATH directories exist
 mkdir -p "$HOME/go"/{bin,src,pkg}
