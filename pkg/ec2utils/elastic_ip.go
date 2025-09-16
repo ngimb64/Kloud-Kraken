@@ -145,3 +145,36 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
     // Create and wait until VPC is created
     return Ec2Man.elasticIPCreate(callTime, tagName)
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) ElasticIpTerminate(callTime time.Duration,
+                                           eipId string) error {
+    // Ensure required arg is present
+    if eipId == "" {
+        return fmt.Errorf("eipId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.ReleaseAddressInput{
+        AllocationId: &eipId,
+    }
+
+    // Release the Elastic IP
+    _, err := Ec2Man.client.ReleaseAddress(ctx, callInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}

@@ -3,6 +3,7 @@ package ssmutils
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -123,4 +124,68 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
 
         return candidate, nil
     }
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
+                                             paramName string) error {
+    // Ensure required arg is present
+    if paramName == "" {
+        return fmt.Errorf("paramName is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteCallInput := &ssm.DeleteParameterInput{
+        Name: aws.String(paramName),
+    }
+
+    // Delete the passed in parameter from SSM Parameter Store
+    _, err := SsmMan.client.DeleteParameter(ctx, deleteCallInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (SsmMan SsmManager) SsmDeleteAllParams(callTime time.Duration,
+                                            baseName string) error {
+    for i := 1;; i++ {
+        // Format the parameter name per iteration
+        paramName := baseName + "-" + strconv.Itoa(i)
+        // Attempt to delete the parameter
+        err := SsmMan.SsmDeleteParameter(callTime, paramName)
+        if err != nil {
+            var paramNotFound *ssmtypes.ParameterNotFound
+
+            // If the parameter was not found, operation is complete
+            if errors.As(err, &paramNotFound) {
+                break
+            }
+
+            return fmt.Errorf("failed to delete param %q - %w", paramName, err)
+        }
+    }
+
+    return nil
 }

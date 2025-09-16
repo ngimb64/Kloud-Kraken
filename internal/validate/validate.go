@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws/endpoints"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
@@ -527,18 +527,10 @@ func ValidatePath(path string) (string, error) {
 //  - true/false boolean depending on whether the AWS region is valid or not
 //
 func ValidateRegion(region string) bool {
-    // Iterate through the endpoint partitions
-    for _, currPartitions := range endpoints.DefaultPartitions() {
-        // Iterate through the regions in the current partition
-        for _, currRegion := range currPartitions.Regions() {
-            // It the current region ID matches arg string
-            if currRegion.ID() == region {
-                return true
-            }
-        }
-    }
-
-    return false
+    resolver := s3.NewDefaultEndpointResolver()
+    // Resolve S3 endpoint to confirm region exists
+    _, err := resolver.ResolveEndpoint(region, s3.EndpointResolverOptions{})
+    return err == nil
 }
 
 

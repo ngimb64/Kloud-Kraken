@@ -286,3 +286,36 @@ func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
 
     return true, aws.ToString(out.VpcEndpoints[0].VpcEndpointId), nil
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) VpcEndpointTerminate(callTime time.Duration,
+                                             vpcEndpointIds []string) error {
+    // Ensure a VPC endpoint is present
+    if len(vpcEndpointIds) == 0 {
+        return fmt.Errorf("vpcEndpointId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.DeleteVpcEndpointsInput {
+        VpcEndpointIds: vpcEndpointIds,
+    }
+
+    // Delete the VPC endpoints
+    _, err := Ec2Man.client.DeleteVpcEndpoints(ctx, callInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}

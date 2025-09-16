@@ -1,13 +1,36 @@
-- Research and implement tips of calculating cost of resources and which should persist & which should be deleted per execution
+- Practical cleanup checklist to implement at program end:
+    X Delete NAT Gateways (DeleteNatGateway) — this stops the hourly + data charges.
+    X Terminate EC2 instances (TerminateInstances) and wait for termination with waiter.
+    X Delete / release EIP allocations (ReleaseAddress) if not needed.
+    X Delete Interface VPC endpoints — stops per-hour charges.
+    - Delete VpcFlow logs
+    - Remove or shorten retention on CloudWatch Log Groups (or delete them) to avoid ongoing ingested + storage costs.
+    X Delete ephemeral S3 objects and bucket
+    X Delete ephemeral TLS certificates from SSM Parameter Store
+    - Delete unattached EBS volumes and snapshots you no longer need.
+
+- Add logic in server program where resources are deleted to ensure their IDs are removed from state file
+
+- Add client to configure security group rule for each outbound connection back to local server
+    - Add additional logic to remove the rule after the file transfer is complete
+    - Make sure permissions list is updated
+
+- Implement teardown program that ensures all resources in state file are terminated
+    - Ensure Makefile is updated to build with other binaries
+    - Make sure permissions list is updated
 
 - Make sure all policies are updated based on review
     - Update README with bootstrap policy
 
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
-- Rerun system testing locally and in AWS environment
+- Run system testing in AWS environment
+
+- Implement system of calculating cost of resources
+    - Ensure to update permissions policies as needed
 
 - Look into using custom generated key for KMS encryption utilized with S3 and SSM
+    - Ensure to update permissions policies as needed
 
 - Finish documentation for AWS code
 
@@ -123,8 +146,21 @@ Server role:
         - CreateTags
         - NewInstanceExistsWaiter
         - RunInstances
+    - Terminate NAT Gateway
+        - DeleteNatGateway
     - Terminate EC2 instances
         - TerminateInstances
+    - Terminate Elastic IP
+        - ReleaseAddress
+    - Terminate SSM VPC Endpoint
+        - DeleteVpcEndpoints
+
+    - Terminate S3 bucket and its contents
+        - ListObjectsV2
+        - DeleteObjects
+        - DeleteBucket
+    - Terminate TLS certificate from SSM param store
+        - DeleteParameter
 
 Client role:
     - Get the client binary from s3 in user data script using aws s3 cp command

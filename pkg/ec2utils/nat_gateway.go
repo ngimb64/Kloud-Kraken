@@ -171,3 +171,36 @@ func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId strin
     return Ec2Man.natGatewayCreateAndWait(callTime, subnetId,
                                           eipId, nameTag)
 }
+
+
+// Deletes the NAT Gateway based on passed in ID.
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man *Ec2Manger) NatGatewayTerminate(callTime time.Duration,
+                                             natGatewayId string) error {
+    // Ensure required arg is present
+    if natGatewayId == "" {
+        return errors.New("natGatewayId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.DeleteNatGatewayInput{
+        NatGatewayId: aws.String(natGatewayId),
+    }
+
+    // Delete the NAT Gateway
+    _, err := Ec2Man.client.DeleteNatGateway(ctx, callInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}

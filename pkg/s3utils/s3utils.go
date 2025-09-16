@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 )
 
@@ -99,8 +100,8 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
 // Checks to see if an S3 bucket already exists.
 //
 // @Parameters
-//  - bucketName:  The name of the S3 bucket to check existence
 //  - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the S3 bucket to check existence
 //
 // @Returns
 //  - Boolean toggle whether the bucket exists or not
@@ -268,4 +269,73 @@ func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
 
         return candidate, nil
     }
+}
+
+
+// Deletes all objects (handles pagination) and then deletes the bucket.
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (S3Man *S3Manager) S3TerminateBucket(callTime time.Duration,
+                                          bucketName string) error {
+    var token *string
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    for {
+        listCallInput := &s3.ListObjectsV2Input{
+            Bucket:            aws.String(bucketName),
+            ContinuationToken: token,
+        }
+
+        // Get a list of up to 1,000 object in bucket (pagination limits)
+        listOut, err := S3Man.client.ListObjectsV2(ctx, listCallInput)
+        if err != nil {
+            return fmt.Errorf("listing S3 bucket objects - %w", err)
+        }
+
+        // If there is objects in the S3 bucket
+        if len(listOut.Contents) > 0 {
+            var objects []s3types.ObjectIdentifier
+
+            // Iterate through the retrived objects and add them to objects list
+            for _, object := range listOut.Contents {
+                objects = append(objects, s3types.ObjectIdentifier{
+                    Key: object.Key,
+                })
+            }
+
+            // Delete all the S3 objects added to the objects list
+            _, err = S3Man.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+                Bucket: aws.String(bucketName),
+                Delete: &s3types.Delete{Objects: objects},
+            })
+            if err != nil {
+                return fmt.Errorf("delete objects: %w", err)
+            }
+        }
+
+        // If the last of pagination results is met
+        if !*listOut.IsTruncated {
+            break
+        }
+
+        token = listOut.NextContinuationToken
+    }
+
+    // Once objects in bucket are deleted, delete bucket itself
+    _, err := S3Man.client.DeleteBucket(ctx, &s3.DeleteBucketInput{
+        Bucket: aws.String(bucketName),
+    })
+    if err != nil {
+        return fmt.Errorf("deleting S3 bucket - %w", err)
+    }
+
+    return nil
 }

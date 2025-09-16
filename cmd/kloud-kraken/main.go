@@ -539,29 +539,33 @@ $CWD/client -applyOptimization=%t \
 //
 // @Returns
 //  - The initialized AWS configuration instance
-//  - The EC2 manager instance to utilize for later operations
+//  - The VPC bootstrap output struct
 //  - Error if it occurs, otherwise nil on success
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
-              awsConfig aws.Config, ec2Client *ec2utils.Ec2Manger, err error) {
+              awsConfig aws.Config,
+              bootstrapOut *vpcsetup.VpcBootstrapOutput,
+              err error) {
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, _, _, err = awsutils.AwsConfigSetup(1 * time.Minute,
                                                    appConfig.LocalConfig.Region)
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
 
 	// Establish clients to various services
-	ec2Client = ec2utils.Ec2NewManager(awsConfig)
+	ec2Client := ec2utils.Ec2NewManager(awsConfig)
 	iamClient := iamutils.IamNewManager(awsConfig)
 	stsClient := sts.NewFromConfig(awsConfig)
 
     // Set up the kloud kraken VPC and its associated components
-    bootstrapOut, err := vpcsetup.VpcBootstrap(*appConfig, awsConfig, *ec2Client,
-                                               *iamClient, *stsClient)
+    bootstrapOut, err = vpcsetup.VpcBootstrap(*appConfig, awsConfig, *ec2Client,
+                                              *iamClient, *stsClient)
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
+
+    bootstrapOut.Ec2Client = ec2Client
 
     // Create a provider that will call STS AssumeRole under the covers
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
@@ -573,7 +577,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
     )
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
 
     // Setup client to SSM
@@ -584,8 +588,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                             string(TlsMan.CertPemBlock),
                                             "kloud-kraken-ssm-tls-cert")
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
+
+    bootstrapOut.SsmClient = ssmClient
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
@@ -595,30 +601,31 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Read the client binary into memory
     binData, err := os.ReadFile("./kloud-kraken-client")
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
 
     // Re-establish client to S3 with new API key set
     s3Client := s3utils.S3NewManager(awsConfig)
-
     // Upload the client binary to S3 Bucket
     keyName, err := s3Client.S3PutObject(5 * time.Minute,
-                                         bootstrapOut.BucketName,
+                                         bootstrapOut.S3BucketName,
                                          "client", binData)
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
+
+    bootstrapOut.S3Client = s3Client
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Uploaded client binary to S3 bucket ",
-                                   color.RadiantAmethyst, bootstrapOut.BucketName))
+                                   color.RadiantAmethyst, bootstrapOut.S3BucketName))
 
     // Generate user data script to set up client program in EC2
-    userData, err := ec2UserDataGen(appConfig, bootstrapOut.BucketName,
+    userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
                                     keyName, publicIps, param)
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
 
     // Re-setup new client to EC2 service with newly assumed role
@@ -633,14 +640,14 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        []string{bootstrapOut.Ec2SgId},
                                        bootstrapOut.PrivSubnetId)
     if err != nil {
-        return awsConfig, ec2Client, err
+        return awsConfig, bootstrapOut, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 instance creation completed"))
 
-    return awsConfig, ec2Client, nil
+    return awsConfig, bootstrapOut, nil
 }
 
 
@@ -777,7 +784,7 @@ func main() {
                                    color.NeonAzure, "Wordlist merging process completed"))
 
     var awsConfig aws.Config
-    var ec2Man *ec2utils.Ec2Manger
+    var bootstrapOut *vpcsetup.VpcBootstrapOutput
     var logMan *kloudlogs.LoggerManager
 
     // If the program is being run in full mode (not testing)
@@ -806,19 +813,27 @@ func main() {
         // Call handler function that sets up AWS IAM user permissions,
         // transfers client binary via S3, set TLS certificate via SSM
         // parameter store, and launches EC2 instances
-        awsConfig, ec2Man, err = awsSetup(appConfig, publicIps)
+        awsConfig, bootstrapOut, err = awsSetup(appConfig, publicIps)
         if err != nil {
             log.Fatalf("Error with AWS setup:  %v", err)
         }
 
+        // AWS cost optimization resource deletion cleanup routine
         defer func() {
-            // Terminate the EC2 instances when processing is complete
-            termOutput, err := ec2Man.Ec2TerminateInstances(5 * time.Minute)
+            // Terminate the NAT Gateway
+            err = bootstrapOut.Ec2Client.NatGatewayTerminate(10 * time.Minute,
+                                                             bootstrapOut.NatGatewayId)
+            if err != nil {
+                log.Printf("Error deleting NAT Gateway:  %v", err)
+            }
+
+            // Terminate the EC2 instances
+            termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
             if err != nil {
                 log.Printf("Error terminating EC2 instances:  %v", err)
             }
 
-            // Iterate through list of terminated instance ids
+            // Iterate through list of terminated instance ids and log them
             for _, instance := range termOutput.TerminatingInstances {
                 if logMan != nil {
                     logMan.LogMessage("Instance state for %s: %s -> %s\n",
@@ -831,6 +846,39 @@ func main() {
                                 string(instance.CurrentState.Name))
                 }
             }
+
+            // Release the Elastic IP
+            err = bootstrapOut.Ec2Client.ElasticIpTerminate(1 * time.Minute,
+                                                            bootstrapOut.EipId)
+            if err != nil {
+                log.Printf("Error releasing Elastic IP:  %v", err)
+            }
+
+            // Terminate SSM Parameter Store VPC Interface Endpoint
+            err = bootstrapOut.Ec2Client.VpcEndpointTerminate(1 * time.Minute,
+                                                              []string{bootstrapOut.SsmVpcEndpointId})
+            if err != nil {
+                log.Printf("Error deleting SSM Parameter Store VPC Interface Endpoint:  %v", err)
+            }
+
+
+
+            // Delete the S3 bucket and its contents
+            err = bootstrapOut.S3Client.S3TerminateBucket(5 * time.Minute,
+                                                          bootstrapOut.S3BucketName)
+            if err != nil {
+                log.Printf("Error deleting S3 bucket and its contents:  %v", err)
+            }
+
+            // Delete all the client TLS certificate from SSM Parameter store
+            err = bootstrapOut.SsmClient.SsmDeleteAllParams(1 * time.Minute,
+                                                            "/kloud-kraken/tls-cert")
+            if err != nil {
+                log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
+            }
+
+
+
         } ()
 
     // If the program is being run in testing mode

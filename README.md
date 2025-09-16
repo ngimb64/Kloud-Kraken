@@ -99,7 +99,7 @@
 <br>
 
 - When running the program in full mode with AWS environment there are two options for credential setup
-    - Configure API access credentials locally before running with `aws configure` (prefered)
+    - Configure API access credentials locally before running with `aws configure` (preferred)
     - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY
     	- Keep in mind these will be stored in command line history unless configuration is done prior
 <br>
@@ -108,7 +108,7 @@
     - Smaller wordlists easily merge but larger ones slow the process down **substantially**
     - In the YAML config it is best to set a reasonable `max_merging_size` (ex: 500MB) to prevent bottlenecks from merging large wordlists
     - It is also ideal to set a reasonable `max_file_size` (ex: 2GB) to prevent extensive delays in network latency as smaller files transfer quicker and distribute better among EC2 clients
-    - The following example splits crackstation's 15GB wordlist into 400MB files:
+    - The following example splits Crackstation's 15GB wordlist into 400MB files:
       `split -C 400M -d --additional-suffix=.txt crackstation.txt ./crack_station_`
     - It is also important the `max_size_range` is at a decent percent as lower percentage will results feeding the same wordlist into the merging process until it is within that range or meets the `max_merging_size`
 <br>

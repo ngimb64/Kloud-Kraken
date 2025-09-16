@@ -17,6 +17,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ssmutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"gopkg.in/yaml.v2"
 )
@@ -44,11 +45,17 @@ type StateConfig struct {
 }
 
 type VpcBootstrapOutput struct {
-    AccountId    string
-    BucketName   string
-    Ec2SgId	     string
-    PrivSubnetId string
-    ServerArn    string
+    AccountId        string
+    Ec2Client        *ec2utils.Ec2Manger
+    Ec2SgId	         string
+    EipId            string
+    NatGatewayId     string
+    PrivSubnetId     string
+    S3BucketName     string
+    S3Client         *s3utils.S3Manager
+    SsmClient        *ssmutils.SsmManager
+    ServerArn        string
+    SsmVpcEndpointId string
 }
 
 
@@ -113,6 +120,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         }
     }()
 
+    // VPC setup
+    //-----------
+
     // Check to see if the VPC exists, otherwise create one
     vpcId, err := ec2Client.VpcProvision(10 * time.Minute,
                                          stateConfig.VpcId,
@@ -130,6 +140,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         vpcId = stateConfig.VpcId
     }
 
+    // Internet Gateway setup
+    //------------------------
+
     // Check to see if IGW exists, otherwise create & attach one
     igwId, err := ec2Client.InternetGatewayProvision(5 * time.Minute,
                                                      stateConfig.IgwId, vpcId,
@@ -145,6 +158,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     } else {
         igwId = stateConfig.IgwId
     }
+
+    // Elastic IP setup
+    //------------------
 
     // Check to see if Elastic IP exists, otherwise create one
     eipId, err := ec2Client.ElasticIpProvision(1 * time.Minute,
@@ -162,6 +178,11 @@ func VpcBootstrap(appConfig conf.AppConfig,
         eipId = stateConfig.EipId
     }
 
+    outStruct.EipId = eipId
+
+    // Public and Private Subnets setup
+    //----------------------------------
+
     // Get the slice of availability zones based on region
     azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
     if err != nil {
@@ -172,7 +193,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     az := awsutils.PickAzRandom(azs)
 
     // Set up map for ensuring unique subnet allocation
-    alloc := map[string]struct{}{}
+    subnetMap := map[string]struct{}{}
 
     // Parse the prefix length from CIDR
     prefixLength, err := cidrutils.PrefixFromCidr(appConfig.LocalConfig.CidrBlock)
@@ -182,7 +203,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     // Allocate first available subnet in CIDR block for public subnet
     pubCidr, err := cidrutils.AllocateNextSubnet(appConfig.LocalConfig.CidrBlock,
-                                                 alloc, prefixLength + 1)
+                                                 subnetMap, prefixLength + 1)
     if err != nil {
         return outStruct, err
     }
@@ -207,7 +228,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     // Allocate next available subnet in CIDR block for private subnet
     privCidr, err := cidrutils.AllocateNextSubnet(appConfig.LocalConfig.CidrBlock,
-                                                  alloc, prefixLength + 1)
+                                                  subnetMap, prefixLength + 1)
     if err != nil {
         return outStruct, err
     }
@@ -232,6 +253,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
 
     outStruct.PrivSubnetId = privSubnetId
 
+    // NAT Gateway setup
+    //-------------------
+
     // Create NAT gateway in public subnet if it does not exist
     natGatewayId, err := ec2Client.NatGatewayProvision(15 * time.Minute,
                                                        stateConfig.NatGatewayId,
@@ -248,6 +272,11 @@ func VpcBootstrap(appConfig conf.AppConfig,
     } else {
         natGatewayId = stateConfig.NatGatewayId
     }
+
+    outStruct.NatGatewayId = natGatewayId
+
+    // Public & Private Route Table setup
+    //------------------------------------
 
     // Create route table for subnets to internet gateway if does not exist
     publicRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
@@ -285,6 +314,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         privateRouteId = stateConfig.PrivateRouteId
     }
 
+    // Public & Private Route Table association
+    //------------------------------------------
+
     // Ensure public route tables are associated to subnet
     publicAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
                                                                    stateConfig.PublicAssociationId,
@@ -317,6 +349,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         privateAssocId = stateConfig.PrivateAssociationId
     }
 
+    // EC2 Security Group setup
+    //--------------------------
+
     // Create EC2 security group if it does not exist
     ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.Ec2SecurityGroupId, vpcId,
@@ -337,6 +372,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     outStruct.Ec2SgId = ec2SgId
+
+    // EC2 Security Group Rules setup
+    //--------------------------------
 
     // Get the DNS address from the CIDR (Ex: 192.168.0.0/24 => 192.168.0.2/32)
     dnsAddr, err := ec2Client.VpcResolverForCidr(appConfig.LocalConfig.CidrBlock)
@@ -372,6 +410,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         return outStruct, err
     }
 
+    // SSM Security Group setup
+    //--------------------------
+
     // Create SSM Parameter Store security group if it does not exist
     ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.SsmSecurityGroupId, vpcId,
@@ -392,12 +433,18 @@ func VpcBootstrap(appConfig conf.AppConfig,
         ssmSgId = stateConfig.SsmSecurityGroupId
     }
 
+    // SSM Security Group Rules setup
+    //--------------------------------
+
     // Configure TCP rule in security group for HTTPS
     err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ssmSgId, "0.0.0.0/0",
                                                "tcp", "ingress", 443, 443)
     if err != nil {
         return outStruct, err
     }
+
+    // S3 Bucket setup
+    //-----------------
 
     // Set up client to S3 service
     s3Client := s3utils.S3NewManager(awsConfig)
@@ -417,7 +464,10 @@ func VpcBootstrap(appConfig conf.AppConfig,
         bucketName = stateConfig.S3BucketName
     }
 
-    outStruct.BucketName = bucketName
+    outStruct.S3BucketName = bucketName
+
+    // S3 VPC Gateway Endpoint setup
+    //-------------------------------
 
     // Generate policy document for S3 VPC Endpoint
     policyDocument := policies.VpcS3EndpointPolicyGen(bucketName, vpcId)
@@ -440,6 +490,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     } else {
         s3VpcEndPointId = stateConfig.S3VpcEndpointId
     }
+
+    // SSM VPC Interface Endpoint setup
+    //----------------------------------
 
     // Generate policy document for SSM VPC Endpoint
     policyDocument = policies.VpcSsmEndpointPolicyGen(outStruct.AccountId,
@@ -465,6 +518,11 @@ func VpcBootstrap(appConfig conf.AppConfig,
     } else {
         ssmVpcEndpointId = stateConfig.SsmVpcEndpointId
     }
+
+    outStruct.SsmVpcEndpointId = ssmVpcEndpointId
+
+    // VPC Flow Logs IAM Role setup
+    //------------------------------
 
     // Get the account ID associated with API credentials
     outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
@@ -496,6 +554,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
         vpcFlowLogArn = stateConfig.IamArnVpcFlowLogs
     }
 
+    // VPC Flow Logs setup
+    //---------------------
+
     // Set up client to CloudWatch Logs
     cwlClient := cwl.NewFromConfig(awsConfig)
 
@@ -517,6 +578,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     } else {
         flowLogId = stateConfig.FlowLogId
     }
+
+    // Client IAM Role setup
+    //-----------------------
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy = policies.ClientTrustPolicyGen()
@@ -544,6 +608,9 @@ func VpcBootstrap(appConfig conf.AppConfig,
     } else {
         clientArn = stateConfig.IamArnClient
     }
+
+    // Server IAM Role setup
+    //-----------------------
 
     // Generate the servers trust and permissions policy templates
     trustPolicy = policies.ServerTrustPolicyGen(outStruct.AccountId,
