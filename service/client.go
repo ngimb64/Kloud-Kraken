@@ -387,6 +387,10 @@ func processTransfer(connection net.Conn, buffer []byte,
 
     ipAddr := strings.Split(connection.RemoteAddr().String(), ":")[0]
 
+
+    // TODO:  add rule to security group to allow outbound port to connect to server
+
+
     // Make a connection to the client for file transfer
     transferConn, err := tls.Dial("tcp", ipAddr + ":" + strconv.Itoa(port),
                                   tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))

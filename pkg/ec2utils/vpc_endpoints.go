@@ -296,8 +296,8 @@ func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
 // @Returns
 //
 //
-func (Ec2Man Ec2Manger) VpcEndpointTerminate(callTime time.Duration,
-                                             vpcEndpointIds []string) error {
+func (Ec2Man Ec2Manger) VpcEndpointsTerminate(callTime time.Duration,
+                                              vpcEndpointIds []string) error {
     // Ensure a VPC endpoint is present
     if len(vpcEndpointIds) == 0 {
         return fmt.Errorf("vpcEndpointId is missing")

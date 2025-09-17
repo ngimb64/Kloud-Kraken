@@ -146,7 +146,7 @@ func (manager *LoggerManager) LogMessage(level string, message string, args ...a
     case "fatal":
         manager.LogFatal(formattedMessage, zapFields...)
     default:
-        log.Fatalf("[*] Error: Unknown logging level specified %v", level)
+        log.Fatalf("[*] Error: Unknown logging level specified \"%v\"", level)
     }
 }
 
@@ -284,7 +284,7 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
         // Build the file-based logger
         logger, err = cfg.Build()
         if err != nil {
-            return nil, fmt.Errorf("could not create file logger: %w", err)
+            return nil, fmt.Errorf("could not create file logger - %w", err)
         }
 
         return &ZapLogger{
@@ -387,13 +387,13 @@ func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
         // Fallback to hostname if failed to retrieve instance id
         stream, err = os.Hostname()
         if err != nil {
-            return nil, fmt.Errorf("cannot determine host identity: %w", err)
+            return nil, fmt.Errorf("cannot determine host identity - %w", err)
         }
     } else {
         // Get the EC2 instance id from metadata output
         streamData, err := io.ReadAll(metaData.Content)
         if err != nil {
-            return nil, fmt.Errorf("getting instance ID:  %w", err)
+            return nil, fmt.Errorf("getting instance ID - %w", err)
         }
 
         stream = string(streamData)
@@ -416,7 +416,7 @@ func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
 
         // If the error is not having to do with group already existing
         if !errors.As(err, &ae) {
-            return nil, fmt.Errorf("CreateLogGroup: %w", err)
+            return nil, fmt.Errorf("CreateLogGroup - %w", err)
         }
     }
 
@@ -433,7 +433,7 @@ func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
         LogStreamName: aws.String(stream),
     })
     if err != nil {
-        return nil, fmt.Errorf("CreateLogStream: %w", err)
+        return nil, fmt.Errorf("CreateLogStream - %w", err)
     }
 
     // Describe to grab initial token, nil if fresh
@@ -442,7 +442,7 @@ func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
         LogStreamNamePrefix: aws.String(stream),
     })
     if err != nil {
-        return nil, fmt.Errorf("calling DescribeLogStreams: %w", err)
+        return nil, fmt.Errorf("DescribeLogStreams - %w", err)
     }
 
     var token *string
@@ -467,7 +467,8 @@ func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
 //  - msg:  The message of log event
 //  - fields:  Any additional zap field to be added to log entry
 //
-func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...zap.Field) {
+func (cloudWatchLog *CloudWatchLogger) log(level string, msg string,
+                                           fields ...zap.Field) {
     // Build log entry
     entry := map[string]any{
         "timestamp": time.Now().UTC().Format(time.RFC3339Nano),
@@ -484,7 +485,7 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...z
     // Format the data into JSON for transporting to CloudWatch
     payload, err := json.Marshal(entry)
     if err != nil {
-        log.Fatalf("marshal log entry: %v", err)
+        log.Fatalf("Marshaling log entry: %v", err)
     }
 
     // Set up input log event message
@@ -570,7 +571,7 @@ func LogToMap(jsonStr string) (map[string]any, error) {
     // Store the json string data as key-values in log map
     err := json.Unmarshal([]byte(jsonStr), &logMap)
     if err != nil {
-        return nil, fmt.Errorf("failed to unmarshal JSON log: %w", err)
+        return nil, fmt.Errorf("failed to unmarshal JSON log - %w", err)
     }
 
     return logMap, nil

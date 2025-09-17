@@ -36,7 +36,9 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/tlsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/tui"
 	"github.com/ngimb64/Kloud-Kraken/pkg/wordlist"
+	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 // Package level variables
@@ -820,11 +822,50 @@ func main() {
 
         // AWS cost optimization resource deletion cleanup routine
         defer func() {
+            var stateConfig vpcsetup.AwsEnv
+            var stateData []byte
+            stateFilePath := "../.kraken-state.yml"
+            var yamlUpdates map[string]string
+
+            // Read the data from yaml state file
+            stateData, err = os.ReadFile(stateFilePath)
+            if err != nil {
+                log.Printf("Error reading state file for cleanup:  %v", err)
+            }
+
+            // Decode raw bytes into StateConfig struct
+            err = yaml.Unmarshal(stateData, &stateConfig)
+            if err != nil {
+                log.Printf("Error unmarshaling state file YAML data into state struct:  %v", err)
+            }
+
+            defer func() {
+                // If there are no values in YAML file to be updated
+                if len(yamlUpdates) == 0 {
+                    return
+                }
+
+                // Update the yaml values with values from passed in map
+                newYaml, err := yamlutils.UpdateYAMLBytes(stateData, yamlUpdates)
+                if err != nil {
+                    log.Printf("Error updating state data with entries in map:  %v", err)
+                    return
+                }
+
+                // Overwrite the original yaml with the updated data
+                err = os.WriteFile(stateFilePath, newYaml, 0644)
+                if err != nil {
+                    log.Printf("Error writing state data to state file:  %v", err)
+                }
+            }()
+
             // Terminate the NAT Gateway
             err = bootstrapOut.Ec2Client.NatGatewayTerminate(10 * time.Minute,
                                                              bootstrapOut.NatGatewayId)
             if err != nil {
                 log.Printf("Error deleting NAT Gateway:  %v", err)
+            } else {
+                yamlUpdates["aws_env.nat_gateway_id"] = ""
             }
 
             // Terminate the EC2 instances
@@ -841,9 +882,15 @@ func main() {
                                       instance.PreviousState.Name,
                                       instance.CurrentState.Name)
                 } else {
-                    log.Println("Instance state for " + aws.ToString(instance.InstanceId) +
-                                ": " + string(instance.PreviousState.Name) + " -> " +
-                                string(instance.CurrentState.Name))
+                    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                       color.LightCyan, "+"), "",
+                                                   color.NeonAzure, "Instance state for ",
+                                                   color.RadiantAmethyst,
+                                                   aws.ToString(instance.InstanceId),
+                                                   color.NeonAzure, ": ", color.KrakenGlowGreen,
+                                                   string(instance.PreviousState.Name),
+                                                   color.NeonAzure, " -> ", color.KrakenGlowGreen,
+                                                   string(instance.CurrentState.Name)))
                 }
             }
 
@@ -852,13 +899,17 @@ func main() {
                                                             bootstrapOut.EipId)
             if err != nil {
                 log.Printf("Error releasing Elastic IP:  %v", err)
+            } else {
+                yamlUpdates["aws_env.eip_id"] = ""
             }
 
             // Terminate SSM Parameter Store VPC Interface Endpoint
-            err = bootstrapOut.Ec2Client.VpcEndpointTerminate(1 * time.Minute,
-                                                              []string{bootstrapOut.SsmVpcEndpointId})
+            err = bootstrapOut.Ec2Client.VpcEndpointsTerminate(1 * time.Minute,
+                                                               []string{bootstrapOut.SsmVpcEndpointId})
             if err != nil {
                 log.Printf("Error deleting SSM Parameter Store VPC Interface Endpoint:  %v", err)
+            } else {
+                yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ""
             }
 
             // Delete the S3 bucket and its contents
@@ -866,6 +917,8 @@ func main() {
                                                           bootstrapOut.S3BucketName)
             if err != nil {
                 log.Printf("Error deleting S3 bucket and its contents:  %v", err)
+            } else {
+                yamlUpdates["aws_env.s3_bucket_name"] = ""
             }
 
             // Delete all the client TLS certificate from SSM Parameter store

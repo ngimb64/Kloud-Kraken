@@ -1,6 +1,3 @@
-- Add logic in server program where AWS resources are deleted to ensure their IDs are removed from state file
-    - Reload YAML file and update map with entry entries and rewrite the file
-
 - Add client to configure security group rule for each outbound connection back to local server
     - Add additional logic to remove the rule after the file transfer is complete
     - Make sure permissions list is updated
