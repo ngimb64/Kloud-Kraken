@@ -114,6 +114,7 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
 
     var instanceIDs []string
 
+    // Add the instance IDs from run output to list
     for _, inst := range runOutput.Instances {
         instanceIDs = append(instanceIDs, *inst.InstanceId)
     }
@@ -191,6 +192,7 @@ func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
                                                *ec2.TerminateInstancesOutput,
                                                error) {
     var ids []string
+    var termOutput *ec2.TerminateInstancesOutput
 
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -202,6 +204,11 @@ func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
         if instance.InstanceId != nil {
             ids = append(ids, *instance.InstanceId)
         }
+    }
+
+    // If no instances were found, return early
+    if len(ids) == 0 {
+        return termOutput, nil
     }
 
     // build termination input with parsed id's

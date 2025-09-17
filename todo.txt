@@ -1,15 +1,5 @@
-- Practical cleanup checklist to implement at program end:
-    X Delete NAT Gateways (DeleteNatGateway) — this stops the hourly + data charges.
-    X Terminate EC2 instances (TerminateInstances) and wait for termination with waiter.
-    X Delete / release EIP allocations (ReleaseAddress) if not needed.
-    X Delete Interface VPC endpoints — stops per-hour charges.
-    - Delete VpcFlow logs
-    - Remove or shorten retention on CloudWatch Log Groups (or delete them) to avoid ongoing ingested + storage costs.
-    X Delete ephemeral S3 objects and bucket
-    X Delete ephemeral TLS certificates from SSM Parameter Store
-    - Delete unattached EBS volumes and snapshots you no longer need.
-
-- Add logic in server program where resources are deleted to ensure their IDs are removed from state file
+- Add logic in server program where AWS resources are deleted to ensure their IDs are removed from state file
+    - Reload YAML file and update map with entry entries and rewrite the file
 
 - Add client to configure security group rule for each outbound connection back to local server
     - Add additional logic to remove the rule after the file transfer is complete
@@ -121,6 +111,7 @@ Server Bootstrap role:
         - CreateLogGroup
         - CreateTags
         - DescribeFlowLogs
+        - PutRetentionPolicy
     - Create IAM role for client
         - AddRoleToInstanceProfile
         - CreateInstanceProfile
@@ -154,7 +145,6 @@ Server role:
         - ReleaseAddress
     - Terminate SSM VPC Endpoint
         - DeleteVpcEndpoints
-
     - Terminate S3 bucket and its contents
         - ListObjectsV2
         - DeleteObjects
@@ -163,14 +153,15 @@ Server role:
         - DeleteParameter
 
 Client role:
-    - Get the client binary from s3 in user data script using aws s3 cp command
+    - Get the client binary from s3 in user data script using aws s3 cp command in user data script
         - GetObject
     - Get the TLS certificate from SSM parameter store
         - GetParameter
-    - Logging system with cloudwatch integration
+    - Logging system with Cloudwatch integration
         - CreateLogGroup
         - CreateLogStream
         - CreateTags
         - DescribeLogStreams
         - GetMetadata
         - PutLogEvents
+        - PutRetentionPolicy

@@ -565,7 +565,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
                                                     stateConfig.FlowLogId,
                                                     vpcId, cwlClient,
                                                     "kloud-kraken-vpc-flow-logs",
-                                                    vpcFlowLogArn,
+                                                    vpcFlowLogArn, 1,
                                                     "kloud-kraken-vpc-flow-logs")
     if err != nil {
         return outStruct, err

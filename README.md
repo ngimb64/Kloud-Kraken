@@ -22,6 +22,7 @@
 
 ## Features
 
+- Easy setup with automated script
 - Easy configuration with YAML templates
 - Built-in wordlist merging with flexibility to skip larger files
   - Merging process using `cat` -> `deduplicut`
@@ -44,9 +45,10 @@
 <br>
 
 - EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for performance
-- Supports hash cracking distributed workloads among multiple EC2
+- Supports hash cracking distributed workloads among multiple EC2 instances
 - CLI features colorized TUI interface
 - Custom logging system with CloudWatch and local backup
+- Cleans up AWS resources that incur cost over time when processing is complete
 <br>
 
 
@@ -117,7 +119,8 @@
 ## Usage
 
 - Make a copy of the `config.yml` file in the config folder to avoid modifying original
-- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in the `config.yml` file (ensure to use `instructions.yml` as a reference when configuring)
+- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in the `config.yml` file
+- Ensure to use `instructions.yml` as a reference when configuring the recently made copy
 
 Run the project:
 ```

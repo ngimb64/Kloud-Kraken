@@ -11,6 +11,7 @@ import (
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 //
@@ -115,14 +116,13 @@ func (Ec2Man *Ec2Manger) VpcFlowLogExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
                                              flowLogId string, vpcId string,
-                                             cwl *cloudwatchlogs.Client,
-                                             logGroupName string,
-                                             roleArn string,
-                                             tagName string) (
+                                             cwlClient *cloudwatchlogs.Client,
+                                             logGroupName string, roleArn string,
+                                             retentionDays int32, tagName string) (
                                              string, error) {
     // Ensure required args are present
-    if vpcId == "" || cwl == nil || logGroupName == "" || roleArn == "" {
-        return "", errors.New("vpcId or cwl or logGroupName or roleArn is missing")
+    if vpcId == "" || cwlClient == nil || logGroupName == "" || roleArn == "" {
+        return "", errors.New("vpcId or cwlClient or logGroupName or roleArn is missing")
     }
 
     // If the flow log Id is present in state file
@@ -153,7 +153,7 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
     // Create the Cloudwatch log group
-    _, err := cwl.CreateLogGroup(ctx, callInput)
+    _, err := cwlClient.CreateLogGroup(ctx, callInput)
     cancel()
     if err != nil {
         var alreadyExists *cwtypes.ResourceAlreadyExistsException
@@ -161,6 +161,13 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
         if !errors.As(err, &alreadyExists) {
             return "", err
         }
+    }
+
+    // Set the VPC Flow Logs group retention period
+    err = awsutils.SetRetentionForLogGroup(1 * time.Minute, cwlClient,
+                                           logGroupName, retentionDays)
+    if err != nil {
+        return "", err
     }
 
     // Create the flow logs from VPC to CloudWatch

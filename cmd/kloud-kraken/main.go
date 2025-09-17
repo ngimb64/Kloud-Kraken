@@ -861,8 +861,6 @@ func main() {
                 log.Printf("Error deleting SSM Parameter Store VPC Interface Endpoint:  %v", err)
             }
 
-
-
             // Delete the S3 bucket and its contents
             err = bootstrapOut.S3Client.S3TerminateBucket(5 * time.Minute,
                                                           bootstrapOut.S3BucketName)
@@ -876,9 +874,6 @@ func main() {
             if err != nil {
                 log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
             }
-
-
-
         } ()
 
     // If the program is being run in testing mode
@@ -909,7 +904,7 @@ func main() {
 
     // Initialize the LoggerManager based on the flags
     logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log",
-                                             awsConfig, "", "", false)
+                                             awsConfig, "", -1, "", false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

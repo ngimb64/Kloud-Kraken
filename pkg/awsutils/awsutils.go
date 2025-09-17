@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -147,4 +148,38 @@ func PickAzRandom(azs []string) string {
     // Seed the random number generator to ensure unique results
     rand.New(rand.NewSource(time.Now().UnixNano()))
     return azs[rand.Intn(len(azs))]
+}
+
+
+// Sets retention in days for the provided log group.
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func SetRetentionForLogGroup(callTime time.Duration, client *cwl.Client,
+                             logGroupName string, retentionDays int32) error {
+	if retentionDays < 1 {
+		return fmt.Errorf("retentionDays must be 1 or greater")
+	}
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &cwl.PutRetentionPolicyInput{
+        LogGroupName:    aws.String(logGroupName),
+        RetentionInDays: aws.Int32(retentionDays),
+    }
+
+    // Put the retention policy for passed in log group
+    _, err := client.PutRetentionPolicy(ctx, callInput)
+    if err != nil {
+        return fmt.Errorf("failed to set retention for %q - %w",
+                          logGroupName, err)
+    }
+
+	return nil
 }
