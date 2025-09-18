@@ -24,6 +24,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/hashcat"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
@@ -33,12 +34,15 @@ import (
 )
 
 // Package level variables
-var BufferMutex = &sync.Mutex{}           // Mutex for message buffer synchronization
-var DataPath string                       // Path where data dirs will be stored
+var BufferMutex = &sync.Mutex{}    // Mutex for message buffer synchronization
+var DataPath string                // Path where data dirs will be stored
+var Ec2Client *ec2utils.Ec2Manger  //
+var Ec2SecurityGroupId string      // ID for Security Group for EC2 clients
 var HashcatArgs = &hashcat.HashcatArgs{}  // Initialze where hashcat args are stored
 var HashFilePath string  // Stores hash file path when received
 var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
+var IsTesting bool       // Toggle for specifying whether program is in testing mode
 var LogPath = "/tmp/KloudKraken.log"  // Stores log file to be returned to client
 var MaxTransfers atomic.Int32         // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32           // Stores converted int maxTransfers arg
@@ -386,10 +390,20 @@ func processTransfer(connection net.Conn, buffer []byte,
     }
 
     ipAddr := strings.Split(connection.RemoteAddr().String(), ":")[0]
+    port32 := int32(port)
 
+    // If the program is not in testing mode
+    if !IsTesting {
+        // Add rule to security group to allow outbound port to connect to server
+        err = Ec2Client.SecurityGroupRuleProvision(1 * time.Minute, Ec2SecurityGroupId, "0.0.0.0/0",
+                                                   "tcp", "egress", port32, port32)
+        if err != nil {
+            logMan.LogMessage("Error", "Error provisioning security group rule for file transfer",
+                              zap.Int32("Port", port32))
+        }
 
-    // TODO:  add rule to security group to allow outbound port to connect to server
-
+        return
+    }
 
     // Make a connection to the client for file transfer
     transferConn, err := tls.Dial("tcp", ipAddr + ":" + strconv.Itoa(port),
@@ -411,6 +425,20 @@ func processTransfer(connection net.Conn, buffer []byte,
             if err != nil {
                 logMan.LogMessage("Error", "Error closing transfer connection %d:  %v",
                                   port, err)
+            }
+
+            // If the program is not in testing mode
+            if !IsTesting {
+                // Remove rule from security group that allows
+                // outbound port to connect to server
+                err = Ec2Client.RevokeSecurityGroupRule(1 * time.Minute,
+                                                        Ec2SecurityGroupId,
+                                                        "tcp", "0.0.0.0/0",
+                                                        "egress", port32, port32)
+                if err != nil {
+                    logMan.LogMessage("Error", "Error revoking EC2 security group",
+                                      zap.Int32("Port", port32))
+                }
             }
 
             // Decrement the waitgroup
@@ -638,7 +666,6 @@ func main() {
     var awsRegion string
     var certSsmParam string
     var ipAddrs string
-    var isTesting bool
     var logMode string
     var maxFileSizeInt64 int64
     var maxTransfers int
@@ -656,11 +683,12 @@ func main() {
     flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
     flag.StringVar(&HashcatArgs.CharSet4, "charSet4", "", "Custom character set 4 for masks")
     flag.StringVar(&HashcatArgs.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
+    flag.StringVar(&Ec2SecurityGroupId, "ec2SecurityGroupId", "", "ID for Security Group for EC2 clients")
     flag.StringVar(&HashcatArgs.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
-    flag.StringVar(&HashcatArgs.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
+    flag.StringVar(&HashcatArgs.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.StringVar(&ipAddrs, "ipAddrs", "localhost", "IP addresses of server to connect to in CSV format")
-    flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
+    flag.BoolVar(&IsTesting, "isTesting", false, "Toggle to enable testing mode")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
@@ -677,7 +705,7 @@ func main() {
     MaxTransfersInt32 = int32(maxTransfers)
 
     // If the program is being run in full mode
-    if !isTesting {
+    if !IsTesting {
         DataPath = "/mnt/instance-store"
     // If the program is being run in testing mode
     } else {
@@ -696,8 +724,8 @@ func main() {
     var err error
     var serverCertPemBlock []byte
 
-    // If the program is being run in full mode (not testing)
-    if !isTesting {
+    // If the program is being run in full mode
+    if !IsTesting {
         // If parameter for SSM param store is not present
         if certSsmParam == "" {
             log.Fatal("Missing parameter to retrieve TLS from SSM param store")
@@ -720,6 +748,9 @@ func main() {
 
         // Convert retrieved TLS cert PEM block to bytes
         serverCertPemBlock = []byte(certPemString)
+
+        // Establish client to EC2 service
+        Ec2Client = ec2utils.Ec2NewManager(awsConfig)
 
     // If the program is being run in testing mode
     } else {

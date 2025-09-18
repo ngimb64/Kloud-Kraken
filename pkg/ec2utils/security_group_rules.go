@@ -22,13 +22,13 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
-                                                 sgId string, cidr string,
-                                                 direction string,
-                                                 minPort int32,
-                                                 maxPort int32) error {
+                                                 sgId string, proto string,
+                                                 cidr string, direction string,
+                                                 minPort int32, maxPort int32,
+                                                 ) error {
 	// Ensure required args are present
-	if sgId == "" || cidr == "" {
-		return errors.New("sgId or cidr is missing")
+	if sgId == "" || proto == "" || cidr == "" {
+		return errors.New("sgId or proto or cidr is missing")
 	}
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -36,9 +36,11 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
     defer cancel()
 
     ipPerm := ec2types.IpPermission{
-        IpProtocol: aws.String("tcp"),
+        IpProtocol: aws.String(proto),
         IpRanges: []ec2types.IpRange{
-            {CidrIp: aws.String(cidr)},
+            {
+                CidrIp: aws.String(cidr),
+            },
         },
         FromPort:   aws.Int32(minPort),
         ToPort:     aws.Int32(maxPort),
@@ -138,7 +140,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
         return false, nil
     }
 
-    // Iterate through security groups1
+    // Iterate through security groups
     for _, sg := range out.SecurityGroups {
         // Iterate through rules in each security group
         for _, perm := range sg.IpPermissions {
@@ -226,6 +228,73 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleProvision(callTime time.Duration,
     }
 
     // Create egress security group
-    return Ec2Man.securityGroupRuleCreate(callTime, sgId, cidr, direction,
-                                          minPort, maxPort)
+    return Ec2Man.securityGroupRuleCreate(callTime, sgId, proto, cidr,
+                                          direction, minPort, maxPort)
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) RevokeSecurityGroupRule(callTime time.Duration,
+                                                groupId string, proto string,
+                                                cidr string, direction string,
+                                                minPort int32, maxPort int32,
+                                                ) error {
+    // Ensure required arg is present
+	if groupId == "" || proto == "" || cidr == "" {
+		return fmt.Errorf("groupID or proto or cidr is missing")
+	}
+
+    // Ensure API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    ipPerm := ec2types.IpPermission{
+        IpProtocol: aws.String(proto),
+        IpRanges: []ec2types.IpRange{
+            {
+                CidrIp: aws.String(cidr),
+            },
+        },
+        FromPort:   aws.Int32(minPort),
+        ToPort:     aws.Int32(maxPort),
+    }
+
+    switch direction {
+    case "egress":
+        revokeCallInput := &ec2.RevokeSecurityGroupEgressInput{
+            GroupId:       aws.String(groupId),
+            IpPermissions: []ec2types.IpPermission{ipPerm},
+        }
+
+        // Revoke the egress security group rule
+        _, err := Ec2Man.client.RevokeSecurityGroupEgress(ctx, revokeCallInput)
+        if err != nil {
+            return fmt.Errorf("revoke egress on %s failed - %w", groupId, err)
+        }
+
+    case "ingress":
+        revokeCallInput := &ec2.RevokeSecurityGroupIngressInput{
+			GroupId:       aws.String(groupId),
+			IpPermissions: []ec2types.IpPermission{ipPerm},
+		}
+
+        // Revoke the ingress security group rule
+		_, err := Ec2Man.client.RevokeSecurityGroupIngress(ctx, revokeCallInput)
+		if err != nil {
+			return fmt.Errorf("revoke ingress on %s failed - %w", groupId, err)
+		}
+
+		return nil
+    default:
+        return errors.New("improper direction specified, use egress or ingress")
+    }
+
+	return nil
 }

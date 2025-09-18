@@ -1,7 +1,3 @@
-- Add client to configure security group rule for each outbound connection back to local server
-    - Add additional logic to remove the rule after the file transfer is complete
-    - Make sure permissions list is updated
-
 - Implement teardown program that ensures all resources in state file are terminated
     - Ensure Makefile is updated to build with other binaries
     - Make sure permissions list is updated
@@ -18,6 +14,8 @@
 
 - Look into using custom generated key for KMS encryption utilized with S3 and SSM
     - Ensure to update permissions policies as needed
+
+- Re-run system testing in AWS environment
 
 - Finish documentation for AWS code
 
@@ -84,12 +82,12 @@ Server Bootstrap role:
         - RevokeSecurityGroupEgress
     - Add rules to EC2 security group to allow updates and package installation
         - AuthorizeSecurityGroupEgress
-        - AuthorizeSecurityGroupIngress
         - DescribeSecurityGroups
     - Create security group for SSM Parameter Store
         - Same as above
     - Add rules to SSM parameter store for allowing storing and grabbing TLS certs
-        - Same as above
+        - AuthorizeSecurityGroupIngress
+        - DescribeSecurityGroups
     - Create S3 bucket & add bucket policy restricting access to VPC/VPC endpoint
         - CreateBucket
         - HeadBucket
@@ -154,7 +152,7 @@ Client role:
         - GetObject
     - Get the TLS certificate from SSM parameter store
         - GetParameter
-    - Logging system with Cloudwatch integration
+    - Logging system with CloudWatch integration
         - CreateLogGroup
         - CreateLogStream
         - CreateTags
@@ -162,3 +160,8 @@ Client role:
         - GetMetadata
         - PutLogEvents
         - PutRetentionPolicy
+    - Create security group rule to open port for file transfer
+        - AuthorizeSecurityGroupEgress
+        - DescribeSecurityGroups
+    - Revoke security group rule to close port after file transfer
+        - RevokeSecurityGroupEgress

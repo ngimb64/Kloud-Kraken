@@ -423,13 +423,14 @@ func startServer(appConfig *conf.AppConfig,
 //  - keyName:  The name of the key of the S3 bucket
 //  - ipAddrs:  Slice of IP addresses to be formatted into CSV string
 //  - ssmParam:  The path where the certificate is stored in SSM param store
+//  - ec2SgId:  The ID for the security group for client EC2 instances
 //
 // @Returns
 //  - The generated EC2 user data with args formatted into it
 //  - Error if it occurs, otherwise nil on success
 //
 func ec2UserDataGen(appConf *conf.AppConfig, bucketName string, keyName string,
-                    ipAddrs []string, ssmParam string) (
+                    ipAddrs []string, ssmParam string, ec2SgId string) (
                     string, error) {
     var hasRuleset bool
     // Convert the slice of IP addresses to CSV string
@@ -503,9 +504,10 @@ $CWD/client -applyOptimization=%t \
             -charSet3=%s \
             -charSet4=%s \
             -crackingMode=%s \
+            -ec2SecurityGroupId=%s \
             -hashMask=%s \
-            -hashType=%s \
             -hasRuleset=%t \
+            -hashType=%s \
             -ipAddrs=%s \
             -isTesting=%t \
             -logMode=%s \
@@ -518,11 +520,11 @@ $CWD/client -applyOptimization=%t \
    appConf.ClientConfig.Region, ssmParam,
    appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
    appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
-   appConf.ClientConfig.CrackingMode, appConf.ClientConfig.HashMask,
-   appConf.ClientConfig.HashType, hasRuleset, ipAddrsCsv, false,
-   appConf.ClientConfig.LogMode, appConf.ClientConfig.MaxFileSizeInt64,
-   appConf.ClientConfig.MaxTransfers, appConf.LocalConfig.ListenerPort,
-   appConf.ClientConfig.Workload)
+   appConf.ClientConfig.CrackingMode, ec2SgId,
+   appConf.ClientConfig.HashMask, hasRuleset, appConf.ClientConfig.HashType,
+   ipAddrsCsv, false, appConf.ClientConfig.LogMode,
+   appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
+   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
     return data, nil
 }
@@ -585,7 +587,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Setup client to SSM
     ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
-    param, err := ssmClient.SsmPutParameter(1 * time.Minute,
+    ssmParam, err := ssmClient.SsmPutParameter(1 * time.Minute,
                                             "/kloud-kraken/tls-cert",
                                             string(TlsMan.CertPemBlock),
                                             "kloud-kraken-ssm-tls-cert")
@@ -625,7 +627,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
-                                    keyName, publicIps, param)
+                                    keyName, publicIps, ssmParam,
+                                    bootstrapOut.Ec2SgId)
     if err != nil {
         return awsConfig, bootstrapOut, err
     }
