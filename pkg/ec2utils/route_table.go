@@ -210,3 +210,36 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
     return Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId, natId,
                                             destCidr, nameTag, subnetId)
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) RouteTableTerminate(callTime time.Duration,
+                                            routeTableId string) error {
+    // Ensure required arg is present
+    if routeTableId == "" {
+        return errors.New("routeTableId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteRouteCallInput := &ec2.DeleteRouteTableInput{
+        RouteTableId: aws.String(routeTableId),
+    }
+
+    _, err := Ec2Man.client.DeleteRouteTable(ctx, deleteRouteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete route table (%s) - %w",
+                          routeTableId, err)
+    }
+
+    return nil
+}

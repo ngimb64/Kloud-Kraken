@@ -183,3 +183,50 @@ func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
     // Create new internet gateway
     return Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId, nameTag)
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) InternetGatewayTerminate(callTime time.Duration,
+                                                 igwId string,
+                                                 vpcId string) error {
+    // Ensure required args are present
+    if igwId == "" || vpcId == "" {
+        return errors.New("igwId or vpcId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    detachCallInput := &ec2.DetachInternetGatewayInput{
+        InternetGatewayId: aws.String(igwId),
+        VpcId:             aws.String(vpcId),
+    }
+
+    // Detach the Internet Gateway from specified VPC
+    _, err := Ec2Man.client.DetachInternetGateway(ctx, detachCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to detach internet gateway %s from VPC %s - %w",
+                          igwId, vpcId, err)
+    }
+
+    deleteCallInput := &ec2.DeleteInternetGatewayInput{
+        InternetGatewayId: aws.String(igwId),
+    }
+
+    // Delete the Internet Gateway
+    _, err = Ec2Man.client.DeleteInternetGateway(ctx, deleteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete internet gateway %s - %w",
+                          igwId, err)
+    }
+
+    return nil
+}

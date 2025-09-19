@@ -214,3 +214,36 @@ func (Ec2Man *Ec2Manger) VpcResolverForCidr(cidr string) (string, error) {
 
     return resIP.String() + "/32", nil
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) VpcTerminate(callTime time.Duration,
+                                     vpcId string) error {
+    // Ensure required arg is present
+    if vpcId == "" {
+        return errors.New("vpcId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteCallInput := &ec2.DeleteVpcInput{
+        VpcId: aws.String(vpcId),
+    }
+
+    // Delete the VPC by passed in ID
+    _, err := Ec2Man.client.DeleteVpc(ctx, deleteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete VPC %s - %w", vpcId, err)
+    }
+
+    return nil
+}

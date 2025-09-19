@@ -26,16 +26,14 @@ var AzIndex = 0
 //
 // @Returns
 //  - The AWS credentials config
-//  - The AWS API access key ID
-//  - The AWS API secret access key
 //  - Boolean indicating whether the credentials exist or not in default keychain
 //
 func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
-                                 aws.Config, string, string, bool) {
+                                 aws.Config, bool) {
     // Load the local credential chain (env, ~/.aws, etc.)
     cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
     if err != nil {
-        return cfg, "", "", false
+        return cfg, false
     }
 
     // Retrieve credentials with a deadline
@@ -43,12 +41,12 @@ func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
     defer cancel()
 
     // Retreive the credentials from the credentials provider
-    creds, err := cfg.Credentials.Retrieve(ctx)
+    _, err = cfg.Credentials.Retrieve(ctx)
     if err != nil {
-        return cfg, "", "", false
+        return cfg, false
     }
 
-    return cfg, creds.AccessKeyID, creds.SecretAccessKey, true
+    return cfg, true
 }
 
 
@@ -60,26 +58,24 @@ func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
 //
 // @Returns:
 //  - The initialized AWS credentials config
-//  - The AWS access key id
-//  - The AWS secret access key
 //  - Error if it occurs, otherwise nil on success
 //
 func AwsConfigSetup(callTime time.Duration, region string) (
-                    aws.Config, string, string, error) {
+                    aws.Config, error) {
     // Attempt to load credentials from default credential chain
-    cfg, accessKey, secretKey, exists := AttemptLoadDefaultCredChain(callTime, region)
+    cfg, exists := AttemptLoadDefaultCredChain(callTime, region)
     if exists {
-        return cfg, accessKey, secretKey, nil
+        return cfg, nil
     }
 
     // Get AWS access and secret key environment variables
-    accessKey = os.Getenv("AWS_ACCESS_KEY")
-    secretKey = os.Getenv("AWS_SECRET_KEY")
+    accessKey := os.Getenv("AWS_ACCESS_KEY")
+    secretKey := os.Getenv("AWS_SECRET_KEY")
     // If AWS access and secret key are present
     if accessKey == "" || secretKey == "" {
-        return aws.Config{}, "", "", fmt.Errorf("missing either the access (%s) or " +
-                                                "secret key (%s) for AWS",
-                                                accessKey, secretKey)
+        return aws.Config{}, fmt.Errorf("missing either the access (%s) or " +
+                                        "secret key (%s) for AWS",
+                                        accessKey, secretKey)
     }
 
     // Set the AWS credentials provider
@@ -89,10 +85,10 @@ func AwsConfigSetup(callTime time.Duration, region string) (
     cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region),
                                          config.WithCredentialsProvider(awsCreds))
     if err != nil {
-        return cfg, "", "", err
+        return cfg, err
     }
 
-    return cfg, accessKey, secretKey, nil
+    return cfg, nil
 }
 
 

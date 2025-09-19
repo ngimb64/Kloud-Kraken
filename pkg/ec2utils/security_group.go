@@ -181,3 +181,37 @@ func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
     return Ec2Man.securityGroupCreate(callTime, vpcId, groupName,
                                       description, tagName)
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) SecurityGroupTerminate(callTime time.Duration,
+                                               securityGroupId string) error {
+    // Ensure required arg is passed in
+    if securityGroupId == "" {
+        return errors.New("securityGroupId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteCallInput := &ec2.DeleteSecurityGroupInput{
+        GroupId: aws.String(securityGroupId),
+    }
+
+    // Delete the security group by ID
+    _, err := Ec2Man.client.DeleteSecurityGroup(ctx, deleteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete security group %s - %w",
+                          securityGroupId, err)
+    }
+
+    return nil
+}

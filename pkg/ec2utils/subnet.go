@@ -171,3 +171,37 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
     return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock,
                                az, tagName, isPublic)
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) SubnetTerminate(callTime time.Duration,
+                                        subnetId string) error {
+    // Ensure required arg is present
+    if subnetId == "" {
+        return errors.New("subnetId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteCallInput := &ec2.DeleteSubnetInput{
+        SubnetId: aws.String(subnetId),
+    }
+
+    // Delete the subnet by passed in ID
+    _, err := Ec2Man.client.DeleteSubnet(ctx, deleteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete subnet (%s) - %w",
+                          subnetId, err)
+    }
+
+    return nil
+}

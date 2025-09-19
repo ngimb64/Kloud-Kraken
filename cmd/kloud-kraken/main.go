@@ -551,8 +551,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               bootstrapOut *vpcsetup.VpcBootstrapOutput,
               err error) {
     // Set up the AWS credentials based on local chain or environment variables
-    awsConfig, _, _, err = awsutils.AwsConfigSetup(1 * time.Minute,
-                                                   appConfig.LocalConfig.Region)
+    awsConfig, err = awsutils.AwsConfigSetup(1 * time.Minute,
+                                             appConfig.LocalConfig.Region)
     if err != nil {
         return awsConfig, bootstrapOut, err
     }
@@ -862,15 +862,6 @@ func main() {
                 }
             }()
 
-            // Terminate the NAT Gateway
-            err = bootstrapOut.Ec2Client.NatGatewayTerminate(10 * time.Minute,
-                                                             bootstrapOut.NatGatewayId)
-            if err != nil {
-                log.Printf("Error deleting NAT Gateway:  %v", err)
-            } else {
-                yamlUpdates["aws_env.nat_gateway_id"] = ""
-            }
-
             // Terminate the EC2 instances
             termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
             if err != nil {
@@ -895,6 +886,15 @@ func main() {
                                                    color.NeonAzure, " -> ", color.KrakenGlowGreen,
                                                    string(instance.CurrentState.Name)))
                 }
+            }
+
+            // Terminate the NAT Gateway
+            err = bootstrapOut.Ec2Client.NatGatewayTerminate(10 * time.Minute,
+                                                             bootstrapOut.NatGatewayId)
+            if err != nil {
+                log.Printf("Error deleting NAT Gateway:  %v", err)
+            } else {
+                yamlUpdates["aws_env.nat_gateway_id"] = ""
             }
 
             // Release the Elastic IP

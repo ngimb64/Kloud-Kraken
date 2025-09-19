@@ -1,6 +1,56 @@
 - Implement teardown program that ensures all resources in state file are terminated
-    - Ensure Makefile is updated to build with other binaries
-    - Make sure permissions list is updated
+    X- S3 contents & bucket
+        - Empty bucket: ListObjectsV2 + DeleteObjects (multipart / versioned buckets require special handling).
+        - Delete bucket policy if you want: DeleteBucketPolicy.
+        - DeleteBucket.
+
+    X- SSM Parameter Store entries
+        - DeleteParameter for TLS certs.
+
+    - CloudWatch / Flow Logs
+        - Delete CloudWatch log groups used by clients & flow logs: DeleteLogGroup.
+        - Delete flow logs: DeleteFlowLogs.
+
+    X- VPC endpoints
+        - DeleteVpcEndpoints for S3, SSM, etc.
+
+    X- NAT Gateways & EIP
+        - DeleteNatGateway (wait for it to be removed/available).
+        - After NAT is deleted and the EIP is disassociated, ReleaseAddress for the Elastic IP(s).
+
+    X- Route tables & associations
+        - Disassociate route table associations: DisassociateRouteTable (or modify associations).
+        - Remove custom routes (DeleteRoute) if necessary.
+        - DeleteRouteTable.
+
+    X- Internet Gateway
+        - DetachInternetGateway from VPC.
+        - DeleteInternetGateway.
+
+    X- Subnets
+        - DeleteSubnet for each public and private subnet.
+
+    X- Security groups
+        - Revoke any rules: RevokeSecurityGroupIngress / RevokeSecurityGroupEgress.
+        - DeleteSecurityGroup.
+
+    X- VPC
+        - Ensure nothing remains (endpoints, ENIs, NATs, subnets, IGW).
+        - DeleteVpc.
+
+    - IAM cleanup
+        - For each instance profile:
+            - Remove roles from instance profiles: RemoveRoleFromInstanceProfile.
+            - Delete instance profiles: DeleteInstanceProfile.
+        - For each role (flow-logs role, client role, server role, etc.):
+            - Delete inline policies: DeleteRolePolicy.
+            - Detach managed policies: DetachRolePolicy.
+            - Delete any managed policies created: DeletePolicy.
+            - Delete roles: DeleteRole.
+
+    - Make sure permissions list and README is updated
+
+- Add logic to remove security group rules on client after updates are complete
 
 - Make sure all policies are updated based on review
     - Update README with bootstrap policy
