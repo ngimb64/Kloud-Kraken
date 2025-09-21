@@ -90,9 +90,9 @@ func main() {
         log.Fatalf("Error loading AWS configuration:  %v", err)
     }
 
-	// Establish clients to various services
-	ec2Client := ec2utils.Ec2NewManager(awsConfig)
-	iamClient := iamutils.IamNewManager(awsConfig)
+    // Establish clients to various services
+    ec2Client := ec2utils.Ec2NewManager(awsConfig)
+    iamClient := iamutils.IamNewManager(awsConfig)
     s3Client := s3utils.S3NewManager(awsConfig)
     ssmClient := ssmutils.SsmNewManager(awsConfig)
 

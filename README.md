@@ -38,6 +38,7 @@
 
 - Designed to setup isolated VPC in AWS environment
   - Feature public/private subnet setup with NAT gateway for EC2 internet access
+  - VPC Endpoints for S3 bucket & SSM Parameter Store operations
   - Security groups for ensuring only outbound traffic occurs on EC2
   - Minimalist IAM role utilization featuring bootstrap role for creating AWS resources
   - Automatically assumes role for server operations with the Security Token Service
@@ -130,6 +131,11 @@ Run the project:
 If at any point the project needs to be rebuilt:
 ```
 make clean && make all
+```
+
+To delete the project from AWS environment:
+```
+./bin/kloud-kraken-teardown
 ```
 <br>
 

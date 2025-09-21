@@ -107,12 +107,12 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-	out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		return "", err
-	}
+    out, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+    if err != nil {
+        return "", err
+    }
 
-	return *out.Account, nil
+    return *out.Account, nil
 }
 
 
@@ -157,9 +157,9 @@ func PickAzRandom(azs []string) string {
 //
 func SetRetentionForLogGroup(callTime time.Duration, client *cwl.Client,
                              logGroupName string, retentionDays int32) error {
-	if retentionDays < 1 {
-		return fmt.Errorf("retentionDays must be 1 or greater")
-	}
+    if retentionDays < 1 {
+        return fmt.Errorf("retentionDays must be 1 or greater")
+    }
 
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -177,5 +177,5 @@ func SetRetentionForLogGroup(callTime time.Duration, client *cwl.Client,
                           logGroupName, err)
     }
 
-	return nil
+    return nil
 }

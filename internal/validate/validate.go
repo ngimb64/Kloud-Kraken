@@ -81,9 +81,9 @@ func ValidateCidrBlock(cidrBlock string) error {
     }
 
     // Ensure the AWS subnet ID is of proper format
-	if !RePrivateCidr.MatchString(cidrBlock) {
-		return fmt.Errorf("invalid CIDR block - %q", cidrBlock)
-	}
+    if !RePrivateCidr.MatchString(cidrBlock) {
+        return fmt.Errorf("invalid CIDR block - %q", cidrBlock)
+    }
 
     return nil
 }
