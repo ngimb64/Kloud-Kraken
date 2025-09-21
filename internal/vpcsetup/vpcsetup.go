@@ -41,6 +41,7 @@ type StateConfig struct {
     PublicAssociationId  string `yaml:"public_association_id"`
     PublicRouteId        string `yaml:"public_route_id"`
     PublicSubnetId       string `yaml:"public_subnet_id"`
+    Region               string `yaml:"region"`
     S3BucketName         string `yaml:"s3_bucket_name"`
     S3VpcEndpointId      string `yaml:"s3_vpc_endpoint_id"`
     SsmVpcEndpointId     string `yaml:"ssm_vpc_endpoint_id"`
@@ -103,6 +104,16 @@ func VpcBootstrap(appConfig conf.AppConfig,
             return outStruct, err
         }
     }
+
+    // Check to see if the region in the state
+    if stateConfig.AwsEnv.Region != appConfig.LocalConfig.Region &&
+    stateConfig.AwsEnv.Region != "" {
+        return outStruct, errors.New("region in YAML config does not match state file, " +
+                                     "run teardown program first before running again")
+    }
+
+    // Add the region to the updates map for YAML state file
+    yamlUpdates["aws_env.region"] = appConfig.LocalConfig.Region
 
     defer func() {
         // If there are no values in YAML file to be updated

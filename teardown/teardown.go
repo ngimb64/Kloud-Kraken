@@ -6,8 +6,10 @@ import (
 	"os"
 	"time"
 
+	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/cloudwatchutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
@@ -45,6 +47,10 @@ func main() {
         log.Fatalf("Error unmarshaling state file YAML data into state struct:  %v", err)
     }
 
+    if stateConfig.AwsEnv.Region == "" {
+        log.Fatal("Missing region from state file, teardown operation likely not needed")
+    }
+
     defer func() {
         // If all resources were deleted without errors
         if !hadError {
@@ -79,7 +85,7 @@ func main() {
 
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, err := awsutils.AwsConfigSetup(1 * time.Minute,
-                                              appConfig.LocalConfig.Region)
+                                              stateConfig.AwsEnv.Region)
     if err != nil {
         log.Fatalf("Error loading AWS configuration:  %v", err)
     }
@@ -110,11 +116,34 @@ func main() {
         hadError = true
     }
 
+    // Setup client to CloudWatch
+    cwlClient := cwl.NewFromConfig(awsConfig)
 
+    if stateConfig.AwsEnv.FlowLogId != "" {
+        // Delete the VPC Flow Logs
+        err = ec2Client.VpcFlowLogTerminate(1 * time.Minute,
+                                            []string{stateConfig.AwsEnv.FlowLogId})
+        if err != nil {
+            log.Printf("Error deleting VPC Flow Logs:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.flow_log_id"] = ""
+        }
 
-    // TODO:  teardown CloudWatch resources for EC2 clients and VPC Flow Logs
+        // Delete the VPC flow Logs log group
+        err = cloudwatchutils.DeleteLogGroup(1 * time.Minute, cwlClient,
+                                            "kloud-kraken-vpc-flow-logs")
+        if err != nil {
+            log.Printf("Error deleting VPC Flow Logs log group:  %v", err)
+        }
+    }
 
-
+    // Delete the CloudWatch logging stream and group for EC2 clients
+    err = cloudwatchutils.TerminateCloudWatchLogger(1 * time.Minute, cwlClient,
+                                                    "kloud-kraken-logs", []string{})
+    if err != nil {
+        log.Printf("Error deleting CloudWatch logging stream and group:  %v", err)
+    }
 
     if stateConfig.AwsEnv.S3VpcEndpointId != "" {
         // Terminate S3 bucket VPC Endpoint
@@ -282,6 +311,45 @@ func main() {
             hadError = true
         } else {
             yamlUpdates["aws_env.vpc_id"] = ""
+        }
+    }
+
+    if stateConfig.AwsEnv.IamArnVpcFlowLogs != "" {
+        // Delete the VPC Flow Logs IAM role
+        err = iamClient.IamRoleTerminator(5 * time.Minute,
+                                          stateConfig.AwsEnv.IamArnVpcFlowLogs,
+                                          false)
+        if err != nil {
+            log.Printf("Error deleting VPC Flow Logs IAM role:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.iam_arn_vpc_flow_logs"] = ""
+        }
+    }
+
+    if stateConfig.AwsEnv.IamArnClient != "" {
+        // Delete the client IAM role
+        err = iamClient.IamRoleTerminator(5 * time.Minute,
+                                          stateConfig.AwsEnv.IamArnClient,
+                                          true)
+        if err != nil {
+            log.Printf("Error deleting client IAM role:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.iam_arn_client"] = ""
+        }
+    }
+
+    if stateConfig.AwsEnv.IamArnServer != "" {
+        // Delete the server IAM role
+        err = iamClient.IamRoleTerminator(5 * time.Minute,
+                                          stateConfig.AwsEnv.IamArnServer,
+                                          false)
+        if err != nil {
+            log.Printf("Error deleting server IAM role:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.iam_arn_server"] = ""
         }
     }
 }

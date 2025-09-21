@@ -7,7 +7,7 @@
     X- SSM Parameter Store entries
         - DeleteParameter for TLS certs.
 
-    - CloudWatch / Flow Logs
+    X- CloudWatch / Flow Logs
         - Delete CloudWatch log groups used by clients & flow logs: DeleteLogGroup.
         - Delete flow logs: DeleteFlowLogs.
 
@@ -38,7 +38,7 @@
         - Ensure nothing remains (endpoints, ENIs, NATs, subnets, IGW).
         - DeleteVpc.
 
-    - IAM cleanup
+    X- IAM cleanup
         - For each instance profile:
             - Remove roles from instance profiles: RemoveRoleFromInstanceProfile.
             - Delete instance profiles: DeleteInstanceProfile.
@@ -82,7 +82,9 @@
 
 NOTE:  below list is reference for research item in list
 
-Server Bootstrap role:
+Server Bootstrap role
+----------------------
+vpc_setup.go/main.go:
     - Create VPC with CIDR block
         - CreateTags
         - CreateVpc
@@ -172,7 +174,12 @@ Server Bootstrap role:
     - Assume Server role after bootstrap is complete
         - NewAssumeRoleProvider
 
-Server role:
+- teardown.go
+
+
+Server role
+------------
+- main.go
     - Put the generated TLS certificate SSM parameter store
         - PutParameter
         - CreateTags
@@ -197,7 +204,9 @@ Server role:
     - Terminate TLS certificate from SSM param store
         - DeleteParameter
 
-Client role:
+Client role
+------------
+- client.go
     - Get the client binary from s3 in user data script using aws s3 cp command in user data script
         - GetObject
     - Get the TLS certificate from SSM parameter store

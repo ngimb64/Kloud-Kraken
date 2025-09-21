@@ -494,8 +494,8 @@ echo "[!] Instance-store ready at /mnt/instance-store"
 
 # Application bootstrap
 CWD=$(pwd)
-aws s3 cp s3://%s/%s $CWD/client --region %s --no-progress
-chmod +x $CWD/client
+aws s3 cp s3://%s/%s "$CWD"/client --region %s --no-progress
+chmod +x "$CWD"/client
 $CWD/client -applyOptimization=%t \
             -awsRegion=%s \
             -certSsmParam=%s \

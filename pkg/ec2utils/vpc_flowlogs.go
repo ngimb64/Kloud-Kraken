@@ -181,3 +181,36 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
 
     return flowLogId, nil
 }
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func (Ec2Man Ec2Manger) VpcFlowLogTerminate(callTime time.Duration,
+                                            flowLogIDs []string) error {
+    // Ensure required arg is present
+	if len(flowLogIDs) == 0 {
+		return fmt.Errorf("DeleteFlowLogs: no flow log IDs provided")
+	}
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+	defer cancel()
+
+    deleteFlowLogsInput := &ec2.DeleteFlowLogsInput{
+		FlowLogIds: flowLogIDs,
+	}
+
+    // Delete the VPC flow logs
+	_, err := Ec2Man.client.DeleteFlowLogs(ctx, deleteFlowLogsInput)
+	if err != nil {
+		return fmt.Errorf("deleting VPC Flow Logs - %w", err)
+	}
+
+	return nil
+}
