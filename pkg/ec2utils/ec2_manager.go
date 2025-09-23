@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Struct for managing EC2 operations
@@ -59,7 +60,7 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
                                             minCount int32,
                                             maxCount int32,
                                             roleName string,
-                                            tagName string,
+                                            tags map[string]string,
                                             securityGroupIds []string,
                                             subnetId string) (
                                             error) {
@@ -82,16 +83,11 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
         UserData:     aws.String(encodedUserData),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         createInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInstance,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }

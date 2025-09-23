@@ -94,18 +94,26 @@ func ServerPermPolicyGen(region string, accountId string,
       "Sid": "SSMUploadClientCert",
       "Effect": "Allow",
       "Action": [
-        "ssm:PutParameter"
+        "ssm:PutParameter",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource"
       ],
       "Resource": "arn:aws:ssm:%s:%s:parameter%s*"
     },
     {
-      "Sid": "S3UploadClientBinary",
+      "Sid": "S3Operations",
       "Effect": "Allow",
       "Action": [
         "s3:PutObject",
-        "s3:PutObjectAcl"
+        "s3:PutObjectAcl",
+        "s3:ListBucket",
+        "s3:DeleteObject",
+        "s3:DeleteBucket"
       ],
-      "Resource": "arn:aws:s3:::%s/*"
+      "Resource": [
+        "arn:aws:s3:::%s",
+        "arn:aws:s3:::%s/*"
+      ]
     },
     {
       "Sid": "EC2LifecycleControl",
@@ -114,13 +122,17 @@ func ServerPermPolicyGen(region string, accountId string,
         "ec2:RunInstances",
         "ec2:TerminateInstances",
         "ec2:DescribeInstances",
-        "ec2:CreateTags"
+        "ec2:CreateTags",
+        "ec2:DeleteNatGateway",
+        "ec2:ReleaseAddress",
+        "ec2:DeleteVpcEndpoints"
       ],
-      "Resource": [
-        "arn:aws:ec2:%s:%s:instance/*",
-        "arn:aws:ec2:%s:%s:subnet/*",
-        "arn:aws:ec2:%s:%s:security-group/*"
-      ]
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:ResourceTag/kloud-kraken": "true"
+        }
+      }
     },
     {
       "Sid": "EC2PassRoleForInstanceProfile",
@@ -131,8 +143,8 @@ func ServerPermPolicyGen(region string, accountId string,
       "Resource": "arn:aws:iam::%s:role/%s"
     }
   ]
-}`, region, accountId, ssmParam, bucketName, region, accountId, region,
-    accountId, region, accountId, accountId, clientRoleName)
+}`, region, accountId, ssmParam, bucketName,
+    bucketName, accountId, clientRoleName)
 }
 
 
@@ -167,17 +179,33 @@ func ServerTrustPolicyGen(accountId string, iamUser string) string {
 // @Returns
 //
 //
-func VpcFlowLogsPermPolicyGen() string {
-	return `{
+func VpcFlowLogsPermPolicyGen(region string, accountId string,
+                              logGroupName string) string {
+    return fmt.Sprintf(`{
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {
-      "Service": "vpc-flow-logs.amazonaws.com"
-    },
-    "Action": "sts:AssumeRole"
-  }]
-}`
+  "Statement": [
+    {
+      "Sid": "AllowCreateAndWriteToKloudKrakenFlowLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:logs:%s:%s:log-group:%s",
+        "arn:aws:logs:%s:%s:log-group:%s:*",
+        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/%s",
+        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/%s:*"
+      ]
+    }
+  ]
+}`, region, accountId, logGroupName,
+    region, accountId, logGroupName,
+    region, accountId, logGroupName,
+    region, accountId, logGroupName)
 }
 
 
@@ -190,19 +218,17 @@ func VpcFlowLogsPermPolicyGen() string {
 //
 //
 func VpcFlowLogsTrustPolicyGen() string {
-	return `{
-  "Version":"2012-10-17",
-  "Statement":[{
-    "Effect":"Allow",
-    "Action":[
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-      "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams"
-    ],
-    "Resource":"*"
-  }]
+    return `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "vpc-flow-logs.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
 }`
 }
 
@@ -215,40 +241,28 @@ func VpcFlowLogsTrustPolicyGen() string {
 // @Returns
 //
 //
-func VpcS3EndpointPolicyGen(bucketName string, vpcId string) string {
+func VpcS3EndpointPolicyGen(bucketName string, iamArn string) string {
     return fmt.Sprintf(`{
+  "Version": "2012-10-17",
   "Statement": [
     {
-      "Principal": "*",
+      "Sid": "AllowKKUserToKKBucketOnly",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "%s"
+      },
       "Action": [
         "s3:GetObject",
         "s3:PutObject",
         "s3:ListBucket"
       ],
-      "Effect": "Allow",
       "Resource": [
         "arn:aws:s3:::%s",
         "arn:aws:s3:::%s/*"
-      ],
-      "Condition": {
-        "StringEquals": {
-          "aws:SourceVpc": "%s"
-        }
-      }
-    },
-    {
-      "Principal": "*",
-      "Action": "s3:*",
-      "Effect": "Deny",
-      "Resource": "*",
-      "Condition": {
-        "StringNotEquals": {
-          "aws:SourceVpc": "%s"
-        }
-      }
+      ]
     }
   ]
-}`, bucketName, bucketName, vpcId, vpcId)
+}`, iamArn, bucketName, bucketName)
 }
 
 
@@ -260,14 +274,15 @@ func VpcS3EndpointPolicyGen(bucketName string, vpcId string) string {
 // @Returns
 //
 //
-func VpcSsmEndpointPolicyGen(accountId string, region string,
-                             vpcId string) string {
+func VpcSsmEndpointPolicyGen(accountId, region, iamArn string) string {
     return fmt.Sprintf(`{
+  "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "AllowKKUserSSMParams",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::%s:root"
+        "AWS": "%s"
       },
       "Action": [
         "ssm:GetParameter",
@@ -276,13 +291,9 @@ func VpcSsmEndpointPolicyGen(accountId string, region string,
         "ssm:PutParameter",
         "ssm:DeleteParameter"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/*",
-      "Condition": {
-        "StringEquals": {
-          "aws:SourceVpc": "%s"
-        }
-      }
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/*"
     }
   ]
-}`, accountId, region, accountId, vpcId)
+}`, iamArn, region, accountId)
 }
+

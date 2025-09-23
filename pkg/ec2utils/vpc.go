@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Creates and waits for the VPC to be created.
@@ -19,14 +20,14 @@ import (
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
-//  - tagName:  Name to tag the AWS resource
+//  - tags:  Map of tags to be applied to resource
 //
 // @Returns
 //  - The ID of the created VPC
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
-                                   tagName string) (string, error) {
+                                   tags map[string]string) (string, error) {
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -35,16 +36,11 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
         CidrBlock: aws.String(cidrBlock),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeVpc,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -125,17 +121,18 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
 //  - callTime:  The length of time the API call is allowed to execute
 //  - vpcID:  The ID of the VPC to ensure exists
 //  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//  - tags:  Map of tags to be applied to resource
 //
 // @Returns
 //  - The ID of VPC if created, otherwise nil
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
-                                      cidrBlock string, tagName string) (
+                                      cidrBlock string, tags map[string]string) (
                                       string, error) {
     // Ensure required args are present
-    if cidrBlock == "" || tagName == "" {
-        return "", errors.New("cidrBlock or tagName is missing")
+    if cidrBlock == "" {
+        return "", errors.New("cidrBlock is missing")
     }
 
     // If VPC ID is present in state file
@@ -153,7 +150,7 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
     }
 
     // Wait until VPC is created
-    return Ec2Man.vpcCreate(callTime, cidrBlock, tagName)
+    return Ec2Man.vpcCreate(callTime, cidrBlock, tags)
 }
 
 

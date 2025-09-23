@@ -118,7 +118,7 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
                                              flowLogId string, vpcId string,
                                              cwlClient *cloudwatchlogs.Client,
                                              logGroupName string, roleArn string,
-                                             retentionDays int32, tagName string) (
+                                             retentionDays int32, tags map[string]string) (
                                              string, error) {
     // Ensure required args are present
     if vpcId == "" || cwlClient == nil || logGroupName == "" || roleArn == "" {
@@ -143,10 +143,8 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
         LogGroupName: aws.String(logGroupName),
     }
 
-    if tagName != "" {
-        callInput.Tags = map[string]string{
-            "Name": tagName,
-        }
+    if len(tags) > 0 {
+        callInput.Tags = tags
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -174,7 +172,7 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
     flowLogId, err = Ec2Man.createFlowLogToCloudWatch(callTime, vpcId,
                                                       logGroupName,
                                                       roleArn,
-                                                      tagName)
+                                                      tags["Name"])
     if err != nil {
         return "", fmt.Errorf("creating flow log to CloudWatch - %w", err)
     }

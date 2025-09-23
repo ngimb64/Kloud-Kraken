@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Regex to match IAM ARN
@@ -144,7 +145,7 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
 //
 func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName string,
                                           trustPolicyJson string, permPolicyName string,
-                                          permPolicyJson string, tagName string,
+                                          permPolicyJson string, tags map[string]string,
                                           createProfile bool) (
                                           string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -156,13 +157,8 @@ func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName strin
         RoleName:                 aws.String(roleName),
     }
 
-    if tagName != "" {
-        createInput.Tags = []iamtypes.Tag{
-            {
-                Key: aws.String("Name"),
-                Value: aws.String(tagName),
-            },
-        }
+    if len(tags) > 0 {
+        createInput.Tags = awsutils.BuildIamTags(tags)
     }
 
     // Create the IAM role
@@ -186,7 +182,7 @@ func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName strin
 
     // If specified, create instance profile and attach role to it
     if createProfile {
-        err = IamMan.createInstanceProfile(callTime, roleName, tagName)
+        err = IamMan.createInstanceProfile(callTime, roleName, tags["Name"])
         if err != nil {
             return roleArn, fmt.Errorf("creating EC2 instace profile - %w", err)
         }
@@ -247,7 +243,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
                                            trustPolicyJson string,
                                            permPolicyName string,
                                            permPolicyJson string,
-                                           tagName string,
+                                           tags map[string]string,
                                            createProfile bool) (
                                            string, error) {
     // Ensure required args are present
@@ -280,8 +276,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
     // Create the IAM role using the default assigned name
     return IamMan.iamRoleCreation(callTime, defaultRoleName,
                                   trustPolicyJson, permPolicyName,
-                                  permPolicyJson, tagName,
-                                  createProfile)
+                                  permPolicyJson, tags, createProfile)
 }
 
 // Handles the full deletion of an IAM role, TODO: add more

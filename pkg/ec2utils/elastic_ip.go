@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 //
@@ -21,7 +21,7 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
-                                         tagName string) (
+                                         tags map[string]string) (
                                          string, error) {
     // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -31,16 +31,11 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
         Domain: ec2types.DomainTypeVpc,
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         callInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeElasticIp,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -126,7 +121,7 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
                                             eipId string,
-                                            tagName string) (
+                                            tags map[string]string) (
                                             string, error) {
     // If Elastic IP ID is present in state file
     if eipId != "" {
@@ -143,7 +138,7 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
     }
 
     // Create and wait until VPC is created
-    return Ec2Man.elasticIPCreate(callTime, tagName)
+    return Ec2Man.elasticIPCreate(callTime, tags)
 }
 
 

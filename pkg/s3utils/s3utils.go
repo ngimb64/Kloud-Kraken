@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Struct for managing S3 bucket operations
@@ -47,7 +48,8 @@ func S3NewManager(config aws.Config) *S3Manager {
 //  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
-                                       bucketName string) (
+                                       bucketName string,
+                                       tags map[string]string) (
                                        string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -92,6 +94,21 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
     err = waiter.Wait(ctx, &waiterCallInput, callTime)
     if err != nil {
         return bucketName, err
+    }
+
+    if len(tags) > 0 {
+        putBucketTagInput := &s3.PutBucketTaggingInput{
+            Bucket: aws.String(bucketName),
+            Tagging: &s3types.Tagging{
+                TagSet: awsutils.BuildS3Tags(tags),
+            },
+        }
+
+        // Tag the bucket after creation if there are tags
+        _, err = S3Man.client.PutBucketTagging(ctx, putBucketTagInput)
+        if err != nil {
+            return bucketName, err
+        }
     }
 
     return bucketName, nil
@@ -201,7 +218,8 @@ func (S3Man *S3Manager) S3GetObject(callTime time.Duration,
 //
 func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
                                           bucketName string,
-                                          defaultBucketName string) (
+                                          defaultBucketName string,
+                                          tags map[string]string) (
                                           string, error) {
     // If the bucket name is present in state file
     if bucketName != "" {
@@ -218,7 +236,7 @@ func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
     }
 
     // Create S3 bucket with default name
-    return S3Man.s3BucketCreate(callTime, defaultBucketName)
+    return S3Man.s3BucketCreate(callTime, defaultBucketName, tags)
 }
 
 // Put an object into a S3 bucket.

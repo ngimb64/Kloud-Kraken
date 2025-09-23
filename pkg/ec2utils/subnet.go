@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 //
@@ -21,7 +22,8 @@ import (
 //
 //
 func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
-                                      cidrBlock string, az string, tagName string,
+                                      cidrBlock string, az string,
+                                      tags map[string]string,
                                       isPublic bool) (string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -33,16 +35,11 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
         VpcId:            aws.String(vpcId),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeSubnet,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -145,7 +142,7 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string,
                                          vpcID string, cidrBlock string,
-                                         az string, tagName string,
+                                         az string, tags map[string]string,
                                          isPublic bool) (
                                          string, error) {
     // Ensure required args are present
@@ -169,7 +166,7 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
 
     // Create new subnet
     return Ec2Man.subnetCreate(callTime, vpcID, cidrBlock,
-                               az, tagName, isPublic)
+                               az, tags, isPublic)
 }
 
 

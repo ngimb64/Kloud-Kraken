@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Generic creator for Gateway endpoints (S3).
@@ -25,7 +26,7 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
                                                vpcId string,
                                                serviceName string,
                                                routeTableIds []string,
-                                               tagName string) (
+                                               tags map[string]string) (
                                                string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -39,16 +40,11 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
         VpcId:           aws.String(vpcId),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         callInput.TagSpecifications = []ec2types.TagSpecification{
          {
             ResourceType: ec2types.ResourceTypeVpcEndpoint,
-            Tags: []ec2types.Tag{
-                {
-                    Key: aws.String("Name"),
-                    Value: aws.String(tagName),
-                },
-            },
+            Tags: awsutils.BuildEc2Tags(tags),
          },
         }
     }
@@ -84,7 +80,7 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
                                                  serviceName string,
                                                  subnetIds []string,
                                                  securityGroupIds []string,
-                                                 tagName string) (
+                                                 tags map[string]string) (
                                                  string, error) {
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -100,16 +96,11 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
         VpcId:             aws.String(vpcId),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         callInput.TagSpecifications = []ec2types.TagSpecification{
          {
             ResourceType: ec2types.ResourceTypeVpcEndpoint,
-            Tags: []ec2types.Tag{
-                {
-                    Key: aws.String("Name"),
-                    Value: aws.String(tagName),
-                },
-            },
+            Tags: awsutils.BuildEc2Tags(tags),
          },
         }
     }
@@ -144,7 +135,7 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
                                              region string, vpcId string,
                                              policyDocument string,
                                              routeTableIds []string,
-                                             tagName string) (
+                                             tags map[string]string) (
                                              string, error) {
     // Ensure required args are present
     if vpcId == "" || region == "" || policyDocument == "" {
@@ -175,7 +166,7 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
     }
 
     return Ec2Man.gatewayEndpointCreate(callTime, policyDocument, vpcId,
-                                        serviceName, routeTableIds, tagName)
+                                        serviceName, routeTableIds, tags)
 }
 
 // SSM provisioner: tiny function that reuses vpcEndpointExists + interfaceEndpointCreate.
@@ -191,7 +182,7 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
                                               vpcId string, policyDocument string,
                                               subnetIds []string,
                                               securityGroupIds []string,
-                                              tagName string) (
+                                              tags map[string]string) (
                                               string, error) {
     // Ensure required args are present
     if region == "" || vpcId == "" || policyDocument == "" {
@@ -224,7 +215,7 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
     // Private DNS enabled for SSM
     return Ec2Man.interfaceEndpointCreate(callTime, policyDocument, vpcId,
                                           serviceName, subnetIds,
-                                          securityGroupIds, tagName)
+                                          securityGroupIds, tags)
 }
 
 // Generic existence checker usable by S3, SSM, etc.

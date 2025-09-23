@@ -11,6 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -89,6 +93,102 @@ func AwsConfigSetup(callTime time.Duration, region string) (
     }
 
     return cfg, nil
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func BuildEc2Tags(tagMap map[string]string) []ec2types.Tag {
+    tags := make([]ec2types.Tag, 0, len(tagMap))
+
+    // Iterate through the tags map
+    for key, value := range tagMap {
+        // Add the key-value in map to tags slice
+        tags = append(tags, ec2types.Tag{
+            Key:   aws.String(key),
+            Value: aws.String(value),
+        })
+    }
+
+    return tags
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func BuildIamTags(tagMap map[string]string) []iamtypes.Tag {
+	tags := make([]iamtypes.Tag, 0, len(tagMap))
+
+    // Iterate through the tags map
+	for k, v := range tagMap {
+        // Add the key-value in map to tags slice
+		tags = append(tags, iamtypes.Tag{
+			Key:   aws.String(k),
+			Value: aws.String(v),
+		})
+	}
+
+	return tags
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func BuildS3Tags(tagMap map[string]string) []s3types.Tag {
+    tags := make([]s3types.Tag, 0, len(tagMap))
+
+    // Iterate through the tags map
+    for key, value := range tagMap {
+        // Add the key-value in map to tags slice
+        tags = append(tags, s3types.Tag{
+            Key:   aws.String(key),
+            Value: aws.String(value),
+        })
+    }
+
+    return tags
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
+    tags := make([]ssmtypes.Tag, 0, len(tagMap))
+
+    // Iterate through the tags map
+    for key, value := range tagMap {
+        // Add the key-value in map to tags slice
+        tags = append(tags, ssmtypes.Tag{
+            Key:   aws.String(key),
+            Value: aws.String(value),
+        })
+    }
+
+    return tags
 }
 
 

@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Struct for managing S3 bucket operations
@@ -80,7 +81,7 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
                                           parameter string,
                                           data string,
-                                          tagName string) (
+                                          tags map[string]string) (
                                           string, error) {
     var existsErr *ssmtypes.ParameterAlreadyExists
 
@@ -99,13 +100,8 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
         }
 
         // If tag was specified, add it to input
-        if tagName != "" {
-            callInput.Tags = []ssmtypes.Tag{
-                {
-                    Key: aws.String("Name"),
-                    Value: aws.String(tagName),
-                },
-            }
+        if len(tags) > 0 {
+            callInput.Tags = awsutils.BuildSsmTags(tags)
         }
 
         // Put parameter into AWS SSM Parameter Store

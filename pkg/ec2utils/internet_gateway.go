@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 //
@@ -22,7 +23,7 @@ import (
 //
 func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
                                                         vpcId string,
-                                                        tagName string) (
+                                                        tags map[string]string) (
                                                         string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -30,16 +31,11 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
 
     createCallInput := &ec2.CreateInternetGatewayInput{}
 
-    if tagName != "" {
+    if len(tags) > 0 {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeInternetGateway,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -159,7 +155,7 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
 func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
                                                   igwId string,
                                                   vpcId string,
-                                                  nameTag string) (
+                                                  tags map[string]string) (
                                                   string, error) {
     // Ensure required args are present
     if vpcId == "" {
@@ -181,7 +177,7 @@ func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
     }
 
     // Create new internet gateway
-    return Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId, nameTag)
+    return Ec2Man.internetGatewayCreateAndAttach(callTime, vpcId, tags)
 }
 
 

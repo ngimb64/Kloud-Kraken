@@ -584,13 +584,18 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, bootstrapOut, err
     }
 
+    tags := map[string]string{
+        "kloud-kraken": "true",
+        "Name": "kloud-kraken-ssm-tls-cert",
+    }
+
     // Setup client to SSM
     ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
     ssmParam, err := ssmClient.SsmPutParameter(1 * time.Minute,
                                             "/kloud-kraken/tls-cert",
                                             string(TlsMan.CertPemBlock),
-                                            "kloud-kraken-ssm-tls-cert")
+                                            tags)
     if err != nil {
         return awsConfig, bootstrapOut, err
     }
@@ -633,6 +638,11 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, bootstrapOut, err
     }
 
+    tags = map[string]string{
+        "kloud-kraken": "true",
+        "Name": "kloud-kraken-ec2-client",
+    }
+
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
@@ -641,7 +651,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,
                                        appConfig.LocalConfig.NumberInstances,
-                                       "client-role", "kloud-kraken-ec2-client",
+                                       "client-role", tags,
                                        []string{bootstrapOut.Ec2SgId},
                                        bootstrapOut.PrivSubnetId)
     if err != nil {

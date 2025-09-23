@@ -89,6 +89,7 @@ vpc_setup.go/main.go:
         - CreateBucket
         - HeadBucket
         - NewBucketExistsWaiter
+        - PutBucketTagging
     - Create VPC endpoints (e.g., S3, SSM) for private access
         - DescribeVpcEndpoints
         - CreateVpcEndpoint

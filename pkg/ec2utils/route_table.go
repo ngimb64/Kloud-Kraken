@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Create a route table in the VPC add the passed in route to either
@@ -21,9 +22,10 @@ import (
 // @Returns
 //
 //
-func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId string,
-                                                   igwId string, natId string,
-                                                   destCidr string, nameTag string,
+func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration,
+                                                   vpcId string, igwId string,
+                                                   natId string, destCidr string,
+                                                   tags map[string]string,
                                                    subnetId string) (
                                                    string, error) {
     // Ensure required arg is present
@@ -45,16 +47,11 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
     }
 
     // Tag the route table name if provided
-    if nameTag != "" {
+    if len(tags) > 0 {
         createRouteTableCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeRouteTable,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(nameTag),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -180,7 +177,8 @@ func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
 func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string,
                                              vpcId string, igwId string,
                                              natId string, subnetId string,
-                                             destCidr string, nameTag string) (
+                                             destCidr string,
+                                             tags map[string]string) (
                                              string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
@@ -208,7 +206,7 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
 
     // Create a new route table with the chosen target and optionally associate it
     return Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId, natId,
-                                            destCidr, nameTag, subnetId)
+                                            destCidr, tags, subnetId)
 }
 
 

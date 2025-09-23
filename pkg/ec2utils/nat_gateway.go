@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Create a NAT gateway in the specified subnet using the provided EIP allocation ID.
@@ -23,7 +24,7 @@ import (
 func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
                                                  subnetID string,
                                                  eipId string,
-                                                 nameTag string) (
+                                                 tags map[string]string) (
                                                  string, error) {
     // Ensure required args are present
     if subnetID == ""  || eipId == "" {
@@ -40,16 +41,11 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
     }
 
     // Tag the NAT gateway name if provided
-    if nameTag != "" {
+    if len(tags) > 0 {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeNatgateway,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(nameTag),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -147,7 +143,8 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
 //
 func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId string,
                                              subnetId string, eipId string,
-                                             nameTag string) (string, error) {
+                                             tags map[string]string) (
+                                             string, error) {
     // Ensure required args are present
     if subnetId == "" || eipId == "" {
         return "", errors.New("subnetId or eipId is missing")
@@ -168,8 +165,7 @@ func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId strin
     }
 
     // Create and wait for a new NAT gateway
-    return Ec2Man.natGatewayCreateAndWait(callTime, subnetId,
-                                          eipId, nameTag)
+    return Ec2Man.natGatewayCreateAndWait(callTime, subnetId, eipId, tags)
 }
 
 
