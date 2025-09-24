@@ -26,7 +26,12 @@ func ClientPermPolicyGen(bucketName string, region string,
       "Action": [
         "s3:GetObject"
       ],
-      "Resource": "arn:aws:s3:::%s/*"
+      "Resource": "arn:aws:s3:::%s/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/kloud-kraken": "true"
+        }
+      }
     },
     {
       "Sid": "SSMFetchParameters",
@@ -36,9 +41,12 @@ func ClientPermPolicyGen(bucketName string, region string,
         "ssm:GetParameters",
         "ssm:GetParametersByPath"
       ],
-      "Resource": [
-        "arn:aws:ssm:%s:%s:parameter%s*"
-      ]
+      "Resource": "arn:aws:ssm:%s:%s:parameter%s*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/kloud-kraken": "true"
+        }
+      }
     },
     {
       "Sid": "CloudWatchLogging",
@@ -46,12 +54,36 @@ func ClientPermPolicyGen(bucketName string, region string,
       "Action": [
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
-        "logs:PutLogEvents"
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:PutRetentionPolicy",
+        "logs:CreateTags"
       ],
-      "Resource": "arn:aws:logs:%s:%s:log-group:/%s*"
+      "Resource": "arn:aws:logs:%s:%s:log-group:/%s*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/kloud-kraken": "true"
+        }
+      }
+    },
+    {
+      "Sid": "ManageSecurityGroupEgress",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:DescribeSecurityGroups"
+      ],
+      "Resource": "arn:aws:ec2:%s:%s:security-group/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/kloud-kraken": "true"
+        }
+      }
     }
   ]
-}`, bucketName, region, accountId, paramPath, region, accountId, logGroup)
+}`, bucketName, region, accountId, paramPath, region,
+    accountId, logGroup, region, accountId)
 }
 
 
@@ -124,8 +156,11 @@ func ServerPermPolicyGen(region string, accountId string,
         "ec2:DescribeInstances",
         "ec2:CreateTags",
         "ec2:DeleteNatGateway",
+        "ec2:DescribeNatGateways",
         "ec2:ReleaseAddress",
-        "ec2:DeleteVpcEndpoints"
+        "ec2:DescribeAddresses",
+        "ec2:DeleteVpcEndpoints",
+        "ec2:DescribeVpcEndpoints"
       ],
       "Resource": "*",
       "Condition": {

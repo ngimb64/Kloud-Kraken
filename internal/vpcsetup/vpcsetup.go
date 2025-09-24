@@ -604,8 +604,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Create and appy the VPC flow logs role
     vpcFlowLogArn, err := iamClient.IamRoleProvision(5 * time.Minute,
                                                      stateConfig.AwsEnv.IamArnVpcFlowLogs,
-                                                     "vpc-flow-logs-role", trustPolicy,
-                                                     "vpc-flow-log-permissions",
+                                                     "KloudKrakenVpcFlowLogsRole", trustPolicy,
+                                                     "KloudKrakenVpcFlowLogPerms",
                                                      permissionsPolicy, tags, false)
     if err != nil {
         return outStruct, err
@@ -664,8 +664,8 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Create and apply the EC2 client role
     clientArn, err := iamClient.IamRoleProvision(5 * time.Minute,
                                                  stateConfig.AwsEnv.IamArnClient,
-                                                 "client-role", trustPolicy,
-                                                 "client-permissions",
+                                                 "KloudKrakenClientRole", trustPolicy,
+                                                 "KloudKrakenClientPerms",
                                                  permissionsPolicy,
                                                  tags, true)
     if err != nil {
@@ -693,12 +693,12 @@ func VpcBootstrap(appConfig conf.AppConfig,
     permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
                                                      outStruct.AccountId,
                                                      "/kloud-kraken/tls-cert",
-                                                     bucketName, "client-role")
+                                                     bucketName, "KloudKrakenClientRole")
     // Create and apply role for local server permissions
     outStruct.ServerArn, err = iamClient.IamRoleProvision(5 * time.Minute,
                                                           stateConfig.AwsEnv.IamArnServer,
-                                                          "server-role", trustPolicy,
-                                                          "server-permissions",
+                                                          "KloudKrakenServerRole", trustPolicy,
+                                                          "KloudKrakenServerPerms",
                                                           permissionsPolicy,
                                                           tags, false)
     if err != nil {

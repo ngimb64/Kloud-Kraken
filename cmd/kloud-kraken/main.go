@@ -651,7 +651,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                        appConfig.LocalConfig.InstanceType,
                                        appConfig.LocalConfig.NumberInstances,
                                        appConfig.LocalConfig.NumberInstances,
-                                       "client-role", tags,
+                                       "KloudKrakenClientRole", tags,
                                        []string{bootstrapOut.Ec2SgId},
                                        bootstrapOut.PrivSubnetId)
     if err != nil {

@@ -67,39 +67,21 @@
 
 - Begin by downloading the project with `git clone https://github.com/ngimb64/Kloud-Kraken.git`
 
+- Run the installation script
+	- `./setup.sh`
+
 ### Cloud Setup
 
 - Start by ensuring an AWS account is created and log in as the root user
 - In the search bar, search "budgets" which will find the budgets feature in "Billing and Cost Management"
 - Create a budget an set a monetary limit based on the intended budget
-- Search IAM to access the IAM services, create a user with the following permission in the policy editor
-```
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateRole",
-        "iam:GetRole",
-        "iam:PutRolePolicy",
-        "iam:CreateInstanceProfile",
-        "iam:AddRoleToInstanceProfile",
-        "sts:AssumeRole"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
+- Run the policy generator program to generate policy for bootstrap role
+  - `./bin/policygen <account_id> <region>`
+- Search IAM to access the IAM services, create a user group with the permissions policy just generated in the policy editor
 - Create a user and assign them to the created user group with IAM permissions
 - Generate access keys for the newly created user
 
 ### Local Setup
-
-- Run the installation script
-	- `./setup.sh`
-<br>
 
 - When running the program in full mode with AWS environment there are two options for credential setup
     - Configure API access credentials locally before running with `aws configure` (preferred)
