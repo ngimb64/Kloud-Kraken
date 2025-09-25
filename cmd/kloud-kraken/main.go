@@ -647,17 +647,22 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "Name": "kloud-kraken-ec2-client",
     }
 
+    ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
+        AMI:              "ami-0eb94e3d16a6eea5f",
+        InstanceType:     appConfig.LocalConfig.InstanceType,
+        MaxCount:         appConfig.LocalConfig.NumberInstances,
+        MinCount:         appConfig.LocalConfig.NumberInstances,
+        RoleName:         "KloudKrakenClientRole",
+        SecurityGroupIds: []string{bootstrapOut.Ec2SgId},
+        SubnetId:         bootstrapOut.PrivSubnetId,
+        Tags:             tags,
+        UserData:         []byte(userData),
+    }
+
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
-    err = ec2Client.Ec2CreateInstances(15 * time.Minute, []byte(userData),
-                                       "ami-0eb94e3d16a6eea5f",
-                                       appConfig.LocalConfig.InstanceType,
-                                       appConfig.LocalConfig.NumberInstances,
-                                       appConfig.LocalConfig.NumberInstances,
-                                       "KloudKrakenClientRole", tags,
-                                       []string{bootstrapOut.Ec2SgId},
-                                       bootstrapOut.PrivSubnetId)
+    err = ec2Client.Ec2CreateInstances(15 * time.Minute, ec2CreateInstancesInput)
     if err != nil {
         return awsConfig, bootstrapOut, err
     }
@@ -904,8 +909,8 @@ func main() {
             }
 
             // Terminate the NAT Gateway
-            err = bootstrapOut.Ec2Client.NatGatewayTerminate(10 * time.Minute,
-                                                             bootstrapOut.NatGatewayId)
+            err = bootstrapOut.Ec2Client.NatGatewayTerminator(10 * time.Minute,
+                                                              bootstrapOut.NatGatewayId)
             if err != nil {
                 log.Printf("Error deleting NAT Gateway:  %v", err)
             } else {
@@ -913,8 +918,8 @@ func main() {
             }
 
             // Release the Elastic IP
-            err = bootstrapOut.Ec2Client.ElasticIpTerminate(1 * time.Minute,
-                                                            bootstrapOut.EipId)
+            err = bootstrapOut.Ec2Client.ElasticIpTerminator(1 * time.Minute,
+                                                             bootstrapOut.EipId)
             if err != nil {
                 log.Printf("Error releasing Elastic IP:  %v", err)
             } else {
@@ -922,8 +927,8 @@ func main() {
             }
 
             // Terminate SSM Parameter Store VPC Interface Endpoint
-            err = bootstrapOut.Ec2Client.VpcEndpointsTerminate(1 * time.Minute,
-                                                               []string{bootstrapOut.SsmVpcEndpointId})
+            err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
+                                                                []string{bootstrapOut.SsmVpcEndpointId})
             if err != nil {
                 log.Printf("Error deleting SSM Parameter Store VPC Interface Endpoint:  %v", err)
             } else {
@@ -931,8 +936,8 @@ func main() {
             }
 
             // Delete the S3 bucket and its contents
-            err = bootstrapOut.S3Client.S3TerminateBucket(5 * time.Minute,
-                                                          bootstrapOut.S3BucketName)
+            err = bootstrapOut.S3Client.S3BucketTerminator(5 * time.Minute,
+                                                           bootstrapOut.S3BucketName)
             if err != nil {
                 log.Printf("Error deleting S3 bucket and its contents:  %v", err)
             } else {

@@ -100,8 +100,8 @@ func main() {
 
     if stateConfig.AwsEnv.S3BucketName != "" {
         // Delete the S3 bucket and its contents
-        err = s3Client.S3TerminateBucket(5 * time.Minute,
-                                         stateConfig.AwsEnv.S3BucketName)
+        err = s3Client.S3BucketTerminator(5 * time.Minute,
+                                          stateConfig.AwsEnv.S3BucketName)
         if err != nil {
             log.Printf("Error deleting S3 bucket and its contents:  %v", err)
             hadError = true
@@ -123,8 +123,8 @@ func main() {
 
     if stateConfig.AwsEnv.FlowLogId != "" {
         // Delete the VPC Flow Logs
-        err = ec2Client.VpcFlowLogTerminate(1 * time.Minute,
-                                            []string{stateConfig.AwsEnv.FlowLogId})
+        err = ec2Client.VpcFlowLogTerminator(1 * time.Minute,
+                                             []string{stateConfig.AwsEnv.FlowLogId})
         if err != nil {
             log.Printf("Error deleting VPC Flow Logs:  %v", err)
             hadError = true
@@ -141,16 +141,16 @@ func main() {
     }
 
     // Delete the CloudWatch logging stream and group for EC2 clients
-    err = cloudwatchutils.TerminateCloudWatchLogger(1 * time.Minute, cwlClient,
-                                                    "kloud-kraken-logs", []string{})
+    err = cloudwatchutils.CloudWatchLoggerTerminator(1 * time.Minute, cwlClient,
+                                                     "kloud-kraken-logs", []string{})
     if err != nil {
         log.Printf("Error deleting CloudWatch logging stream and group:  %v", err)
     }
 
     if stateConfig.AwsEnv.S3VpcEndpointId != "" {
         // Terminate S3 bucket VPC Endpoint
-        err = ec2Client.VpcEndpointsTerminate(1 * time.Minute,
-                                              []string{stateConfig.AwsEnv.S3VpcEndpointId})
+        err = ec2Client.VpcEndpointsTerminator(1 * time.Minute,
+                                               []string{stateConfig.AwsEnv.S3VpcEndpointId})
         if err != nil {
             log.Printf("Error deleting S3 VPC Endpoint:  %v", err)
             hadError = true
@@ -161,8 +161,8 @@ func main() {
 
     if stateConfig.AwsEnv.SsmVpcEndpointId != "" {
         // Terminate SSM Parameter Store VPC Endpoint
-        err = ec2Client.VpcEndpointsTerminate(1 * time.Minute,
-                                              []string{stateConfig.AwsEnv.SsmVpcEndpointId})
+        err = ec2Client.VpcEndpointsTerminator(1 * time.Minute,
+                                               []string{stateConfig.AwsEnv.SsmVpcEndpointId})
         if err != nil {
             log.Printf("Error deleting SSM Parameter Store VPC Endpoint:  %v", err)
             hadError = true
@@ -173,8 +173,8 @@ func main() {
 
     if stateConfig.AwsEnv.NatGatewayId != "" {
         // Terminate the NAT Gateway
-        err = ec2Client.NatGatewayTerminate(10 * time.Minute,
-                                            stateConfig.AwsEnv.NatGatewayId)
+        err = ec2Client.NatGatewayTerminator(10 * time.Minute,
+                                             stateConfig.AwsEnv.NatGatewayId)
         if err != nil {
             log.Printf("Error deleting NAT Gateway:  %v", err)
             hadError = true
@@ -185,8 +185,8 @@ func main() {
 
     if stateConfig.AwsEnv.EipId != "" {
         // Release the Elastic IP
-        err = ec2Client.ElasticIpTerminate(1 * time.Minute,
-                                           stateConfig.AwsEnv.EipId)
+        err = ec2Client.ElasticIpTerminator(1 * time.Minute,
+                                            stateConfig.AwsEnv.EipId)
         if err != nil {
             log.Printf("Error releasing Elastic IP:  %v", err)
             hadError = true
@@ -197,8 +197,8 @@ func main() {
 
     if stateConfig.AwsEnv.PrivateAssociationId != "" {
         // Disassociate private route table <-> subnet
-        err = ec2Client.RouteTableAssociateTerminate(1 * time.Minute,
-                                                     stateConfig.AwsEnv.PrivateAssociationId)
+        err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
+                                                      stateConfig.AwsEnv.PrivateAssociationId)
         if err != nil {
             log.Printf("Error disassociating private route table <-> subnet:  %v", err)
             hadError = true
@@ -209,8 +209,8 @@ func main() {
 
     if stateConfig.AwsEnv.PublicAssociationId != "" {
         // Disassociate public route table <-> public subnet
-        err = ec2Client.RouteTableAssociateTerminate(1 * time.Minute,
-                                                     stateConfig.AwsEnv.PublicAssociationId)
+        err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
+                                                      stateConfig.AwsEnv.PublicAssociationId)
         if err != nil {
             log.Printf("Error disassociating public route table <-> subnet:  %v", err)
             hadError = true
@@ -221,8 +221,8 @@ func main() {
 
     if stateConfig.AwsEnv.PrivateRouteId != "" {
         // Delete the private route table
-        err = ec2Client.RouteTableTerminate(1 * time.Minute,
-                                            stateConfig.AwsEnv.PrivateRouteId)
+        err = ec2Client.RouteTableTerminator(1 * time.Minute,
+                                             stateConfig.AwsEnv.PrivateRouteId)
         if err != nil {
             log.Printf("Error deleting Private Route Table:  %v", err)
             hadError = true
@@ -233,8 +233,8 @@ func main() {
 
     if stateConfig.AwsEnv.PublicRouteId != "" {
         // Delete the public route table
-        err = ec2Client.RouteTableTerminate(1 * time.Minute,
-                                            stateConfig.AwsEnv.PublicRouteId)
+        err = ec2Client.RouteTableTerminator(1 * time.Minute,
+                                             stateConfig.AwsEnv.PublicRouteId)
         if err != nil {
             log.Printf("Error deleting Public Route Table:  %v", err)
             hadError = true
@@ -245,9 +245,9 @@ func main() {
 
     if stateConfig.AwsEnv.IgwId != "" {
         // Detach and delete the Internet Gateway
-        err = ec2Client.InternetGatewayTerminate(2 * time.Minute,
-                                                 stateConfig.AwsEnv.IgwId,
-                                                 stateConfig.AwsEnv.VpcId)
+        err = ec2Client.InternetGatewayTerminator(2 * time.Minute,
+                                                  stateConfig.AwsEnv.IgwId,
+                                                  stateConfig.AwsEnv.VpcId)
         if err != nil {
             log.Printf("Error deleting Internet Gateway:  %v", err)
             hadError = true
@@ -258,8 +258,8 @@ func main() {
 
     if stateConfig.AwsEnv.PrivateSubnetId != "" {
         // Delete the private subnet
-        err = ec2Client.SubnetTerminate(1 * time.Minute,
-                                        stateConfig.AwsEnv.PrivateSubnetId)
+        err = ec2Client.SubnetTerminator(1 * time.Minute,
+                                         stateConfig.AwsEnv.PrivateSubnetId)
         if err != nil {
             log.Printf("Error deleting private subnet:  %v", err)
             hadError = true
@@ -270,8 +270,8 @@ func main() {
 
     if stateConfig.AwsEnv.PublicSubnetId != "" {
         // Delete the public subnet
-        err = ec2Client.SubnetTerminate(1 * time.Minute,
-                                        stateConfig.AwsEnv.PublicSubnetId)
+        err = ec2Client.SubnetTerminator(1 * time.Minute,
+                                         stateConfig.AwsEnv.PublicSubnetId)
         if err != nil {
             log.Printf("Error deleting public subnet:  %v", err)
             hadError = true
@@ -282,8 +282,8 @@ func main() {
 
     if stateConfig.AwsEnv.Ec2SecurityGroupId != "" {
         // Delete the EC2 security group
-        err = ec2Client.SecurityGroupTerminate(1 * time.Minute,
-                                               stateConfig.AwsEnv.Ec2SecurityGroupId)
+        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
+                                                stateConfig.AwsEnv.Ec2SecurityGroupId)
         if err != nil {
             log.Printf("Error deleting EC2 seecurity group:  %v", err)
             hadError = true
@@ -294,8 +294,8 @@ func main() {
 
     if stateConfig.AwsEnv.SsmSecurityGroupId != "" {
         // Delete the SSM Parameter Store security group
-        err = ec2Client.SecurityGroupTerminate(1 * time.Minute,
-                                               stateConfig.AwsEnv.SsmSecurityGroupId)
+        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
+                                                stateConfig.AwsEnv.SsmSecurityGroupId)
         if err != nil {
             log.Printf("Error deleting SSM security group:  %v", err)
             hadError = true
@@ -306,8 +306,8 @@ func main() {
 
     if stateConfig.AwsEnv.VpcId != "" {
         // Delete the VPC
-        err = ec2Client.VpcTerminate(5 * time.Minute,
-                                     stateConfig.AwsEnv.VpcId)
+        err = ec2Client.VpcTerminator(5 * time.Minute,
+                                      stateConfig.AwsEnv.VpcId)
         if err != nil {
             log.Printf("Error deleting VPC:  %v", err)
             hadError = true

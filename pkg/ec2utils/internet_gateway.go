@@ -13,13 +13,17 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-//
+// Creates a Internet Gateway in the passed in VPC and returns the ID
+// of created resource.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The VPC ID where the Internet Gateway resides
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - The Internet Gateway ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
                                                         vpcId string,
@@ -80,13 +84,16 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     return igwId, nil
 }
 
-//
+// Checks to see of the passed in Internet Gateway ID exists.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The VPC ID where the Internet Gateway resides
+//  - igwId:  The Internet Gateway ID
 //
 // @Returns
-//
+//  - Toggle for whether Internet Gateway already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
                                                vpcId string, igwId string) (
@@ -144,13 +151,18 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
     return false, fmt.Errorf("igw exist but is not attached to %s", vpcId)
 }
 
-//
+// Handles provisioning Internet Gateway, checking its existence and
+// creating only if the resource is missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - igwId:  The Internet Gateway ID
+//  - vpcId:  The VPC ID where the Internet Gateway resides
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - Internet Gateway ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
                                                   igwId string,
@@ -181,17 +193,19 @@ func (Ec2Man *Ec2Manger) InternetGatewayProvision(callTime time.Duration,
 }
 
 
-//
+// Detaches and deletes the Internet Gateway.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - igwId:  The Internet Gateway ID
+//  - vpcId:  The VPC ID where the Internet Gateway is located
 //
 // @Returns
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func (Ec2Man Ec2Manger) InternetGatewayTerminate(callTime time.Duration,
-                                                 igwId string,
-                                                 vpcId string) error {
+func (Ec2Man Ec2Manger) InternetGatewayTerminator(callTime time.Duration,
+                                                  igwId string,
+                                                  vpcId string) error {
     // Ensure required args are present
     if igwId == "" || vpcId == "" {
         return errors.New("igwId or vpcId is missing")

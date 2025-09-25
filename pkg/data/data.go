@@ -41,7 +41,7 @@ func GenerateRandomBytes(buffer []byte, maxBytes int) {
 //  - percent:  The upper allowed percentange within max size
 //
 // @Returns
-//  - true/false boolean whether the size is within upper max range
+//  - Toggle for whether the size is within upper max range
 //
 func IsInPercentRange(maxSize float64, currentSize float64,
                       percent float64) bool {
@@ -150,7 +150,7 @@ func SliceToCsv(fields []string) (string, error) {
 //  - target:  Target string to check if contained in slice items
 //
 // @Returns
-//  - true/false boolean depnding on whether target is in slice or not
+//  - Toggle for whether target is in slice or not
 //
 func StringSliceContains(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
@@ -172,7 +172,7 @@ func StringSliceContains(slice []string, target string) bool {
 //  - target:  Target string to check if equal to slice items
 //
 // @Returns
-//  - true/false boolean depnding on whether target is in slice or not
+//  - Toggle for whether target is in slice or not
 //
 func StringSliceHasItem(slice []string, target string) bool {
     // Iterate over the copied slice and check for the target value
@@ -220,27 +220,44 @@ func ToBytes(size float64, unit string) int64 {
 }
 
 
-// TransferManager tracks the size of all ongoing transfers.
+// Tracks the size of all ongoing transfers.
+//
 type TransferManager struct {
     OngoingTransfersSize int64
 }
 
-// NewTransferManager initializes and returns a new TransferManager instance.
+// Initializes and returns a new TransferManager instance.
+//
+// @Returns
+//  - Initialized transfer manager
+//
 func NewTransferManager() *TransferManager {
     return &TransferManager{}
 }
 
 // AddTransferSize adds the specified size to the ongoing transfers.
+//
+// @Parameters
+//  - size:  The size of file to be added to transfer manager
+//
 func (tm *TransferManager) AddTransferSize(size int64) {
     atomic.AddInt64(&tm.OngoingTransfersSize, size)
 }
 
-// GetOngoingTransfersSize returns the current total size of ongoing transfers.
+// Returns the current total size of ongoing transfers.
+//
+// @Returns
+//  - The size of all ongoing file transfers
+//
 func (tm *TransferManager) GetOngoingTransfersSize() int64 {
     return atomic.LoadInt64(&tm.OngoingTransfersSize)
 }
 
 // RemoveTransferSize subtracts the specified size from the ongoing transfers.
+//
+// @Parameters
+//  - size:  The size of the file to remove after transfer
+//
 func (tm *TransferManager) RemoveTransferSize(size int64) {
     atomic.AddInt64(&tm.OngoingTransfersSize, -size)
 }
@@ -250,7 +267,7 @@ func (tm *TransferManager) RemoveTransferSize(size int64) {
 //
 // @Parameters
 //  - input:  Input to parsed based on last delimiter
-//  - delimiter:  The delimiter to specify where input should be parsed
+//  - delimiter:  Specifies where input should be parsed
 //
 // @Returns
 //  - The parsed byte slice output

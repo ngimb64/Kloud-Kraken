@@ -30,7 +30,7 @@ var AzIndex = 0
 //
 // @Returns
 //  - The AWS credentials config
-//  - Boolean indicating whether the credentials exist or not in default keychain
+//  - Toggle for whether the credentials exist or not in default keychain
 //
 func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
                                  aws.Config, bool) {
@@ -54,7 +54,7 @@ func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
 }
 
 
-// Set up the AWS config with credentials and region stored in passed in app config.
+// Set up AWS config with credentials and region stored in app config.
 //
 // @Paramters
 //  - callTime:  The length of time the API call is allowed to execute
@@ -96,13 +96,13 @@ func AwsConfigSetup(callTime time.Duration, region string) (
 }
 
 
-//
+// Build AWS resource tags based on the passed in map.
 //
 // @Parameters
-//
+//  - tagMap:  Map used to store the tag key-value entries
 //
 // @Returns
-//
+//  - The populated EC2 tag slice
 //
 func BuildEc2Tags(tagMap map[string]string) []ec2types.Tag {
     tags := make([]ec2types.Tag, 0, len(tagMap))
@@ -120,13 +120,13 @@ func BuildEc2Tags(tagMap map[string]string) []ec2types.Tag {
 }
 
 
-//
+// Build AWS resource tags based on the passed in map.
 //
 // @Parameters
-//
+//  - tagMap:  Map used to store the tag key-value entries
 //
 // @Returns
-//
+//  - The populated IAM tag slice
 //
 func BuildIamTags(tagMap map[string]string) []iamtypes.Tag {
 	tags := make([]iamtypes.Tag, 0, len(tagMap))
@@ -144,13 +144,13 @@ func BuildIamTags(tagMap map[string]string) []iamtypes.Tag {
 }
 
 
-//
+// Build AWS resource tags based on the passed in map.
 //
 // @Parameters
-//
+//  - tagMap:  Map used to store the tag key-value entries
 //
 // @Returns
-//
+//  - The populated S3 tag slice
 //
 func BuildS3Tags(tagMap map[string]string) []s3types.Tag {
     tags := make([]s3types.Tag, 0, len(tagMap))
@@ -168,13 +168,13 @@ func BuildS3Tags(tagMap map[string]string) []s3types.Tag {
 }
 
 
-//
+// Build AWS resource tags based on the passed in map.
 //
 // @Parameters
-//
+//  - tagMap:  Map used to store the tag key-value entries
 //
 // @Returns
-//
+//  - The populcated SSM tag slice
 //
 func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
     tags := make([]ssmtypes.Tag, 0, len(tagMap))
@@ -195,11 +195,11 @@ func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
 // Gets the account ID from STS client.
 //
 // @Parameters
-// - ctx:  Context that manages timeout for API calls
-// - stsClient:  Initialized client to the Security Token Service
+//  - callTime:  The length of time the API call is allowed to execute
+//  - stsClient:  Initialized client to the Security Token Service
 //
 // @Returns
-// - The retrieved account ID
+//  - The retrieved account ID
 //  - Error if it occurs, otherwise nil on success
 //
 func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) {
@@ -219,10 +219,10 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
 // Select next availability zone in a round robin fashion.
 //
 // @Parameters
-// - azs:  Slice of availability zones to select from
+//  - azs:  Slice of availability zones to select from
 //
 // @Returns
-// - The chosen availability zone
+//  - The chosen availability zone
 //
 func PickAzRoundRobin(azs []string) string {
     chosen := azs[AzIndex%len(azs)]
@@ -235,10 +235,10 @@ func PickAzRoundRobin(azs []string) string {
 // Select next availability zone in a random fashion.
 //
 // @Parameters
-// - azs:  Slice of availability zones to select from
+//  - azs:  Slice of availability zones to select from
 //
 // @Returns
-// - The chosen availability zone
+//  - The chosen availability zone
 //
 func PickAzRandom(azs []string) string {
     // Seed the random number generator to ensure unique results
@@ -250,10 +250,13 @@ func PickAzRandom(azs []string) string {
 // Sets retention in days for the provided log group.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - client:  The CloudWatch logs client
+//  - logGroupName:  The CloudWatch log group name
+//  - retentionDays:  Number of days to retain the logs in CloudWatch
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetRetentionForLogGroup(callTime time.Duration, client *cwl.Client,
                              logGroupName string, retentionDays int32) error {

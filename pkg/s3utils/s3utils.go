@@ -298,8 +298,8 @@ func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
 // @Returns
 //
 //
-func (S3Man *S3Manager) S3TerminateBucket(callTime time.Duration,
-                                          bucketName string) error {
+func (S3Man *S3Manager) S3BucketTerminator(callTime time.Duration,
+                                           bucketName string) error {
     var token *string
 
     // Ensure AWS API calls do not hang for longer specified timeout

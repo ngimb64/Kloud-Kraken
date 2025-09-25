@@ -24,6 +24,7 @@
 
 - Easy setup with automated script
 - Easy configuration with YAML templates
+- Supports hash cracking distributed workloads among multiple EC2 instances
 - Built-in wordlist merging with flexibility to skip larger files
   - Merging process using `cat` -> `deduplicut`
   - If the file goes over max file size, excess data is shaved with `cut` into a new file
@@ -45,8 +46,7 @@
   - Client IAM role is created with associated instance profile
 <br>
 
-- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for performance
-- Supports hash cracking distributed workloads among multiple EC2 instances
+- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
 - CLI features colorized TUI interface
 - Custom logging system with CloudWatch and local backup
 - Cleans up AWS resources that incur cost over time when processing is complete
@@ -73,11 +73,11 @@
 ### Cloud Setup
 
 - Start by ensuring an AWS account is created and log in as the root user
-- In the search bar, search "budgets" which will find the budgets feature in "Billing and Cost Management"
+- In the search bar, search `budgets` which will find the budgets feature in "Billing and Cost Management"
 - Create a budget an set a monetary limit based on the intended budget
 - Run the policy generator program to generate policy for bootstrap role
   - `./bin/policygen <account_id> <region>`
-- Search IAM to access the IAM services, create a user group with the permissions policy just generated in the policy editor
+- Search `iam` to access the IAM services, create a user group with the permissions policy just generated in the policy editor
 - Create a user and assign them to the created user group with IAM permissions
 - Generate access keys for the newly created user
 
@@ -91,7 +91,7 @@
 
 - Before running the program it is also incredibly important to prepare wordlist data ahead of time
     - Smaller wordlists easily merge but larger ones slow the process down **substantially**
-    - In the YAML config it is best to set a reasonable `max_merging_size` (ex: 500MB) to prevent bottlenecks from merging large wordlists
+    - In the YAML config it is best to set a reasonable `max_merging_size` (ex: 400MB) to prevent bottlenecks from merging large wordlists
     - It is also ideal to set a reasonable `max_file_size` (ex: 2GB) to prevent extensive delays in network latency as smaller files transfer quicker and distribute better among EC2 clients
     - The following example splits Crackstation's 15GB wordlist into 400MB files:
       `split -C 400M -d --additional-suffix=.txt crackstation.txt ./crack_station_`
@@ -102,8 +102,10 @@
 ## Usage
 
 - Make a copy of the `config.yml` file in the config folder to avoid modifying original
-- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in the `config.yml` file
+- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in `config.yml`
 - Ensure to use `instructions.yml` as a reference when configuring the recently made copy
+- Despite the tool not supporting Hashcat combinator mode (1), it can be easily achieved locally and combined with other wordlist data using the usual straight mode (0)
+  - `hashcat --stdout -a 1 <left_wordlist> <right_wordlist> > combinator_out.txt`
 
 Run the project:
 ```

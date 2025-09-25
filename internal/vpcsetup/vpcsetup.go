@@ -332,8 +332,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     // Create route table for subnets to internet gateway if does not exist
     publicRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
                                                         stateConfig.AwsEnv.PublicRouteId,
-                                                        vpcId, igwId, "", pubSubnetId,
-                                                        "0.0.0.0/0", tags)
+                                                        vpcId, igwId, "", "0.0.0.0/0", tags)
     if err != nil {
         return outStruct, err
     }
@@ -355,7 +354,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     privateRouteId, err := ec2Client.RouteTableProvision(1 * time.Minute,
                                                          stateConfig.AwsEnv.PrivateRouteId,
                                                          vpcId, "", natGatewayId,
-                                                         privSubnetId, "0.0.0.0/0", tags)
+                                                         "0.0.0.0/0", tags)
     if err != nil {
         return outStruct, err
     }

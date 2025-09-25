@@ -189,8 +189,8 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
 // @Returns
 //
 //
-func (Ec2Man Ec2Manger) VpcFlowLogTerminate(callTime time.Duration,
-                                            flowLogIDs []string) error {
+func (Ec2Man Ec2Manger) VpcFlowLogTerminator(callTime time.Duration,
+                                             flowLogIDs []string) error {
     // Ensure required arg is present
     if len(flowLogIDs) == 0 {
         return fmt.Errorf("DeleteFlowLogs: no flow log IDs provided")

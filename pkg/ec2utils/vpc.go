@@ -221,8 +221,8 @@ func (Ec2Man *Ec2Manger) VpcResolverForCidr(cidr string) (string, error) {
 // @Returns
 //
 //
-func (Ec2Man Ec2Manger) VpcTerminate(callTime time.Duration,
-                                     vpcId string) error {
+func (Ec2Man Ec2Manger) VpcTerminator(callTime time.Duration,
+                                      vpcId string) error {
     // Ensure required arg is present
     if vpcId == "" {
         return errors.New("vpcId is missing")

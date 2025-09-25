@@ -10,13 +10,15 @@ import (
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
 
-//
+// Delete the CloudWatch log group.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - client:  Established client to CloudWatch services
+//  - logGroupName:  The name of the log group to be deleted
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func DeleteLogGroup(callTime time.Duration, client *cwl.Client,
                     logGroupName string) error {
@@ -43,13 +45,16 @@ func DeleteLogGroup(callTime time.Duration, client *cwl.Client,
 }
 
 
-//
+// Deletes list of log streams associated with specified log group.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - client:  Established client to CloudWatch services
+//  - logGroupName:  The name of the log group where the streams are present
+//  - streams:  List of streams to be deleted
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func DeleteLogStreams(callTime time.Duration, client *cwl.Client,
                       logGroupName string, streams []string) error {
@@ -81,13 +86,16 @@ func DeleteLogStreams(callTime time.Duration, client *cwl.Client,
 }
 
 
-//
+// Gets the log streams associated with specified log group name.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - client:  Established client to CloudWatch services
+//  - logGroupName:  The name of the log group to retrieve its streams
 //
 // @Returns
-//
+//  - List of retrieved log stream names
+//  - Error if it occurs, otherwise nil on success
 //
 func GetLogStreams(callTime time.Duration, cwlClient *cwl.Client,
                    logGroupName string) (
@@ -133,16 +141,19 @@ func GetLogStreams(callTime time.Duration, cwlClient *cwl.Client,
 }
 
 
-//
+// Get CloudWatch log streams associated with passed in log group is none
+// are already present. Delete the log streams associated with log group,
+// then finally delete the log group.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - client:  Established client to CloudWatch services
 //
 // @Returns
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func TerminateCloudWatchLogger(callTime time.Duration, cwlClient *cwl.Client,
-                               logGroupName string, streams []string) error {
+func CloudWatchLoggerTerminator(callTime time.Duration, cwlClient *cwl.Client,
+                                logGroupName string, streams []string) error {
     // Ensure required args are present
     if logGroupName == "" {
         return errors.New("logGroupName is missing")

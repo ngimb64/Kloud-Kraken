@@ -9,7 +9,7 @@ import (
 // Finds the first unused subnet of prefix length inside passed in CIDR and
 // records it to prevent trying to reallocate it in further invocations.
 //
-// Example - allocates two subnets splitting /24 CIDR in half:
+// @Example - allocates two subnets splitting /24 CIDR in half:
 //   alloc := map[string]struct{}{}
 //   subnet1, err := AllocateNextSubnet("192.168.0.0/24", alloc, 25)
 //   subnet2, err := AllocateNextSubnet("192.168.0.0/24", alloc, 25)
@@ -99,11 +99,11 @@ func AllocateNextSubnet(vpcCidr string, allocated map[string]struct{},
 // Returns true if subnet A and B overlap in address space.
 //
 // @Parameters
-// - subnetA:  The first subnet to compare for overlap
-// - subnetB:  The second subnet to compare for overlap
+//  - subnetA:  The first subnet to compare for overlap
+//  - subnetB:  The second subnet to compare for overlap
 //
 // @Returns
-// - True/False whether the subnet overlaps or not
+//  - Toggle for whether the subnet overlaps or not
 //
 func cidrOverlap(subnetA *net.IPNet, subnetB *net.IPNet) bool {
     // Convert subnet A network address to an IPv4 uint32 value
@@ -157,7 +157,7 @@ func maskOnes(mask net.IPMask) int {
 
 // Parses and returns the prefix length for both IPv4 & IPv6.
 //
-// Example - parse 24 from 192.168.0.0/24:
+// @Example - parse 24 from 192.168.0.0/24:
 //   prefixLen, err := PrefixFromCidr("192.168.0.0/24")
 //
 // @Parameters

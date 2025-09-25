@@ -12,13 +12,15 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-//
+// Creates a Elastic IP address and returns the ID of created resource.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - The Elasic IP address ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
                                          tags map[string]string) (
@@ -64,13 +66,15 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
     return *out.AllocationId, nil
 }
 
-//
+// Checks to see of the passed in Elastic IP address ID exists.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - eipId:  The ID of the elasic IP address
 //
 // @Returns
-//
+//  - Toggle for whether Elastic IP already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
                                          eipId string) (
@@ -111,13 +115,17 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
     return true, nil
 }
 
-//
+// Handles provisioning Elasic IP address, checking its existence and
+// creating only if the resource is missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - eipId:  The ID of the Elasic IP address
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - Elastic IP address ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
                                             eipId string,
@@ -142,16 +150,17 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
 }
 
 
-//
+// Releases the Elastic IP address.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - eipId:  The ID of the elasic IP address
 //
 // @Returns
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func (Ec2Man Ec2Manger) ElasticIpTerminate(callTime time.Duration,
-                                           eipId string) error {
+func (Ec2Man Ec2Manger) ElasticIpTerminator(callTime time.Duration,
+                                            eipId string) error {
     // Ensure required arg is present
     if eipId == "" {
         return fmt.Errorf("eipId is missing")

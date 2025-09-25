@@ -178,8 +178,8 @@ func (Ec2Man *Ec2Manger) SubnetProvision(callTime time.Duration, subnetId string
 // @Returns
 //
 //
-func (Ec2Man Ec2Manger) SubnetTerminate(callTime time.Duration,
-                                        subnetId string) error {
+func (Ec2Man Ec2Manger) SubnetTerminator(callTime time.Duration,
+                                         subnetId string) error {
     // Ensure required arg is present
     if subnetId == "" {
         return errors.New("subnetId is missing")
