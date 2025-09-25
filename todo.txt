@@ -1,3 +1,5 @@
+- Finish documentation for code in pkg folder
+
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
 - Run system testing in AWS environment
@@ -5,12 +7,10 @@
 - Implement system of calculating cost of resources
     - Ensure to update permissions policies as needed
 
-- Look into using custom generated key for KMS encryption utilized with S3 and SSM
+- Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
 
 - Re-run system testing in AWS environment
-
-- Finish documentation for AWS code
 
 - Try improving tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os

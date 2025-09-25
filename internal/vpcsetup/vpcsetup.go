@@ -64,13 +64,21 @@ type VpcBootstrapOutput struct {
 }
 
 
-//
+// Sets up an entire VPC with private-public subnets for allowinf internet
+// access while keeping the EC2 instances in their own isolated environment.
+// The resulting IDs of created AWS resources are saved to a map then the
+// YAML state file is created or updated on subsequent uses.
 //
 // @Parameters
-//
+//  - appConfig:  The program configuration instance with parsed YAML data
+//  - awsConfig:  The configuration to access AWS environment
+//  - ec2Client:  The EC2 service client management struct
+//  - iamClient:  The IAM service client management struct
+//  - stsClient:  The STS service client management struct
 //
 // @Returns
-//
+//  - The VPC bootstrap output struct
+//  - Error if it occurs, otherwise nil on success
 //
 func VpcBootstrap(appConfig conf.AppConfig,
                   awsConfig aws.Config,

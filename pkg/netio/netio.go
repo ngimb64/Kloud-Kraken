@@ -192,6 +192,7 @@ func GetOptimalBufferSize(fileSize int64) int {
 //  - fileSize:  The size of the to be stored on disk from read socket data
 //
 // @Returns
+//  - The file path where the file was received
 //  - Error if it occurs, otherwise nil on success
 //
 func HandleTransferRecv(connection net.Conn, storePath string, fileName string,

@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Reads the state file and terminates any existing resources in it.
+//
 func main() {
     hadError := false
     var stateConfig vpcsetup.AwsEnv

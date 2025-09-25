@@ -44,9 +44,10 @@ var ReSecurityGroupName = regexp.MustCompile(
 //  - args:  A iterator of 4 custom character sets
 //
 // @Returns
-//  - true/false boolean depending on if valid hashmask and charsets are present
+//  - true/false depending on if valid hashmask and charsets are present
 //
-func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool {
+func ValidateCharsets(crackingMode string, hashMask string,
+                      args ...string) bool {
     if hashMask == "" {
         return true
     }
@@ -70,7 +71,7 @@ func ValidateCharsets(crackingMode string, hashMask string, args ...string) bool
 // Ensures the CIDR block is of proper format.
 //
 // @Parameters
-//  - name:  The name of the CIDR block to be validated
+//  - cidrBlock:  The CIDR block to be validated
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -144,7 +145,7 @@ func ValidateConfigPath(configFilePath *string) {
 //  - hashMode:  The hashcat mode to validate
 //
 // @Returns
-//  - A true/false boolean depending on whether the mode is supported or not
+//  - Toggle to specify whether the mode is supported or not
 //
 func ValidateCrackingMode(hashMode string) bool {
     hashModes := []string{"0", "3", "6", "7"}
@@ -169,7 +170,7 @@ func ValidateDir(dirPath string) error {
         return err
     }
 
-    // If the load dir path does not exist OR is not a directory OR does not have data
+    // If load dir path does not exist OR is not a directory OR has no data
     if !exists || !isDir || !hasData {
         return fmt.Errorf("load dir path does not exist or is a file or" +
                           " does not have data in it")
@@ -194,7 +195,7 @@ func validateFile(filePath string) error {
         return err
     }
 
-    // If hash file path does not exist OR is a directory OR does not have data
+    // If hash file path does not exist OR is a directory OR has no data
     if !exists || isDir || !hasData {
         return fmt.Errorf("hash file path does not exist or is a directory or" +
                           " does not have data in it")
@@ -204,9 +205,9 @@ func validateFile(filePath string) error {
 }
 
 
-// Ensure the passed in max file size is of raw bytes format or in
-// unit format (KB, MB, GB). If in raw bytes it is simply converted to
-// int64, but for unit format a conversion to raw bytes then int64.
+// Ensure the passed in max file size is of raw bytes format or in unit
+// format (KB, MB, GB). If in raw bytes it is simply converted to int64,
+// but for unit format a conversion to raw bytes then int64.
 //
 // @Parameters
 //  - maxFileSize:  The max file size prior to parse and calculation/conversion
@@ -264,13 +265,14 @@ func ValidateHashFile(filePath string) error {
     // Validate the hash file path
     validPath, err := ValidatePath(filePath)
     if err != nil {
-        return fmt.Errorf("improper hash_file_path specified in local config - %w", err)
+        return fmt.Errorf("improper hash_file_path in local config - %w", err)
     }
 
     // Validate the hash file
     err = validateFile(validPath)
     if err != nil {
-        return fmt.Errorf("error validating hash file based on %s path - %w", validPath, err)
+        return fmt.Errorf("error validating hash file based on %s path - %w",
+                          validPath, err)
     }
 
     return nil
@@ -284,8 +286,7 @@ func ValidateHashFile(filePath string) error {
 //  - hashMask:  The hashcat mask to validate
 //
 // @Returns
-//  - true/false value depending on whether the hash mask is present
-//    with a supported cracking mode
+//  - Toggle for whether the hash mask is present with supported cracking mode
 //
 func ValidateHashMask(crackingMode string, hashMask string) bool {
     if hashMask == "" {
@@ -293,7 +294,7 @@ func ValidateHashMask(crackingMode string, hashMask string) bool {
     }
 
     supportedModes := []string{"3", "6", "7"}
-    // Check to see if passed in cracking mode is in supported modes and hashmask is present
+    // Check if cracking mode is in supported modes and hashmask is present
     return data.StringSliceHasItem(supportedModes, crackingMode) && hashMask != ""
 }
 
@@ -304,23 +305,27 @@ func ValidateHashMask(crackingMode string, hashMask string) bool {
 //  - hashType:  the hash type to validate
 //
 // @Returns
-//  - true/false boolean depending on whether hash type is valid or not
+//  - Toggle for whether hash type is valid or not
 //
 func ValidateHashType(hashType string) bool {
-    hashTypes := []string{"0", "10", "11", "12", "20", "21", "23", "30", "40", "50",
-                          "60", "100", "101", "110", "111", "112", "120", "121", "122",
-                          "123", "124", "130", "131", "132", "133", "140", "141", "150",
-                          "160", "200", "300", "400", "500", "900", "1000", "1100", "1400",
-                          "1410", "1420", "1421", "1430", "1431", "1440", "1441", "1450",
-                          "1460", "1600", "1700", "1710", "1711", "1720", "1722", "1730",
-                          "1731", "1740", "1750", "1760", "1800", "2400", "2410", "2500",
-                          "2600", "2611", "2612", "2711", "2811", "3200", "3300", "3500",
-                          "3610", "3710", "3711", "3720", "3721", "3800", "3910", "4010",
-                          "4110", "4210", "4300", "4400", "4500", "4600", "4700", "4800",
-                          "4900", "5000", "5100", "5200", "5300", "5400", "5500", "5600",
-                          "5700", "5800", "6300", "6400", "6500", "6700", "6900", "7000",
-                          "7100", "7200", "7300", "7400", "7600", "7900", "8400", "8900",
-                          "9200", "9300", "9800", "10000", "10200", "10300", "11000",
+    hashTypes := []string{"0", "10", "11", "12", "20", "21", "23", "30", "40",
+                          "50", "60", "100", "101", "110", "111", "112", "120",
+                          "121", "122", "123", "124", "130", "131", "132",
+                          "133", "140", "141", "150", "160", "200", "300",
+                          "400", "500", "900", "1000", "1100", "1400", "1410",
+                          "1420", "1421", "1430", "1431", "1440", "1441",
+                          "1450", "1460", "1600", "1700", "1710", "1711",
+                          "1720", "1722", "1730", "1731", "1740", "1750",
+                          "1760", "1800", "2400", "2410", "2500", "2600",
+                          "2611", "2612", "2711", "2811", "3200", "3300",
+                          "3500", "3610", "3710", "3711", "3720", "3721",
+                          "3800", "3910", "4010", "4110", "4210", "4300",
+                          "4400", "4500", "4600", "4700", "4800", "4900",
+                          "5000", "5100", "5200", "5300", "5400", "5500",
+                          "5600", "5700", "5800", "6300", "6400", "6500",
+                          "6700", "6900", "7000", "7100", "7200", "7300",
+                          "7400", "7600", "7900", "8400", "8900", "9200",
+                          "9300", "9800", "10000", "10200", "10300", "11000",
                           "11100", "11200", "11400", "99999"}
 
     // Check to see if arg hash type is in the allowed hash types
@@ -353,7 +358,7 @@ func ValidateIamUsername(iamUsername string) error {
 //  - instanceType:  The EC2 instance type to be used
 //
 // @Returns
-//  - true/false boolean depending on whether instance type is valid or not
+//  - Toggle for whether instance type is valid or not
 //
 func ValidateInstanceType(instanceType string) bool {
     var supportedInstances = []string{
@@ -396,7 +401,7 @@ func ValidateInstanceType(instanceType string) bool {
 //  - listenerPort:  The port to be validated
 //
 // @Returns
-//  - true/false boolean depending on whether the port is above 1000 or not
+//  - Toggle for whether the port is above 1000 or not
 //
 func ValidateListenerPort(listenerPort int) bool {
     return listenerPort > 1024
@@ -434,7 +439,7 @@ func ValidateLoadDir(dirPath string) error {
 //  - logMode:  The log mode to be validated
 //
 // @Returns
-//  - true/false depending on whether log mode is supported or not
+//  - Toggle for whether log mode is supported or not
 //
 func ValidateLogMode(logMode string) bool {
     logModes := []string{"local", "cloudwatch", "both"}
@@ -450,8 +455,8 @@ func ValidateLogMode(logMode string) bool {
 //  - percentage:  The float percentage to validate
 //
 // @Returns
-//  - true/false boolean depending on whether the percentage
-//   less than or equal to 50 or not
+//  - Toggle for whether the percentag is less than or equal
+//    to 50 or not
 //
 func ValidateMaxSizeRange(percentage float64) bool {
     return percentage <= 50.0
@@ -464,8 +469,7 @@ func ValidateMaxSizeRange(percentage float64) bool {
 //  - maxTransfers:  The number of allowed file transfer simultaniously
 //
 // @Returns
-//  - true/false boolean depending on whether the max transfers
-//   is greater than 0 or not
+//  - Toggle for whether the max transfers is greater than 0 or not
 //
 func ValidateMaxTransfers(maxTransfers int32) bool {
     return maxTransfers > 0
@@ -478,8 +482,7 @@ func ValidateMaxTransfers(maxTransfers int32) bool {
 //  - maxTransfers:  The number instances to allocate
 //
 // @Returns
-//  - true/false boolean depending on whether the number instances
-//   is greater than 0 or not
+//  - Toggle for whether the number instances is greater than 0 or not
 //
 func ValidateNumberInstances(numberInstances int32) bool {
     return numberInstances > 0
@@ -524,7 +527,7 @@ func ValidatePath(path string) (string, error) {
 //  - region:  The AWS region to be validated
 //
 // @Returns
-//  - true/false boolean depending on whether the AWS region is valid or not
+//  - Toggle for whether the AWS region is valid or not
 //
 func ValidateRegion(region string) bool {
     resolver := s3.NewDefaultEndpointResolver()
@@ -571,7 +574,7 @@ func ValidateRulesetFile(filePath string) error {
 //  - workload:  The hashcat workload to be validated
 //
 // @Returns
-//  - true/false boolean depending on whether the workload is supported or not
+//  - Toggle for whether the workload is supported or not
 //
 func ValidateWorkload(workload string) bool {
     workloads := []string{"1", "2", "3", "4"}

@@ -8,13 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AppConfig is a wrapper that ties the local and client yaml configs
+// The root tier of the YAML ties local and client configs
 type AppConfig struct {
     ClientConfig ClientConfig `yaml:"client_config"`
     LocalConfig  LocalConfig  `yaml:"local_config"`
 }
 
-// ClientConfig contains the yaml configuration for the client settings
+// Contains the YAML configuration for the client settings
 type ClientConfig struct {
     ApplyOptimization bool   `yaml:"apply_optimization"`
     CharSet1          string `yaml:"char_set1"`
@@ -26,13 +26,13 @@ type ClientConfig struct {
     HashType          string `yaml:"hash_type"`
     LogMode           string `yaml:"log_mode"`
     MaxFileSize       string `yaml:"max_file_size"`
-    MaxFileSizeInt64  int64  `yaml:"-"`              // Parsed later
+    MaxFileSizeInt64  int64  `yaml:"-"`
     MaxTransfers      int32  `yaml:"max_transfers"`
     Region            string `yaml:"region"`
     Workload          string `yaml:"workload"`
 }
 
-// LocalConfig contains the yaml configuration for local server settings
+// Contains the YAML configuration for local server settings
 type LocalConfig struct {
     CidrBlock           string   `yaml:"cidr_block"`
     HashFilePath        string   `yaml:"hash_file_path"`
@@ -42,7 +42,7 @@ type LocalConfig struct {
     LoadDir	   	        string   `yaml:"load_dir"`
     LocalTesting        bool     `yaml:"local_testing"`
     MaxMergingSize      string   `yaml:"max_merging_size"`
-    MaxMergingSizeInt64 int64    `yaml:"-"`                 // Parsed later
+    MaxMergingSizeInt64 int64    `yaml:"-"`
     MaxSizeRange        float64  `yaml:"max_size_range"`
     NumberInstances     int32    `yaml:"number_instances"`
     Region              string   `yaml:"region"`
@@ -92,8 +92,8 @@ func LoadConfig(filePath string) (*AppConfig, error) {
 }
 
 
-// Takes the parsed data in ClientConfig struct and passes each
-// struct member into its corresponding validation routine.
+// Takes the parsed data in ClientConfig struct and passes each struct member
+// into its corresponding validation routine.
 //
 // @Parameters
 //  - clientConfig:  The ClientConfig section of the parsed yaml data
@@ -157,8 +157,8 @@ func validateClientConfig(clientConfig *ClientConfig) error {
 }
 
 
-// Takes the parsed data in LocalConfig struct and passes each
-// struct member into its corresponding validation routine.
+// Takes the parsed data in LocalConfig struct and passes each struct member
+// into its corresponding validation routine.
 //
 // @Parameters
 //  - localConfig:  The LocalConfig section of the parsed yaml data

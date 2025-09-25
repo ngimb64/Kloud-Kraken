@@ -2,7 +2,7 @@ package policies
 
 import "fmt"
 
-// Generates permission policy for the client EC2.
+// Generates permissions policy for the client EC2.
 //
 // @Parameters
 //  - bucketName:  The name of the S3 bucket where actions will be performed
@@ -90,7 +90,7 @@ func ClientPermPolicyGen(bucketName string, region string,
 // Generates trust policy for the client.
 //
 // @Returns
-//  - The generated trust policy with args formatted into it
+//  - The generated trust policy
 //
 func ClientTrustPolicyGen() string {
     return `{
@@ -104,7 +104,7 @@ func ClientTrustPolicyGen() string {
 }
 
 
-// Generates permission policy for the local server.
+// Generate permissions policy for the local server.
 //
 // @Parameters
 //  - region:  The AWS region where actions will be performed
@@ -183,7 +183,7 @@ func ServerPermPolicyGen(region string, accountId string,
 }
 
 
-// Generates trust policy for the server.
+// Generate trust policy for the server.
 //
 // @Parameters
 //  - accountId:  The AWS account ID where actions will be performed
@@ -206,13 +206,15 @@ func ServerTrustPolicyGen(accountId string, iamUser string) string {
 }
 
 
-//
+// Generate permissions policy for VPC Flow Logs.
 //
 // @Parameters
-//
+//  - region:  The AWS region where the VPC Flow Logs are utilized
+//  - accountId:  The AWS account ID number
+//  - logGroupName:  The CloudWatch log group name where the logs are stored
 //
 // @Returns
-//
+//  - The generated permissions policy with args formatted into it
 //
 func VpcFlowLogsPermPolicyGen(region string, accountId string,
                               logGroupName string) string {
@@ -244,13 +246,10 @@ func VpcFlowLogsPermPolicyGen(region string, accountId string,
 }
 
 
-//
-//
-// @Parameters
-//
+// Generate trust policy for the VPC Flow Logs.
 //
 // @Returns
-//
+//  - The generated trust policy with args formatted into it
 //
 func VpcFlowLogsTrustPolicyGen() string {
     return `{
@@ -268,13 +267,14 @@ func VpcFlowLogsTrustPolicyGen() string {
 }
 
 
-//
+// Generate permissions policy for the S3 VPC Endpoint.
 //
 // @Parameters
-//
+//  - bucketName:  The name of the S3 bucket
+//  - iamArn:  The IAM ARN of S3 VPC Endpoint
 //
 // @Returns
-//
+//  - The generated permissions policy with args formatted into it
 //
 func VpcS3EndpointPolicyGen(bucketName string, iamArn string) string {
     return fmt.Sprintf(`{
@@ -301,13 +301,14 @@ func VpcS3EndpointPolicyGen(bucketName string, iamArn string) string {
 }
 
 
-//
+// Generate permissions policy for the SSM VPC Endpoint.
 //
 // @Parameters
-//
+//  - accountId:  The AWS account ID number
+//  - iamArn:  The IAM ARN of the SSM VPC Endpoint
 //
 // @Returns
-//
+//  - The generated permissions policy with args formatted into it
 //
 func VpcSsmEndpointPolicyGen(accountId, region, iamArn string) string {
     return fmt.Sprintf(`{

@@ -47,10 +47,11 @@ var ReceivedDir = "/tmp/received"    // Path where cracked hashes & client logs 
 var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
 
 
-// Select next available file for transfer, if there are no more available send the end transfer
-// message to client. Format the transfer reply with the file name and size, get the IP address
-// of the current connection and read the port from the socket to format the dialer for the new
-// connection for file transfer. Finally pass the connection with other args into TransferFile().
+// Select next available file for transfer, if there are no more available send
+// the end transfer message to client. Format the transfer reply with the file
+// name and size, get the IP address of the current connection and read the port
+// from the socket to format the dialer for the new connection for file transfer.
+// Finally pass the connection with other args goroutine to transfer file.
 //
 // @Parameters
 //  - connection:  Network socket connection for handling messaging
@@ -192,9 +193,10 @@ func handleTransfer(connection net.Conn, buffer []byte,
 }
 
 
-// Upload the hash and ruleset files (if optional ruleset applied). Goes into continual loop
-// where data is read from the message sockets connection-buffer, checks for a processing complete
-// message which signals exiting the loop, finally after the loop received cracked hash and log file.
+// Upload the hash and ruleset files (if optional ruleset applied). Goes into
+// continual loop where data is read from the message sockets connection-buffer,
+// checks for a processing complete message which signals exiting the loop,
+// finally after the loop received cracked hash and log file.
 //
 // @Parameters
 //  - connection:  Network socket connection for handling messaging
@@ -326,10 +328,11 @@ func handleConnection(connection net.Conn,
 }
 
 
-// Set up listener and enter loop where the amount of active connections is checked
-// until the specified number of instances is equal to the active connections the
-// listener will wait until a connection is accepted. Increment the active connections
-// counter and waitgroup, and pass the connection with other args into handler goroutine.
+// Activates TUI interface and sets up TLS listener then enters loop where the
+// amount of active connections is checked until the specified number of
+// instances is equal to the active connections the listener will wait until a
+// connection is accepted. Increment the active connections counter and
+// waitgroup, and pass the connection with other args into handler goroutine.
 //
 // @Parameters
 //  - appConfig:  The configuration struct with loaded yaml program data
@@ -530,12 +533,13 @@ $CWD/client -applyOptimization=%t \
 }
 
 
-// Sets up AWS credentials, then the VPC and all its inner workings are provisioned
-// where it checks if the resource exists and creates it if it does not. Uses IAM
-// permissions in the credentials to set up client and server roles in IAM. Then
-// assumes created server role via STS service. Puts generated TLS certificate in
-// SSM parameter store and client binary in S3 bucket for later retrieval.
-// Concludes by launching EC2 instances and ensure proper termination via defer.
+// Sets up AWS credentials, then the VPC and all its inner workings are
+// provisioned where it checks if the resource exists and creates it if it does
+// not. Uses IAM permissions in the credentials to set up client and server
+// roles in IAM. Then assumes created server role via STS service. Puts
+// generated TLS certificate in SSM parameter store and client binary in S3
+// bucket for later retrieval. Concludes by launching EC2 instances and
+// ensure proper termination via defer.
 //
 // @Parameters
 //  - appConfig:  The configuration instance with program YAML data
@@ -752,8 +756,9 @@ func parseArgs() *conf.AppConfig {
 
 
 // Parse command line args, make needed directories, merge wordlists and remove remaining
-// empty dirs. Set up AWS access config with key and secret, set up logging manager
-// instance, set up EC2 code passing command line args via user data, and start server.
+// empty dirs. Set up AWS access config with key and secret, set up AWS resource cleanup
+// for certain resources before the program terminates set up logging manager instance,
+// set up EC2 code passing command line args via user data, and start server.
 //
 func main() {
     // Begin recording program timing

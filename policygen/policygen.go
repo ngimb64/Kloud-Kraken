@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// Generates a bootstrap IAM policy JSON for initial setup and teardown.
+// Generates bootstrap permissions policy JSON for initial setup and teardown.
 //
 // @Parameters
 //  - accountId:  AWS account id (e.g. "123456789012")
@@ -16,6 +16,9 @@ import (
 //  - logGroupPrefix:  CloudWatch Logs prefix (e.g. "/kloud-kraken")
 //  - roleNamePrefix:  IAM role name prefix allowed for bootstrap to
 // 					   create (e.g. "kloud-kraken-")
+//
+// @Returns
+//  - The generated permissions policy with args formatted into it
 //
 func bootstrapPolicyGen(accountId string, bucketName string,
                         region string, ssmPrefix string,
@@ -190,6 +193,9 @@ func bootstrapPolicyGen(accountId string, bucketName string,
 }
 
 
+// Generates the bootstrap role permissions policy, writes it to JSON file,
+// and notifies the user when the process is complete.
+//
 func main() {
     accountId := os.Args[1]
     region := os.Args[2]
