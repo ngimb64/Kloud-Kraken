@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Iterate through the parsed charsets and append them to the command options slice
-// until an empty charset is met.
+// Iterate through the parsed charsets and append them to the command options
+// slice until an empty charset is met.
 //
 // @Parameters
 //  - cmdOptions:  The string slice of command args to be passed into hashcat
@@ -37,23 +37,23 @@ func AppendCharsets(cmdOptions *[]string, charsets []string) {
 
 // Data structure for managing hashcat program arguments
 type HashcatArgs struct {
-    CrackingMode      string
-    HashType          string
     ApplyOptimization bool
-    Workload          string
     CharSet1          string
     CharSet2          string
     CharSet3          string
     CharSet4          string
+    CrackingMode      string
     HashMask          string
+    HashType          string
+    Workload          string
 }
 
 
 // Parses the final section of hashcat output where result statistics reside,
-// splits the parsed section by newlines into slice, iterates through split slice
-// and trims the data before and after the colon delimiter into key-value variables
-// that are mapped to a map. The keys are sorted and iterated over to log the parsed
-// output in order established by the keys.
+// splits the parsed section by newlines into slice, iterates through split
+// slice and trims the data before and after the colon delimiter into key-value
+// variables that are mapped to a map. The keys are sorted and iterated over to
+// log the parsed output in order established by the keys.
 //
 // @Parameters
 //  - output:  Buffer where hashcat output is stored and to be parsed
@@ -61,6 +61,7 @@ type HashcatArgs struct {
 //
 // @Returns
 //  - Slice of the parsed statistic outputs
+//  - Error if it occurs, otherwise nil on success
 //
 func ParseHashcatOutput(output []byte, delimiter []byte) ([]any, error) {
     var keys []string

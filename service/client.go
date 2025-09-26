@@ -787,10 +787,15 @@ func main() {
         log.Fatalf("Error adding PEM cert to pool:  %v", err)
     }
 
+    tags := map[string]string{
+        "kloud-kraken": "true",
+        "Name": "kloud-kraken-logs",
+    }
+
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig,
                                               "kloud-kraken-logs", 1,
-                                              "kloud-kraken-logs", false)
+                                              tags, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }

@@ -51,7 +51,7 @@ func TestLogMessage(t *testing.T) {
     logFile := "testlog.log"
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager("local", logFile, awsConfig,
-                                              "", -1, "", false)
+                                              "", -1, nil, false)
     assert.Equal(nil, err)
 
     logArgs := []any{zap.String("key1", "value1"), zap.String("key2", "value2"),

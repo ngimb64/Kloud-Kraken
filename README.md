@@ -2,7 +2,7 @@
 
 # Kloud Kraken
 
-**NOTE:** This project is still a work in progress but at least 90-95% finished so expect it to be completed around late summer or early fall 2025
+**NOTE:** This project is still a work in progress but at least 97-98% finished so expect it to be completed in the next few weeks
 
 > A cloud based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 

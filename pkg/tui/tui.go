@@ -39,7 +39,7 @@ type TUI struct {
 //  - redrawInterval:  The duration of time until the display panels are updated
 //  - rightColOffset:  The offset used to set the position of the right column
 //                    (2 for split 50-50, 3 for 33.3-66.6, 4 for 25-75, 5 for 20-80)
-//  - leftPanelName:  The name of the header for the left panel
+//  - rightPanelName:  The name of the header for the right panel
 //
 func NewTUI(maxBuffer int, leftPanelName string, redrawInterval time.Duration,
             rightColOffset uint16, rightPanelName string) *TUI {
@@ -63,9 +63,10 @@ func NewTUI(maxBuffer int, leftPanelName string, redrawInterval time.Duration,
 // @Parameters
 //  - leftPanelHeaderColor:  The color of the left panel header
 //  - rightPanelHeaderColor:  The color of the right panel header
-//  - dividerColor:  The color of the divider used to split header and content section
+//  - dividerColor:  Color of divider used to split header and content section
 //
-func (t *TUI) Start(leftPanelHeaderColor string, rightPanelHeaderColor string,
+func (t *TUI) Start(leftPanelHeaderColor string,
+                    rightPanelHeaderColor string,
                     dividerColor string) {
     // Set up ticker for monitoring on intervals
     ticker := time.NewTicker(t.redrawInterval)
@@ -129,9 +130,10 @@ func (t *TUI) Stop() {
 // @Parameters
 //  - panel1HeaderColor:  The color of the left panel text header
 //  - panel2HeaderColor:  The color of the right panel text header
-//  - dividerColor:  The color of the line divider bewteen headers and dynamic text area
+//  - dividerColor:  Color of line divider bewteen headers and dynamic text area
 //
-func (t *TUI) renderStaticFrame(panel1HeaderColor string, panel2HeaderColor string,
+func (t *TUI) renderStaticFrame(panel1HeaderColor string,
+                                panel2HeaderColor string,
                                 dividerColor string) {
     // Start with a fresh display
     fmt.Print("\033[2J")
@@ -222,7 +224,7 @@ func (t *TUI) updateContent(bufferLeft []string, bufferRight []string) {
 //
 // @Returns
 //  - A new string exactly `width` characters wide in visible length, either
-//   padded with spaces or truncated, preserving ANSI formatting
+//    padded with spaces or truncated, preserving ANSI formatting
 //
 func (t *TUI) padOrTrim(value string, width int) string {
     // Get the visable length of string (non ANSI escape codes)

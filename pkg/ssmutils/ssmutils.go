@@ -38,8 +38,8 @@ func SsmNewManager(config aws.Config) *SsmManager {
 // Retrieve value from AWS SSM Parameter Store.
 //
 // @Parameters
-//  - parameter:  name of the parameter to retrieve
 //  - callTime:  The length of time the API call is allowed to execute
+//  - parameter:  name of the parameter to retrieve
 //
 // @Returns
 //  - The retrieved parameter from param store
@@ -72,7 +72,7 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //  - callTime:  The length of time the API call is allowed to execute
 //  - parameter:  name of the parameter to retrieve
 //  - data:  The data to store with associated parameter
-//  - tagName:  Name to tag the AWS resource
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - The path where the parameter is stored in param store
@@ -123,13 +123,14 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
 }
 
 
-//
+// Deletes a single SSM parameter.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - paramName:  The parameter to be deleted
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
                                              paramName string) error {
@@ -156,13 +157,14 @@ func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
 }
 
 
-//
+// Deletes all the SSM parameters associated with a key.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - baseName:  The base name of the key to delete all params of
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (SsmMan SsmManager) SsmDeleteAllParams(callTime time.Duration,
                                             baseName string) error {

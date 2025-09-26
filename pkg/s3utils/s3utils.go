@@ -41,10 +41,12 @@ func S3NewManager(config aws.Config) *S3Manager {
 // Create an S3 bucket.
 //
 // @Parameters
-//  - bucketName:  The name of the bucket to be created
 //  - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the bucket to be created
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
+//  - Name of the created S3 bucket
 //  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
@@ -114,14 +116,14 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
     return bucketName, nil
 }
 
-// Checks to see if an S3 bucket already exists.
+// Checks whether passed in S3 bucket name exists.
 //
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - bucketName:  The name of the S3 bucket to check existence
 //
 // @Returns
-//  - Boolean toggle whether the bucket exists or not
+//  - Toggle for whether the bucket already exists or not
 //  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) S3BucketExists(callTime time.Duration,
@@ -208,13 +210,17 @@ func (S3Man *S3Manager) S3GetObject(callTime time.Duration,
     return rawData, nil
 }
 
-//
+// Provision S3 bucket by checking for existence and creating if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The S3 bucket name
+//  - defaultBucketName:  The default S3 bucket name used for creation
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - S3 bucket name if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
                                           bucketName string,
@@ -242,10 +248,10 @@ func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
 // Put an object into a S3 bucket.
 //
 // @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
 //  - bucketName:  The name of the S3 bucket where the object will be stored
 //  - key:  The key in bucket used to identify where the object will be stored
 //  - data:  The data to be stored associated with the key of in the S3 bucket
-//  - callTime:  The length of time the API call is allowed to execute
 //
 // @Returns
 //  - The final key name that is used
@@ -290,13 +296,14 @@ func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
 }
 
 
-// Deletes all objects (handles pagination) and then deletes the bucket.
+// Deletes all objects (handles pagination) then deletes S3 bucket.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - bucketName:  The name of the S3 bucket to be deleted
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (S3Man *S3Manager) S3BucketTerminator(callTime time.Duration,
                                            bucketName string) error {

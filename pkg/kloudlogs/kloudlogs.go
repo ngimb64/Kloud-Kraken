@@ -47,7 +47,7 @@ type LoggerManager struct {
 //  - awsConfig:  The initialized AWS configuration instance
 //  - logGroup:  The CloudWatch logging group
 //  - retentionDays:  The number of days to retain logs before deleting
-//  - tagName:  Name to tag the AWS resource
+//  - tags:  String map of tag key-values to configure
 //  - logToMemory:  Boolean toggler whether to log to memory or not
 //
 // @Returns
@@ -56,7 +56,7 @@ type LoggerManager struct {
 //
 func NewLoggerManager(logDestination string, localLogFile string,
                       awsConfig aws.Config, logGroup string,
-                      retentionDays int32, tagName string,
+                      retentionDays int32, tags map[string]string,
                       logToMemory bool) (
                       *LoggerManager, error) {
     var localLogger Logger
@@ -74,7 +74,7 @@ func NewLoggerManager(logDestination string, localLogFile string,
     // Initialize CloudWatch logger if needed
     if logDestination == "cloudwatch" || logDestination == "both" {
         cloudLogger, err = NewCloudWatchLogger(awsConfig, logGroup,
-                                               retentionDays, tagName)
+                                               retentionDays, tags)
         if err != nil {
             return nil, err
         }
@@ -358,14 +358,15 @@ type CloudWatchLogger struct {
 // @Parameters
 //  - awsConfig:  The AWS configuration config struct
 //  - groupName:  The CloudWatch logging group
-//  - tagName:  Name to tag the AWS resource
+//  - retentionDay:  The number of days logs are retained in CloudWatch
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - The initializes CloudWatch logger config instance
 //  - Error if it occurs, otherwise nil on success
 //
 func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
-                         retentionDays int32, tagName string) (
+                         retentionDays int32, tags map[string]string) (
                          Logger, error) {
     var stream string
     // Establish CloudWatch client and set to run in background
@@ -403,10 +404,8 @@ func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
         LogGroupName: aws.String(groupName),
     }
 
-    if tagName != "" {
-        createLogGroupInput.Tags = map[string]string{
-            "Name": tagName,
-        }
+    if len(tags) > 0 {
+        createLogGroupInput.Tags = tags
     }
 
     // Create the CloudWatch log group

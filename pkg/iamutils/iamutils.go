@@ -24,10 +24,11 @@ var ReRoleArn = regexp.MustCompile(`^arn:aws(-[\w]+)?:iam::\d{12}:role/.+$`)
 //   arn:aws:iam::123456789012:role/path/to/MyRole -> MyRole
 //
 // @Parameters
-//
+//  - The IAM role ARN to be parsed
 //
 // @Returns
-//
+//  - The role name parsed from ARN
+//  - Error if it occurs, otherwise nil on success
 //
 func getRoleNameFromArn(roleArn string) (string, error) {
     // Ensure required arg is present
@@ -52,7 +53,7 @@ func getRoleNameFromArn(roleArn string) (string, error) {
 }
 
 
-// Struct for managing S3 bucket operations
+// Struct for managing IAM operations
 type IamManager struct {
     client  *iam.Client
 }
@@ -79,13 +80,14 @@ func IamNewManager(awsConfig aws.Config) *IamManager {
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - roleName:  The IAM Role used for operations
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
                                                 roleName string,
-                                                tagName string) error {
+                                                tags map[string]string) error {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -94,13 +96,15 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
         InstanceProfileName: aws.String(roleName),
     }
 
-    if tagName != "" {
-        createInput.Tags = []iamtypes.Tag{
-            {
-                Key: aws.String("Name"),
-                Value: aws.String(tagName + "-instance-profile"),
-            },
+    if len(tags) > 0 {
+        instanceProfileTags := tags
+
+        // If the name tag exists in tags map
+        if name, ok := tags["Name"]; ok {
+            instanceProfileTags["Name"] = name + "-instance-profile"
         }
+
+        createInput.Tags = awsutils.BuildIamTags(instanceProfileTags)
     }
 
     // Create the instance profile
@@ -137,10 +141,11 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
 //  - trustPolicyJson:  The JSON trust policy
 //  - permPolicyName:  An identifier name for permissions policy
 //  - permPolicyJSON:  The JSON permissions policy
+//  - tags:  String map of tag key-values to configure
 //  - createProfile:  Toggle whether an instance profile is created or not
 //
 // @Returns
-//  - The ARN of the existing or created role
+//  - The ARN of the created role
 //  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName string,
@@ -182,7 +187,7 @@ func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName strin
 
     // If specified, create instance profile and attach role to it
     if createProfile {
-        err = IamMan.createInstanceProfile(callTime, roleName, tags["Name"])
+        err = IamMan.createInstanceProfile(callTime, roleName, tags)
         if err != nil {
             return roleArn, fmt.Errorf("creating EC2 instace profile - %w", err)
         }
@@ -194,10 +199,12 @@ func (IamMan *IamManager) iamRoleCreation(callTime time.Duration, roleName strin
 // Checks whether an IAM role exists by name.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  The name of the IAM role to check existence
 //
 // @Returns
-//
+//  - Toggle for whether IAM role already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) IamRoleExists(callTime time.Duration,
                                         roleName string) (
@@ -229,13 +236,21 @@ func (IamMan *IamManager) IamRoleExists(callTime time.Duration,
     return true, nil
 }
 
-//
+// Provision IAM role by checking for existence and creating if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleArn:  The IAM role ARN
+//  - defaultRoleName:  The name applied to role upon creation
+//  - trustPolicyJson:  JSON trust policy
+//  - permPolicyName:  The name of the permissions policy
+//  - permPolicyJson:  JSON permissions policy
+//  - tags:  String map of tag key-values to configure
+//  - createProfile:  Toggle for whether an IAM instance profile should be made
 //
 // @Returns
-//
+//  - IAM role ARN if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
                                            roleArn string,
@@ -279,7 +294,7 @@ func (IamMan *IamManager) IamRoleProvision(callTime time.Duration,
                                   permPolicyJson, tags, createProfile)
 }
 
-// Handles the full deletion of an IAM role, TODO: add more
+// Handles the full deletion of an IAM role and its associate components.
 //
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
@@ -389,13 +404,14 @@ func (IamMan IamManager) IamRoleTerminator(callTime time.Duration,
     return nil
 }
 
-//
+// Deletes all inline policies associated with IAM role name.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  The role name where the inline policies are applied
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan IamManager) iamTerminateAllInlinePolicies(callTime time.Duration,
                                                        roleName string) error {
@@ -439,13 +455,14 @@ func (IamMan IamManager) iamTerminateAllInlinePolicies(callTime time.Duration,
 }
 
 
-//
+// Deletes all managed policies associated with IAM role name.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  The role name where the managed policies are applied
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan *IamManager) iamTerminateAllManagedPolicies(callTime time.Duration,
                                                          roleName string) error {
@@ -490,13 +507,14 @@ func (IamMan *IamManager) iamTerminateAllManagedPolicies(callTime time.Duration,
 }
 
 
-//
+// Delete the instance profile by name.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - profileName:  Name of instance profile to delete
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan IamManager) iamTerminateInstanceProfile(callTime time.Duration,
                                                      profileName string) error {
@@ -519,6 +537,15 @@ func (IamMan IamManager) iamTerminateInstanceProfile(callTime time.Duration,
 }
 
 
+// Delete the IAM role by name.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  Name of the IAM role to be deleted
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
 func (IamMan IamManager) iamTerminateRole(callTime time.Duration,
                                           roleName string) error {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -538,13 +565,14 @@ func (IamMan IamManager) iamTerminateRole(callTime time.Duration,
 }
 
 
-//
+// Remove IAM role from all associated instance profiles.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - roleName:  The role name to remove from instance profiles
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (IamMan IamManager) iamTerminateRoleFromProfiles(callTime time.Duration,
                                                       roleName string) error {

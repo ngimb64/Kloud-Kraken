@@ -234,8 +234,8 @@ func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
 //  - Error if it occurs, otherwise nil on success
 //
 func (TlsMan *TlsManager) CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte,
-                                        caCertPemBlocks [][]byte,
-                                        certsToAdd ...string) error {
+                                         caCertPemBlocks [][]byte,
+                                         certsToAdd ...string) error {
     // Generate certificate base on certificate & key PEM blocks
     cert, err := tls.X509KeyPair(tlsCertPem, tlsKeyPem)
     if err != nil {
@@ -259,13 +259,14 @@ func (TlsMan *TlsManager) CertGenAndPool(tlsCertPem []byte, tlsKeyPem []byte,
 //
 // @Parameters
 //  - caCertPemBlocks:  The byte PEM block to be used instead of file
-//  - caCertFiles:  Variadic length slice of PEM files to be loaded into caCertPemBlocks
+//  - caCertFiles:  Variadic length slice of PEM files load into caCertPemBlocks
 //
 // @Returns
 //  - The x509 certificate pool with loaded cert added to it
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) caCertPoolGen(caCertPemBlocks [][]byte, caCertPemFiles ...string) (
+func (TlsMan *TlsManager) caCertPoolGen(caCertPemBlocks [][]byte,
+                                        caCertPemFiles ...string) (
                                         *x509.CertPool, error) {
     // If there are PEM cert file passed in, iterate through them
     for _, pemFile := range caCertPemFiles {
@@ -298,8 +299,8 @@ func (TlsMan *TlsManager) caCertPoolGen(caCertPemBlocks [][]byte, caCertPemFiles
 //
 // @Parameters
 //  - orgName:  The organization name to assign to the generated certificate
-//  - testMode:  boolean toggle for whether PEM file should be generated or not
-//  - hostnames:  variadic length variable of ip address and hostnames to add to hosts CSV string
+//  - testMode:  Toggle for whether PEM file should be generated or not
+//  - hostnames:  Variadic length of ip address & hostnames to add to hosts CSV string
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -335,13 +336,14 @@ func (TlsMan *TlsManager) PemCertAndKeyGenHandler(orgName string, testMode bool,
     return nil
 }
 
-// Generates a TLS certficate and key converted to PEM format, if generateFiles boolean is
-// toggled then PEM cert and key will be written as files in addition to returned in memory.
+// Generates a TLS certficate and key converted to PEM format, if generateFiles
+// boolean is toggled then PEM cert and key will be written as files in addition
+// to returned in memory.
 //
 // @Parameters
 //  - name:  name of organization to put on the certificate
-//  - hosts:  A comma-separated string with the IP addresses and DNS names used by clients
-//           to be able to connect with the server that generated it
+//  - hosts:  A comma-separated string with the IP addresses and DNS names used
+//            by clients to be able to connect with the server that generated it
 //  - generateFile:  Toggle for specifying whether PEM cert file shoud be generated
 //
 // @Returns
@@ -349,7 +351,8 @@ func (TlsMan *TlsManager) PemCertAndKeyGenHandler(orgName string, testMode bool,
 //  - PEM byte block for TLS key
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) pemCertAndKeyGen(name string, hosts string, generateFile bool) (
+func (TlsMan *TlsManager) pemCertAndKeyGen(name string, hosts string,
+                                           generateFile bool) (
                                            []byte, []byte, error) {
     // Create a cryptographically secure random 128 bit integer
     serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
@@ -499,9 +502,12 @@ func (TlsMan *TlsManager) createPemCertFile(certBytes []byte) error {
 //  - The established TLS listener
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate, certPool *x509.CertPool,
-                                                  ctx context.Context, listenIp string,
-                                                  listenPort int, listener net.Listener) (
+func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate,
+                                                  certPool *x509.CertPool,
+                                                  ctx context.Context,
+                                                  listenIp string,
+                                                  listenPort int,
+                                                  listener net.Listener) (
                                                   net.Listener, error) {
     // Create a TLS configuration instance
     tlsConfig := &tls.Config{
@@ -533,8 +539,10 @@ func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate, certPool
 // @Returns
 //  - Callback function that returns the TLS config and errors if any occur
 //
-func (TlsMan *TlsManager) getServerTlsConfig(cert tls.Certificate, serverPool *x509.CertPool) func(
-                                             *tls.ClientHelloInfo) (*tls.Config, error) {
+func (TlsMan *TlsManager) getServerTlsConfig(cert tls.Certificate,
+                                             serverPool *x509.CertPool,
+                                             ) func(*tls.ClientHelloInfo) (
+                                             *tls.Config, error) {
     return func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
         // Generate new TLS configuration instance
         cfg := TlsMan.newServerTlsConfig(cert)
@@ -572,8 +580,8 @@ func (TlsMan *TlsManager) newServerTlsConfig(cert tls.Certificate) *tls.Config {
 //  - Callback function that returns errors if any occur
 //
 func (TlsMan *TlsManager) verifyClientCert(serverPool *x509.CertPool,
-                                           hello *tls.ClientHelloInfo) func(
-                                           rawCerts [][]byte,
+                                           hello *tls.ClientHelloInfo,
+                                           ) func(rawCerts [][]byte,
                                            verifiedChains [][]*x509.Certificate) error {
     return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
         // Verify x509 certificate options
@@ -618,7 +626,8 @@ func (TlsMan *TlsManager) verifyClientCert(serverPool *x509.CertPool,
     }
 }
 
-// TlsServer struct method to setup TLS supported TCP listener to handle incoming connections.
+// TlsServer struct method to setup TLS supported TCP listener to handle
+// incoming connections.
 //
 // @Parameters
 //  - listener:  Established raw TCP socket listener, if nil one is created
@@ -627,7 +636,8 @@ func (TlsMan *TlsManager) verifyClientCert(serverPool *x509.CertPool,
 //  - The established TLS TCP listener
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) setupTlsListener(listener net.Listener) (net.Listener, error) {
+func (TlsMan *TlsManager) setupTlsListener(listener net.Listener) (
+                                           net.Listener, error) {
     var err error
 
     // If no active listener was passed in
