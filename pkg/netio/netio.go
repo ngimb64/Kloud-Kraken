@@ -14,8 +14,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 )
 
-// Handle reading data from the passed in file descriptor and write to
-// the socket to client.
+// Copy data directly to network socket using specified kernel buffer.
 //
 // @Parameters
 //  - connection:  The active TCP socket connection to transmit data
@@ -192,10 +191,12 @@ func GetOptimalBufferSize(fileSize int64) int {
 //  - fileSize:  The size of the to be stored on disk from read socket data
 //
 // @Returns
+//  - The file path where the file was received
 //  - Error if it occurs, otherwise nil on success
 //
-func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
-                        fileSize int64) (string, error) {
+func HandleTransferRecv(connection net.Conn, storePath string,
+                        fileName string, fileSize int64) (
+                        string, error) {
     var file *os.File
     var err error
     //  Create buffer to optimal size based on expected file size
@@ -236,7 +237,7 @@ func HandleTransferRecv(connection net.Conn, storePath string, fileName string,
 //  - bytesRead:  The number of bytes read into the buffer
 //
 // @Returns
-//  - The byte slice with the file name
+//  - The file name
 //  - A integer file size
 //  - A network port if specified
 //  - Error if it occurs, otherwise nil on success
@@ -347,12 +348,13 @@ func ReceiveFile(connection net.Conn, buffer []byte,
 }
 
 
-// Reads data from the socket and write it to the passed in open file descriptor until end
-// of expected file size has been reached or error occurs with socket operation.
+// Reads data from the socket and write it to the passed in open file descriptor
+// until end of expected file size has been reached or error occurs with socket
+// operation.
 //
 // @Parameters
-//  - file:  The open file descriptor of where the data to be processed will be stored
-//  - connection:  Active socket connection for reading data to be stored and processed
+//  - file:  Open file descriptor where the data to be processed will be stored
+//  - connection:  Socket connection for reading data to be stored and processed
 //  - transferBuffer:  Buffer allocated for file transfer based on file size
 //  - fileSize:  The size of the file to be received
 //
@@ -377,9 +379,9 @@ func SocketToFileCopy(file *os.File, connection net.Conn,
 }
 
 
-// Gets the IP address and port, sets up optimal buffer based on expected file size, opens
-// the file and calls method to send the file via network socket. After the transfer is
-// complete the file is deleted from disk.
+// Gets the IP address and port, sets up optimal buffer based on expected file
+// size, opens the file and calls method to send the file via network socket.
+// After the transfer is complete the file is deleted from disk.
 //
 // @Parameters
 //  - connection:  The network connection where the file will be sent
@@ -409,7 +411,8 @@ func TransferFile(connection net.Conn, filePath string, fileSize int64) error {
 }
 
 
-// Gets the file size, formats and sends the transfer reply, and calls transfer method.
+// Gets the file size, formats and sends the transfer reply, and calls
+// transfer method.
 //
 // @Parameters
 //  - connection:  The network connection where the file will be sent

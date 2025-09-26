@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Creates and waits for the VPC to be created.
@@ -19,14 +20,14 @@ import (
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
-//  - tagName:  Name to tag the AWS resource
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - The ID of the created VPC
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
-                                   tagName string) (string, error) {
+                                   tags map[string]string) (string, error) {
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -35,16 +36,11 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
         CidrBlock: aws.String(cidrBlock),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeVpc,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -71,14 +67,14 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
     return vpcId, nil
 }
 
-// Checks to see if the VPC exists.
+// Checks to see if the VP ID exists.
 //
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - vpcID:  The ID of the VPC to ensure exists
 //
 // @Returns
-//  - Boolean to notify whether bucket exists or not
+//  - Toggle for whether VPC already exists or not
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
@@ -119,23 +115,24 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
     return true, nil
 }
 
-// Returns VPC ID if it exists, or creates it using supplied CIDR.
+// Provision VPC by checking for existence and creating if missing.
 //
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - vpcID:  The ID of the VPC to ensure exists
 //  - cidrBlock:  The network CIDR block of IP address space to allocate in VPC
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - The ID of VPC if created, otherwise nil
 //  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
-                                      cidrBlock string, tagName string) (
+                                      cidrBlock string, tags map[string]string) (
                                       string, error) {
     // Ensure required args are present
-    if cidrBlock == "" || tagName == "" {
-        return "", errors.New("cidrBlock or tagName is missing")
+    if cidrBlock == "" {
+        return "", errors.New("cidrBlock is missing")
     }
 
     // If VPC ID is present in state file
@@ -153,21 +150,23 @@ func (Ec2Man *Ec2Manger) VpcProvision(callTime time.Duration, vpcId string,
     }
 
     // Wait until VPC is created
-    return Ec2Man.vpcCreate(callTime, cidrBlock, tagName)
+    return Ec2Man.vpcCreate(callTime, cidrBlock, tags)
 }
 
 
-// VPCResolverForCIDR returns the VPC resolver IP for the given IPv4 CIDR.
-// AWS convention: resolver is network base + 2 (returned as /32).
+// Returns the VPC resolver IP for the given IPv4 CIDR which for AWS is commonly
+// network base + 2 (returned as /32).
 //
 // Examples:
 //   "10.1.0.0/16"  -> "10.1.0.2/32"
 //   "192.168.0.0/24" -> "192.168.0.2/32"
 //
-// Returns error if:
-//  - cidr is invalid
-//  - it's not IPv4
-//  - the prefix is too small to contain a +2 host (prefix > 30)
+// @Parameters
+//  - cidr:  Network CIDR to calculate VPC resolver
+//
+// @Returns
+//  - The network CIDR of the VPC resolver (always /32)
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcResolverForCidr(cidr string) (string, error) {
     // Parse the IP and network address with CIDR
@@ -213,4 +212,38 @@ func (Ec2Man *Ec2Manger) VpcResolverForCidr(cidr string) (string, error) {
     binary.BigEndian.PutUint32(resIP, resolver)
 
     return resIP.String() + "/32", nil
+}
+
+
+// Deletes the VPC.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The VPC ID
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man Ec2Manger) VpcTerminator(callTime time.Duration,
+                                      vpcId string) error {
+    // Ensure required arg is present
+    if vpcId == "" {
+        return errors.New("vpcId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteCallInput := &ec2.DeleteVpcInput{
+        VpcId: aws.String(vpcId),
+    }
+
+    // Delete the VPC by passed in ID
+    _, err := Ec2Man.client.DeleteVpc(ctx, deleteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete VPC %s - %w", vpcId, err)
+    }
+
+    return nil
 }

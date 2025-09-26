@@ -6,7 +6,7 @@ client_config:
   char_set2: "Specify custom charset used in hashmask, ignored if hash mask is not present" | "" | "See Hashcat docs"
   char_set3: "Specify custom charset used in hashmask, ignored if hash mask is not present" | "" | "See Hashcat docs"
   char_set4: "Specify custom charset used in hashmask, ignored if hash mask is not present" | "" | "See Hashcat docs"
-  cracking_mode: "The cracking mode used by hashcat for cracking" | "0" | "See Hashcat docs"
+  cracking_mode: "The cracking mode used by hashcat for cracking" | "0" | "All modes except 1 supported, see Hashcat docs"
   hash_mask: "The hash mask applied to hashcat for cracking" | "" | "See Hashcat docs"
   hash_type: "The type of hash attempting to crack" | "1000" | "See Hashcat docs"
   log_mode: "The log mode to be utilized on the client" | "both" | "both", "cloudwatch", "local"
@@ -21,7 +21,27 @@ local_config:
   cidr_block: "The network CIDR to assign to the created VPC" | "192.168.0.0/24"
   hash_file_path: "The file path to the file of hashes to attempt to crack" | "/home/test/hashes"
   iam_username: "The IAM username initially setup manually" | "test-user"
-  instance_type: "The type of EC2 instance to be utilized for cracking" | "p4d.24xlarge"
+  instance_type: "The type of EC2 instance to be utilized for cracking" | # === G4dn (always NVMe) ===
+                                                                          "g4dn.xlarge",  "g4dn.2xlarge",  "g4dn.4xlarge",
+                                                                          "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
+                                                                          # === G5d (d-variant of G5) ===
+                                                                          "g5d.2xlarge",  "g5d.4xlarge",  "g5d.8xlarge",
+                                                                          "g5d.12xlarge", "g5d.16xlarge", "g5d.24xlarge",
+                                                                          "g5d.48xlarge",
+                                                                          # === G6gd (Graviton d-variant of G6) ===
+                                                                          "g6gd.xlarge",   "g6gd.2xlarge",  "g6gd.4xlarge",
+                                                                          "g6gd.8xlarge",  "g6gd.12xlarge", "g6gd.16xlarge",
+                                                                          "g6gd.24xlarge", "g6gd.48xlarge",
+                                                                          # === G6ed (Intel d-variant of G6e) ===
+                                                                          "g6ed.xlarge",   "g6ed.2xlarge",  "g6ed.4xlarge",
+                                                                          "g6ed.8xlarge",  "g6ed.12xlarge", "g6ed.16xlarge",
+                                                                          "g6ed.24xlarge", "g6ed.48xlarge",
+                                                                          # === P4 families ===
+                                                                          "p4d.24xlarge",  "p4de.24xlarge",
+                                                                          # === P5 families ===
+                                                                          "p5.48xlarge",   "p5e.48xlarge",
+                                                                          # === P6-B200 ===
+                                                                          "p6-b200.48xlarge",
   listener_port: "The port of TLS listener to connect to access messaging system" | 7003
   load_dir: "The path to the directory containing wordlist data for cracking attempts" | "/home/test/load_dir"
   local_testing: "Toggle to specify whether the program is being tested locally (VMs) or in AWS" | true, false

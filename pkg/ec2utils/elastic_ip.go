@@ -6,22 +6,24 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-//
+// Creates a Elastic IP address and returns the ID of created resource.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - The Elasic IP address ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
-                                         tagName string) (
+                                         tags map[string]string) (
                                          string, error) {
     // Ensure API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -31,16 +33,11 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
         Domain: ec2types.DomainTypeVpc,
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
         callInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeElasticIp,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -69,13 +66,15 @@ func (Ec2Man *Ec2Manger) elasticIPCreate(callTime time.Duration,
     return *out.AllocationId, nil
 }
 
-//
+// Checks to see of the passed in Elastic IP address ID exists.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - eipId:  The ID of the elasic IP address
 //
 // @Returns
-//
+//  - Toggle for whether Elastic IP already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
                                          eipId string) (
@@ -116,17 +115,21 @@ func (Ec2Man *Ec2Manger) ElasticIPExists(callTime time.Duration,
     return true, nil
 }
 
-//
+// Handles provisioning Elasic IP address, checking its existence and
+// creating only if the resource is missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - eipId:  The ID of the Elasic IP address
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - Elastic IP address ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
                                             eipId string,
-                                            tagName string) (
+                                            tags map[string]string) (
                                             string, error) {
     // If Elastic IP ID is present in state file
     if eipId != "" {
@@ -143,5 +146,39 @@ func (Ec2Man *Ec2Manger) ElasticIpProvision(callTime time.Duration,
     }
 
     // Create and wait until VPC is created
-    return Ec2Man.elasticIPCreate(callTime, tagName)
+    return Ec2Man.elasticIPCreate(callTime, tags)
+}
+
+
+// Releases the Elastic IP address.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - eipId:  The ID of the elasic IP address
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man Ec2Manger) ElasticIpTerminator(callTime time.Duration,
+                                            eipId string) error {
+    // Ensure required arg is present
+    if eipId == "" {
+        return fmt.Errorf("eipId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.ReleaseAddressInput{
+        AllocationId: &eipId,
+    }
+
+    // Release the Elastic IP
+    _, err := Ec2Man.client.ReleaseAddress(ctx, callInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }

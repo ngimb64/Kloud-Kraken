@@ -11,13 +11,16 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
-// Create an association between a route table and a subnet and return the association id.
+// Create an association between a route table and subnet.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - routeTableId:  The ID of the route table to associate
+//  - subnetId:  The ID of the subnet to associate
 //
 // @Returns
-//
+//  - The ID of route table to subnet association
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) associateRouteTableToSubnet(callTime time.Duration,
                                                      routeTableId string,
@@ -52,20 +55,23 @@ func (Ec2Man *Ec2Manger) associateRouteTableToSubnet(callTime time.Duration,
     return aws.ToString(out.AssociationId), nil
 }
 
-// Check whether the route table is associated to the given subnet and
-// return the association id if present.
+// Check whether the route table is associated to the given subnet.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - associationId:  The association ID to check for existence
+//  - routeTableId:  The ID of the route table to check association
+//  - subnetId:  The ID of the subnet to check association
 //
 // @Returns
+//  - Toggle for whether route table association already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
-                                           associationId string,
-                                           routeTableId string,
-                                           subnetId string) (
-                                           bool, error) {
+func (Ec2Man *Ec2Manger) RouteTableAssociationExists(callTime time.Duration,
+                                                     associationId string,
+                                                     routeTableId string,
+                                                     subnetId string) (
+                                                     bool, error) {
     // Ensure required args are present
     if associationId == "" || routeTableId == "" || subnetId == "" {
         return false, errors.New("associationId or routeTableId or " +
@@ -119,13 +125,18 @@ func (Ec2Man *Ec2Manger) AssociationExists(callTime time.Duration,
     return false, nil
 }
 
-// Ensure a route table association exists between routeTableId and subnetId.
+// Provision a association exists between route table and subnet by checking for
+// existence and creating one if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - associationId:  The route table and subnet association ID
+//  - routeTableId:  The route table ID to be associated
+//  - subnetID:  The subnet ID to be associated
 //
 // @Returns
-//
+//  - Route table association ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) RouteTableAssociationProvision(callTime time.Duration,
                                                         associationId string,
@@ -140,8 +151,8 @@ func (Ec2Man *Ec2Manger) RouteTableAssociationProvision(callTime time.Duration,
     // If the route table associate ID is present in state file
     if associationId != "" {
         // Check to see if it exists in AWS environment
-        exists, err := Ec2Man.AssociationExists(callTime, associationId,
-                                                routeTableId, subnetId)
+        exists, err := Ec2Man.RouteTableAssociationExists(callTime, associationId,
+                                                          routeTableId, subnetId)
         if err != nil {
             return "", err
         }
@@ -154,4 +165,38 @@ func (Ec2Man *Ec2Manger) RouteTableAssociationProvision(callTime time.Duration,
 
     // Create a new association from route table to subnet
     return Ec2Man.associateRouteTableToSubnet(callTime, routeTableId, subnetId)
+}
+
+// Disassociates the route table and subnet.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - associationId:  The route table and subnet association ID
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man Ec2Manger) RouteTableAssociateTerminator(callTime time.Duration,
+                                                      associationId string) error {
+    // Ensure required arg is present
+    if associationId == "" {
+        return errors.New("associationId is missing")
+    }
+
+    // Ensure API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    disassocCallInput := &ec2.DisassociateRouteTableInput{
+        AssociationId: aws.String(associationId),
+    }
+
+    // Disassociate subnet from route table
+    _, err := Ec2Man.client.DisassociateRouteTable(ctx, disassocCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to disassociate route table (%s) - %w",
+                          associationId, err)
+    }
+
+    return nil
 }

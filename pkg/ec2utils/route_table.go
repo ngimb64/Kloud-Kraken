@@ -10,21 +10,28 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-// Create a route table in the VPC add the passed in route to either
-// the IGW or NAT depending on arguments.
+// Create a route table in the VPC add the passed in route to either the IGW or
+// NAT depending on arguments.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The VPC ID where the route table is to be created
+//  - igwId:  The ID of the Internet Gateway to attach to route table
+//  - natId:  The ID of the NAT Gateway to attach to route table
+//  - destCidr:  The CIDR netork that the route table routes to
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
+//  - The Route Table ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId string,
-                                                   igwId string, natId string,
-                                                   destCidr string, nameTag string,
-                                                   subnetId string) (
+func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration,
+                                                   vpcId string, igwId string,
+                                                   natId string, destCidr string,
+                                                   tags map[string]string) (
                                                    string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
@@ -45,16 +52,11 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
     }
 
     // Tag the route table name if provided
-    if nameTag != "" {
+    if len(tags) > 0 {
         createRouteTableCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeRouteTable,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(nameTag),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -88,33 +90,18 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration, vpcId
         return "", fmt.Errorf("create route to target on rt %s - %w", rtID, err)
     }
 
-    // Associate the route table to the provided subnet if given
-    if subnetId != "" {
-        associateCallInput := &ec2.AssociateRouteTableInput{
-            RouteTableId: aws.String(rtID),
-            SubnetId:     aws.String(subnetId),
-        }
-
-        _, err = Ec2Man.client.AssociateRouteTable(ctx, associateCallInput)
-        if err != nil {
-            return "", fmt.Errorf("associate route table %s to subnet %s - %w",
-                                  rtID, subnetId, err)
-        }
-    }
-
     return rtID, nil
 }
 
-// Check whether a route table exists in the VPC with passed in route to the
-// provided IGW or NAT/ Returns exists true when such a route table is present
-// id of the route table and a short state string state values are either
-// "has-route" or "has-route-and-association" or empty when not found.
+// Check whether route table exists in the VPC.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - rtId:  The route table ID
 //
 // @Returns
-//
+//  - Toggle for whether Route Table already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
                                           rtId string) (
@@ -169,18 +156,26 @@ func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
 
 
 // Provision a route table that routes passed in network CIDR to either
-// the IGW or NAT and associate it to a subnet when missing.
+// the IGW or NAT and associate it to a subnet when missing. Either the
+// igwId or the natId is specified depending the desired destination.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - rtId:  The route table ID
+//  - vpcId:  The VPC ID where the route table resides
+//  - igwId:  If specified, the Internet Gateway the route table is attached to
+//  - natId:  If specified, the NAT Gateway ID the route table is attached to
+//  - destCidr:  The CIDR netork that the route table routes to
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - Route table ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string,
                                              vpcId string, igwId string,
-                                             natId string, subnetId string,
-                                             destCidr string, nameTag string) (
+                                             natId string, destCidr string,
+                                             tags map[string]string) (
                                              string, error) {
     // Ensure required arg is present
     if vpcId == "" || destCidr == "" {
@@ -206,7 +201,41 @@ func (Ec2Man *Ec2Manger) RouteTableProvision(callTime time.Duration, rtId string
         }
     }
 
-    // Create a new route table with the chosen target and optionally associate it
-    return Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId, natId,
-                                            destCidr, nameTag, subnetId)
+    // Create a new route table with chosen target
+    return Ec2Man.routeTableCreateAndAttach(callTime, vpcId, igwId,
+                                            natId, destCidr, tags)
+}
+
+
+// Deletes the route table.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - routeTableId:  The ID of the route table to terminate
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man Ec2Manger) RouteTableTerminator(callTime time.Duration,
+                                             routeTableId string) error {
+    // Ensure required arg is present
+    if routeTableId == "" {
+        return errors.New("routeTableId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteRouteCallInput := &ec2.DeleteRouteTableInput{
+        RouteTableId: aws.String(routeTableId),
+    }
+
+    _, err := Ec2Man.client.DeleteRouteTable(ctx, deleteRouteCallInput)
+    if err != nil {
+        return fmt.Errorf("failed to delete route table (%s) - %w",
+                          routeTableId, err)
+    }
+
+    return nil
 }

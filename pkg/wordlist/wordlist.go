@@ -12,9 +12,9 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 )
 
-// Performs the Linux cat command on a slice of files to the passed in
-// output path. Prior to executing the command the original source file
-// is deleted and the cat file slice is reset for the next execution.
+// Performs the Linux cat command on a slice of files to the passed in output
+// path. Prior to executing the command the original source file is deleted
+// and the cat file slice is reset for the next execution.
 //
 // @Parameters
 //  - catFiles:  Slice of the file paths of files to be concatenated via cat
@@ -57,8 +57,8 @@ func CatAndDelete(catFiles *[]string, catPath string) error {
 }
 
 
-// Runs the source file through duplicut with the resulting output written
-// to the destination file and comparing its size to the max file size.
+// Runs the source file through duplicut with the resulting output written to
+// the destination file and comparing its size to the max file size.
 //
 // @Parameters
 //  - srcPath:  The path to the source file that needs de-deplication
@@ -96,8 +96,8 @@ func DuplicutAndDelete(srcPath string, destPath string) (int64, error) {
 }
 
 
-// Takes the file that is over the max allowed size and move
-// any data over that max into a new file via cut command.
+// Takes the file that is over the max allowed size and move any data over that
+// max into a new file via cut command.
 //
 // @Parameters
 //  - filterPath:  The source file that is over the max size that
@@ -117,7 +117,8 @@ func FileShaveSplit(filterPath string, shavePath string,
     // Convert the max file size to string
     maxFileSizeStr := strconv.FormatInt(maxFileSize, 10)
     // Format the cut command to be executed
-    cmd := exec.Command("split", "-d", "-C", maxFileSizeStr, filterPath, shavePath)
+    cmd := exec.Command("split", "-d", "-C", maxFileSizeStr,
+                        filterPath, shavePath)
     // Execute split command
     err := cmd.Run()
     if err != nil {
@@ -174,7 +175,7 @@ func FileShaveSplit(filterPath string, shavePath string,
 // Gets the optimal block size for file spliting based on the size of the file.
 //
 // @Parameters
-//  - fileSize:  The size of the file which will be used to calculate optimal block size
+//  - fileSize:  Size of the file to be used calculating optimal block size
 //
 // @Returns
 //  - The calculated optimal block size
@@ -215,8 +216,7 @@ func GetOptimalBlockSize(fileSize int64) (int64, error) {
 //  - Error if it occurs, otherwise nil on success
 //
 func MergeWordlistDir(dirPath string, maxMergingSize int64,
-                      maxFileSize int64, maxRange float64,
-                      ) error {
+                      maxFileSize int64, maxRange float64) error {
     catFiles := []string{}
     outFilesMap := make(map[string]struct{})
 

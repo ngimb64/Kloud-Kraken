@@ -10,20 +10,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-// Create a NAT gateway in the specified subnet using the provided EIP allocation ID.
+// Create a NAT gateway in the specified subnet using the provided Elastic
+// IP address allocation ID.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - subnetId:  The subnet ID where the NAT Gateway is created
+//  - eipId:  The Elastic IP to assign to the NAT Gateway
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - The NAT Gateway ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
                                                  subnetID string,
                                                  eipId string,
-                                                 nameTag string) (
+                                                 tags map[string]string) (
                                                  string, error) {
     // Ensure required args are present
     if subnetID == ""  || eipId == "" {
@@ -40,16 +46,11 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
     }
 
     // Tag the NAT gateway name if provided
-    if nameTag != "" {
+    if len(tags) > 0 {
         createCallInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeNatgateway,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(nameTag),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(tags),
             },
         }
     }
@@ -84,14 +85,15 @@ func (Ec2Man *Ec2Manger) natGatewayCreateAndWait(callTime time.Duration,
     return newNatID, nil
 }
 
-// Check whether a usable NAT gateway exists in the given subnet and
-// return its id and state.
+// Check whether a NAT gateway exists in the given subnet.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - natId:  The ID of the NAT Gateway
 //
 // @Returns
-//
+//  - Toggle for whether NAT Gateway already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
                                           natId string) (
@@ -140,14 +142,20 @@ func (Ec2Man *Ec2Manger) NatGatewayExists(callTime time.Duration,
 // Provision a NAT gateway by checking for existence and creating one if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - natId:  The NAT Gateway ID
+//  - subnetId:  The subnet where the NAT Gateway resides
+//  - eipId:  The Elastic IP address ID associated with NAT Gateway
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - NAT Gateway ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId string,
                                              subnetId string, eipId string,
-                                             nameTag string) (string, error) {
+                                             tags map[string]string) (
+                                             string, error) {
     // Ensure required args are present
     if subnetId == "" || eipId == "" {
         return "", errors.New("subnetId or eipId is missing")
@@ -168,6 +176,39 @@ func (Ec2Man *Ec2Manger) NatGatewayProvision(callTime time.Duration, natId strin
     }
 
     // Create and wait for a new NAT gateway
-    return Ec2Man.natGatewayCreateAndWait(callTime, subnetId,
-                                          eipId, nameTag)
+    return Ec2Man.natGatewayCreateAndWait(callTime, subnetId, eipId, tags)
+}
+
+
+// Deletes the NAT Gateway.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - natGatewayId:  The ID of the nat NAT Gateway
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) NatGatewayTerminator(callTime time.Duration,
+                                              natGatewayId string) error {
+    // Ensure required arg is present
+    if natGatewayId == "" {
+        return errors.New("natGatewayId is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    callInput := &ec2.DeleteNatGatewayInput{
+        NatGatewayId: aws.String(natGatewayId),
+    }
+
+    // Delete the NAT Gateway
+    _, err := Ec2Man.client.DeleteNatGateway(ctx, callInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }

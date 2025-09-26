@@ -11,21 +11,27 @@ import (
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-//
+// Creates VPC Flow Logs to CloudWatch group.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The ID of the VPC where the Flow Logs will be applied
+//  - logGroupName:  Name of the CloudWatch Logs group VPC Flow Logs uses
+//  - roleArn:  The IAM ARN of the VPC Flow Logs role
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - The VPC Flow Logs ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) createFlowLogToCloudWatch(callTime time.Duration,
                                                    vpcID string,
                                                    logGroupName string,
                                                    roleArn string,
-                                                   tagName string) (
+                                                   tags map[string]string) (
                                                    string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -40,16 +46,18 @@ func (Ec2Man *Ec2Manger) createFlowLogToCloudWatch(callTime time.Duration,
         DeliverLogsPermissionArn: aws.String(roleArn),
     }
 
-    if tagName != "" {
+    if len(tags) > 0 {
+        flowLogsTags := tags
+
+        // If the name tag exists in tags map
+        if name, ok := tags["Name"]; ok {
+            flowLogsTags["Name"] = name + "-flow-logs"
+        }
+
         callInput.TagSpecifications = []ec2types.TagSpecification{
             {
                 ResourceType: ec2types.ResourceTypeVpcFlowLog,
-                Tags: []ec2types.Tag{
-                    {
-                        Key: aws.String("Name"),
-                        Value: aws.String(tagName + "-flow-logs"),
-                    },
-                },
+                Tags: awsutils.BuildEc2Tags(flowLogsTags),
             },
         }
     }
@@ -67,13 +75,15 @@ func (Ec2Man *Ec2Manger) createFlowLogToCloudWatch(callTime time.Duration,
     return "", fmt.Errorf("CreateFlowLogs succeeded but returned no flow-log-id")
 }
 
-// Checks if flow log group exists via resource-id filter.
+// Checks if VPC Flow Logs group exists via resource-id filter.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  ID of the VPC where Flow Logs are applied
 //
 // @Returns
-//
+//  - Toggle for whether VPC Flow Logs exists in VPC or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcFlowLogExists(callTime time.Duration,
                                           vpcID string) (
@@ -105,24 +115,32 @@ func (Ec2Man *Ec2Manger) VpcFlowLogExists(callTime time.Duration,
     return len(out.FlowLogs) > 0, nil
 }
 
-// Creates a CloudWatch Logs log group if not present.
+// Provision VPC Flow Logs by checking for existence and creating if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - flowLogId:  The VPC Flow Logs ID
+//  - vpcId:  The ID of the VPC where the Flow Logs will be applied
+//  - cwlClient:  The client to the CloudWatch service
+//  - logGroupName:  Name of the CloudWatch Logs group VPC Flow Logs uses
+//  - roleArn:  The IAM ARN of the VPC Flow Logs role
+//  - retentionDays:  The number of days VPC Flow Logs are retained in CloudWatch
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - VPC Flow Logs ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
                                              flowLogId string, vpcId string,
-                                             cwl *cloudwatchlogs.Client,
-                                             logGroupName string,
-                                             roleArn string,
-                                             tagName string) (
+                                             cwlClient *cloudwatchlogs.Client,
+                                             logGroupName string, roleArn string,
+                                             retentionDays int32,
+                                             tags map[string]string) (
                                              string, error) {
     // Ensure required args are present
-    if vpcId == "" || cwl == nil || logGroupName == "" || roleArn == "" {
-        return "", errors.New("vpcId or cwl or logGroupName or roleArn is missing")
+    if vpcId == "" || cwlClient == nil || logGroupName == "" || roleArn == "" {
+        return "", errors.New("vpcId or cwlClient or logGroupName or roleArn is missing")
     }
 
     // If the flow log Id is present in state file
@@ -143,17 +161,22 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
         LogGroupName: aws.String(logGroupName),
     }
 
-    if tagName != "" {
-        callInput.Tags = map[string]string{
-            "Name": tagName,
+    if len(tags) > 0 {
+        logGroupTags := tags
+
+        // If the name tag exists in tags map
+        if name, ok := tags["Name"]; ok {
+            logGroupTags["Name"] = name + "-log-group"
         }
+
+        callInput.Tags = logGroupTags
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
     // Create the Cloudwatch log group
-    _, err := cwl.CreateLogGroup(ctx, callInput)
+    _, err := cwlClient.CreateLogGroup(ctx, callInput)
     cancel()
     if err != nil {
         var alreadyExists *cwtypes.ResourceAlreadyExistsException
@@ -163,14 +186,54 @@ func (Ec2Man *Ec2Manger) VpcFlowLogProvision(callTime time.Duration,
         }
     }
 
+    // Set the VPC Flow Logs group retention period
+    err = awsutils.SetRetentionForLogGroup(1 * time.Minute, cwlClient,
+                                           logGroupName, retentionDays)
+    if err != nil {
+        return "", err
+    }
+
     // Create the flow logs from VPC to CloudWatch
     flowLogId, err = Ec2Man.createFlowLogToCloudWatch(callTime, vpcId,
                                                       logGroupName,
-                                                      roleArn,
-                                                      tagName)
+                                                      roleArn, tags)
     if err != nil {
         return "", fmt.Errorf("creating flow log to CloudWatch - %w", err)
     }
 
     return flowLogId, nil
+}
+
+
+// Delete VPC Flow Logs with support for multiple IDs.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - flowLogIds:  List of VPC Flow Logs IDs to delete
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man Ec2Manger) VpcFlowLogTerminator(callTime time.Duration,
+                                             flowLogIds []string) error {
+    // Ensure required arg is present
+    if len(flowLogIds) == 0 {
+        return fmt.Errorf("DeleteFlowLogs: no flow log IDs provided")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteFlowLogsInput := &ec2.DeleteFlowLogsInput{
+        FlowLogIds: flowLogIds,
+    }
+
+    // Delete the VPC flow logs
+    _, err := Ec2Man.client.DeleteFlowLogs(ctx, deleteFlowLogsInput)
+    if err != nil {
+        return fmt.Errorf("deleting VPC Flow Logs - %w", err)
+    }
+
+    return nil
 }

@@ -3,12 +3,14 @@ package ssmutils
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
 // Struct for managing S3 bucket operations
@@ -36,8 +38,8 @@ func SsmNewManager(config aws.Config) *SsmManager {
 // Retrieve value from AWS SSM Parameter Store.
 //
 // @Parameters
-//  - parameter:  name of the parameter to retrieve
 //  - callTime:  The length of time the API call is allowed to execute
+//  - parameter:  name of the parameter to retrieve
 //
 // @Returns
 //  - The retrieved parameter from param store
@@ -70,7 +72,7 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //  - callTime:  The length of time the API call is allowed to execute
 //  - parameter:  name of the parameter to retrieve
 //  - data:  The data to store with associated parameter
-//  - tagName:  Name to tag the AWS resource
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - The path where the parameter is stored in param store
@@ -79,7 +81,7 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
                                           parameter string,
                                           data string,
-                                          tagName string) (
+                                          tags map[string]string) (
                                           string, error) {
     var existsErr *ssmtypes.ParameterAlreadyExists
 
@@ -98,13 +100,8 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
         }
 
         // If tag was specified, add it to input
-        if tagName != "" {
-            callInput.Tags = []ssmtypes.Tag{
-                {
-                    Key: aws.String("Name"),
-                    Value: aws.String(tagName),
-                },
-            }
+        if len(tags) > 0 {
+            callInput.Tags = awsutils.BuildSsmTags(tags)
         }
 
         // Put parameter into AWS SSM Parameter Store
@@ -123,4 +120,70 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
 
         return candidate, nil
     }
+}
+
+
+// Deletes a single SSM parameter.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - paramName:  The parameter to be deleted
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
+                                             paramName string) error {
+    // Ensure required arg is present
+    if paramName == "" {
+        return fmt.Errorf("paramName is missing")
+    }
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    deleteCallInput := &ssm.DeleteParameterInput{
+        Name: aws.String(paramName),
+    }
+
+    // Delete the passed in parameter from SSM Parameter Store
+    _, err := SsmMan.client.DeleteParameter(ctx, deleteCallInput)
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+
+// Deletes all the SSM parameters associated with a key.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - baseName:  The base name of the key to delete all params of
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (SsmMan SsmManager) SsmDeleteAllParams(callTime time.Duration,
+                                            baseName string) error {
+    for i := 1;; i++ {
+        // Format the parameter name per iteration
+        paramName := baseName + "-" + strconv.Itoa(i)
+        // Attempt to delete the parameter
+        err := SsmMan.SsmDeleteParameter(callTime, paramName)
+        if err != nil {
+            var paramNotFound *ssmtypes.ParameterNotFound
+
+            // If the parameter was not found, operation is complete
+            if errors.As(err, &paramNotFound) {
+                break
+            }
+
+            return fmt.Errorf("failed to delete param %q - %w", paramName, err)
+        }
+    }
+
+    return nil
 }

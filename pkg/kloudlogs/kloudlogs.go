@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwlTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -44,16 +45,19 @@ type LoggerManager struct {
 //  - logDestination:  Where the logs will be stored (local, cloudwatch, both)
 //  - localLogFile:  Path where the logs will be stored locally on file
 //  - awsConfig:  The initialized AWS configuration instance
-//  - group:  The CloudWatch logging group
-//  - tagName:  Name to tag the AWS resource
+//  - logGroup:  The CloudWatch logging group
+//  - retentionDays:  The number of days to retain logs before deleting
+//  - tags:  String map of tag key-values to configure
 //  - logToMemory:  Boolean toggler whether to log to memory or not
 //
 // @Returns
 //  - The initialzed logging manager
 //  - Error if it occurs, otherwise nil on success
 //
-func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
-                      group string, tagName string, logToMemory bool) (
+func NewLoggerManager(logDestination string, localLogFile string,
+                      awsConfig aws.Config, logGroup string,
+                      retentionDays int32, tags map[string]string,
+                      logToMemory bool) (
                       *LoggerManager, error) {
     var localLogger Logger
     var cloudLogger Logger
@@ -69,7 +73,8 @@ func NewLoggerManager(logDestination, localLogFile string, awsConfig aws.Config,
 
     // Initialize CloudWatch logger if needed
     if logDestination == "cloudwatch" || logDestination == "both" {
-        cloudLogger, err = NewCloudWatchLogger(awsConfig, group, tagName)
+        cloudLogger, err = NewCloudWatchLogger(awsConfig, logGroup,
+                                               retentionDays, tags)
         if err != nil {
             return nil, err
         }
@@ -141,7 +146,7 @@ func (manager *LoggerManager) LogMessage(level string, message string, args ...a
     case "fatal":
         manager.LogFatal(formattedMessage, zapFields...)
     default:
-        log.Fatalf("[*] Error: Unknown logging level specified %v", level)
+        log.Fatalf("[*] Error: Unknown logging level specified \"%v\"", level)
     }
 }
 
@@ -279,7 +284,7 @@ func NewZapLogger(logFile string, logToMemory bool) (Logger, error) {
         // Build the file-based logger
         logger, err = cfg.Build()
         if err != nil {
-            return nil, fmt.Errorf("could not create file logger: %w", err)
+            return nil, fmt.Errorf("could not create file logger - %w", err)
         }
 
         return &ZapLogger{
@@ -352,79 +357,91 @@ type CloudWatchLogger struct {
 //
 // @Parameters
 //  - awsConfig:  The AWS configuration config struct
-//  - group:  The CloudWatch logging group
-//  - tagName:  Name to tag the AWS resource
+//  - groupName:  The CloudWatch logging group
+//  - retentionDay:  The number of days logs are retained in CloudWatch
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
 //  - The initializes CloudWatch logger config instance
 //  - Error if it occurs, otherwise nil on success
 //
-func NewCloudWatchLogger(awsConfig aws.Config, group string, tagName string) (
+func NewCloudWatchLogger(awsConfig aws.Config, groupName string,
+                         retentionDays int32, tags map[string]string) (
                          Logger, error) {
     var stream string
     // Establish CloudWatch client and set to run in background
-    client := cwl.NewFromConfig(awsConfig)
+    cwlClient := cwl.NewFromConfig(awsConfig)
     // Ensure API calls do not hang for than longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Minute)
     defer cancel()
 
     // Set up client to the EC2 instance metadata service
     metaDataService := imds.NewFromConfig(awsConfig)
+
+    getMetadataCallInput := &imds.GetMetadataInput{
+        Path: "instance-id",
+    }
+
     // Get the EC2 insance id based on the AWS config
-    metaData, err := metaDataService.GetMetadata(ctx, &imds.GetMetadataInput{Path: "instance-id"})
+    metaData, err := metaDataService.GetMetadata(ctx, getMetadataCallInput)
     if err != nil {
         // Fallback to hostname if failed to retrieve instance id
         stream, err = os.Hostname()
         if err != nil {
-            return nil, fmt.Errorf("cannot determine host identity: %w", err)
+            return nil, fmt.Errorf("cannot determine host identity - %w", err)
         }
     } else {
         // Get the EC2 instance id from metadata output
         streamData, err := io.ReadAll(metaData.Content)
         if err != nil {
-            return nil, fmt.Errorf("getting instance ID:  %w", err)
+            return nil, fmt.Errorf("getting instance ID - %w", err)
         }
 
         stream = string(streamData)
     }
 
     createLogGroupInput := &cwl.CreateLogGroupInput{
-        LogGroupName: aws.String(group),
+        LogGroupName: aws.String(groupName),
     }
 
-    if tagName != "" {
-        createLogGroupInput.Tags = map[string]string{
-            "Name": tagName,
-        }
+    if len(tags) > 0 {
+        createLogGroupInput.Tags = tags
     }
 
     // Create the CloudWatch log group
-    _, err = client.CreateLogGroup(ctx, createLogGroupInput)
+    _, err = cwlClient.CreateLogGroup(ctx, createLogGroupInput)
     if err != nil {
         var ae *cwlTypes.ResourceAlreadyExistsException
 
         // If the error is not having to do with group already existing
         if !errors.As(err, &ae) {
-            return nil, fmt.Errorf("CreateLogGroup: %w", err)
+            return nil, fmt.Errorf("CreateLogGroup - %w", err)
         }
     }
 
+    // Set the VPC Flow Logs group retention period
+    err = awsutils.SetRetentionForLogGroup(1 * time.Minute, cwlClient,
+                                           groupName, retentionDays)
+    if err != nil {
+        return nil, err
+    }
+
     // Create the CloudWatch log stream
-    _, err = client.CreateLogStream(ctx, &cwl.CreateLogStreamInput{
-        LogGroupName:  aws.String(group),
+    _, err = cwlClient.CreateLogStream(ctx, &cwl.CreateLogStreamInput{
+        LogGroupName:  aws.String(groupName),
         LogStreamName: aws.String(stream),
     })
     if err != nil {
-        return nil, fmt.Errorf("CreateLogStream: %w", err)
+        return nil, fmt.Errorf("CreateLogStream - %w", err)
     }
 
-    // Describe to grab initial token (nil if fresh)
-    res, err := client.DescribeLogStreams(ctx, &cwl.DescribeLogStreamsInput{
-        LogGroupName:        aws.String(group),
+    // Describe to grab initial token, nil if fresh
+    res, err := cwlClient.DescribeLogStreams(ctx, &cwl.DescribeLogStreamsInput{
+        LogGroupName:        aws.String(groupName),
         LogStreamNamePrefix: aws.String(stream),
     })
     if err != nil {
-        return nil, fmt.Errorf("calling DescribeLogStreams: %w", err)
+        return nil, fmt.Errorf("DescribeLogStreams - %w", err)
     }
 
     var token *string
@@ -435,8 +452,8 @@ func NewCloudWatchLogger(awsConfig aws.Config, group string, tagName string) (
     }
 
     return &CloudWatchLogger{
-        client:       client,
-        logGroup:     group,
+        client:       cwlClient,
+        logGroup:     groupName,
         logStream:    stream,
         nextSequence: token,
     }, nil
@@ -449,7 +466,8 @@ func NewCloudWatchLogger(awsConfig aws.Config, group string, tagName string) (
 //  - msg:  The message of log event
 //  - fields:  Any additional zap field to be added to log entry
 //
-func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...zap.Field) {
+func (cloudWatchLog *CloudWatchLogger) log(level string, msg string,
+                                           fields ...zap.Field) {
     // Build log entry
     entry := map[string]any{
         "timestamp": time.Now().UTC().Format(time.RFC3339Nano),
@@ -466,7 +484,7 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string, fields ...z
     // Format the data into JSON for transporting to CloudWatch
     payload, err := json.Marshal(entry)
     if err != nil {
-        log.Fatalf("marshal log entry: %v", err)
+        log.Fatalf("Marshaling log entry: %v", err)
     }
 
     // Set up input log event message
@@ -552,7 +570,7 @@ func LogToMap(jsonStr string) (map[string]any, error) {
     // Store the json string data as key-values in log map
     err := json.Unmarshal([]byte(jsonStr), &logMap)
     if err != nil {
-        return nil, fmt.Errorf("failed to unmarshal JSON log: %w", err)
+        return nil, fmt.Errorf("failed to unmarshal JSON log - %w", err)
     }
 
     return logMap, nil

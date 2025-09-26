@@ -6,7 +6,8 @@ export DEBIAN_FRONTEND=noninteractive
 # Function to handle errors with custom messages and exit codes
 error_exit() {
     local message="$1"
-    local code="${2:-1}"  # Default exit code is 1 if not provided
+    # Default exit code is 1 if not provided
+    local code="${2:-1}"
     echo "[*] Error:  $message"
     exit "$code"
 }

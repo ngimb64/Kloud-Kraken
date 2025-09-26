@@ -16,11 +16,11 @@ var SelectedFiles sync.Map		  // Global map to track selected files
 var FileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
 
 
-// AppendFile appends the contents of srcFile to destFile if the source file has data.
+// AppendFile appends contents of srcFile to destFile if source file has data.
 //
 // @Parameters
 //  - sourceFilePath:  The source file whose data will be appended to the dest
-//  - destFilePath:  The destination file where the source files data will be appended
+//  - destFilePath:  The destination file where source data will be appended
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -73,10 +73,10 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
 // to avoid filling it completely.
 //
 // @Parameters
-// - diskSize:  The total size of the entire disk in bytes
+//  - diskSize:  The total size of the entire disk in bytes
 //
 // @Returns
-// - The calulcated reserved bytes size based on disk size
+//  - The calulcated reserved bytes size based on disk size
 //
 func CalcReserveBytes(diskSize int64) int64 {
     if diskSize <= 0 {
@@ -103,7 +103,7 @@ func CalcReserveBytes(diskSize int64) int64 {
     default:
         // Perform linear interpolation
         ratio := (totalGB - smallGB) / (largeGB - smallGB) // 0..1
-        pct = maxPct - ratio*(maxPct-minPct)
+        pct = maxPct - ratio * (maxPct - minPct)
     }
 
     // Get the reserve size
@@ -118,7 +118,7 @@ func CalcReserveBytes(diskSize int64) int64 {
 }
 
 
-// Reads the passed in path (dir) and attempts to get the first file,
+// Reads the passed in path to dir and attempts to get the first file,
 // returning its name and size.
 //
 // @Parameters
@@ -167,23 +167,25 @@ func CheckDirFiles(path string) (string, int64, error) {
 }
 
 
-// Creates a random text file based on length of name and extension.
-// Provides boolean toggle to specify whether file handle should stay open and
-// returned or be closed and not be returned.
+// Creates a random text file based on length of name and extension. Provides
+// boolean toggle to specify whether file handle should stay open and returned
+// or be closed and not be returned.
 //
 // @Parameters
 //  - dirPath:  The path to the directory where the file will be created
 //  - nameLen:  The number of random characters for the name
-//  - baseName:  The base of file name which random random chars will be appended
+//  - baseName:  The base of file name to append random chars to
 //  - externsion:  The file extension to use (ex: "txt" leave out the .)
 //  - retHandler:  Boolean used to return the open file descriptor or not
 //
 // @Returns
 //  - The formatted path to the newly create random file
 //  - The open file handler of create file is retHandler is true
+//  - Error if it occurs, otherwise nil on success
 //
-func CreateRandFile(dirPath string, nameLen int, baseName string, extension string,
-                    retHandler bool) (string, *os.File, error) {
+func CreateRandFile(dirPath string, nameLen int, baseName string,
+                    extension string, retHandler bool) (
+                    string, *os.File, error) {
     var randoPath string
     var randoString string
 
@@ -292,8 +294,8 @@ func MakeDirs(programDirs []string) error {
 }
 
 
-// Checks if the file or directory exists and ensure directories
-// have contents in them based on file size or entries in dir.
+// Checks if the file or directory exists and ensure directories have contents
+// in them based on file size or entries in dir.
 //
 // @Parameters
 //  - The path to check for existence
@@ -348,7 +350,7 @@ func PathExists(filePath string) (bool, bool, bool, error) {
 //
 // @Parameters
 //  - loadDir:  The directory to attempt to select a file
-//  - maxFileSizeInt64:  The max file size to ensure any violators are not selected
+//  - maxFileSizeInt64:  The max file size to ensure violators are not selected
 //
 // @Returns
 //  - Path of the selected file

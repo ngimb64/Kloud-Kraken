@@ -24,6 +24,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/hashcat"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
@@ -33,12 +34,15 @@ import (
 )
 
 // Package level variables
-var BufferMutex = &sync.Mutex{}           // Mutex for message buffer synchronization
-var DataPath string                       // Path where data dirs will be stored
+var BufferMutex = &sync.Mutex{}    // Mutex for message buffer synchronization
+var DataPath string                // Path where data dirs will be stored
+var Ec2Client *ec2utils.Ec2Manger  // EC2 client management struct
+var Ec2SecurityGroupId string      // ID for Security Group for EC2 clients
 var HashcatArgs = &hashcat.HashcatArgs{}  // Initialze where hashcat args are stored
 var HashFilePath string  // Stores hash file path when received
 var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
+var IsTesting bool       // Toggle for specifying whether program is in testing mode
 var LogPath = "/tmp/KloudKraken.log"  // Stores log file to be returned to client
 var MaxTransfers atomic.Int32         // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32           // Stores converted int maxTransfers arg
@@ -82,7 +86,8 @@ func createFailureResult(lootPath string) error {
 }
 
 
-// Lock mutux for messaging connection and related buffer, send the processing complete message.
+// Lock mutux for messaging connection and related buffer, sends the processing
+// complete message.
 //
 // @Parameters
 //  - connection:  network socket connection where procesing complete message is sent
@@ -104,16 +109,17 @@ func sendProcessingComplete(connection net.Conn,
 }
 
 
-// Periodically attempts to select a received file from the wordlist path until signal in channel
-// takes the received filename and passes it into command execution method for processing, and
-// the result is parse and logged via kloudlogs.
+// Periodically attempts to select a received file from the wordlist path until
+// signal in channel takes the received filename and passes it into command
+// execution method for processing, the result is parsed and logged to kloudlogs.
 //
 // @Parameters
-//  - connection:  Active socket connection for reading data to be stored and processed
-//  - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
-//  - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
+//  - connection:  Socket connection for reading data to be stored and processed
+//  - hashcatOptChannel:  Channel to signal when hash and ruleset files are received
+//  - transferChannel:  Channel to transmit filenames after transfer to initiate
+//                      data processing
 //  - waitGroup:  Acts as a barrier for the Goroutines running
-//  - transferManager:  Manages calculating the amount of data being transferred locally
+//  - transferManager:  Manages calculating the amount of data being transferred
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
@@ -321,17 +327,17 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 }
 
 
-// Sends transfer message to server, waits for transfer reply with file name and size or
-// the end transfer message. Gets an available port and sends it to the server, and
-// waits for an incoming connection from the server and uses that new connection to
-// initiate file transfer routine.
+// Sends transfer message to server, waits for transfer reply with file name and
+// size or the end transfer message. Gets an available port and sends it to the
+// server, and waits for an incoming connection from the server and uses that
+// new connection to initiate file transfer routine.
 //
 // @Parameters
-//  - connection:  Active socket connection for reading data to be stored and processed
+//  - connection:  Socket connection for reading data to be stored and processed
 //  - buffer:  The buffer used for processing socket messaging
 //  - waitGroup:  Used to synchronize the Goroutines running
-//  - transferManager:  Manages calculating the amount of data being transferred locally
-//  - transferComplete:  boolean toggle that is to signify when all files have been transfered
+//  - transferManager:  Manages calculating the amount of data being transferred
+//  - transferComplete:  Toggle to signify when all files have been transfered
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processTransfer(connection net.Conn, buffer []byte,
@@ -386,6 +392,20 @@ func processTransfer(connection net.Conn, buffer []byte,
     }
 
     ipAddr := strings.Split(connection.RemoteAddr().String(), ":")[0]
+    port32 := int32(port)
+
+    // If the program is not in testing mode
+    if !IsTesting {
+        // Add rule to security group to allow outbound port to connect to server
+        err = Ec2Client.SecurityGroupRuleProvision(1 * time.Minute, Ec2SecurityGroupId, "0.0.0.0/0",
+                                                   "tcp", "egress", port32, port32)
+        if err != nil {
+            logMan.LogMessage("Error", "Error provisioning security group rule for file transfer",
+                              zap.Int32("Port", port32))
+        }
+
+        return
+    }
 
     // Make a connection to the client for file transfer
     transferConn, err := tls.Dial("tcp", ipAddr + ":" + strconv.Itoa(port),
@@ -409,6 +429,20 @@ func processTransfer(connection net.Conn, buffer []byte,
                                   port, err)
             }
 
+            // If the program is not in testing mode
+            if !IsTesting {
+                // Remove rule from security group that allows
+                // outbound port to connect to server
+                err = Ec2Client.RevokeSecurityGroupRule(1 * time.Minute,
+                                                        Ec2SecurityGroupId,
+                                                        "tcp", "0.0.0.0/0",
+                                                        "egress", port32, port32)
+                if err != nil {
+                    logMan.LogMessage("Error", "Error revoking EC2 security group",
+                                      zap.Int32("Port", port32))
+                }
+            }
+
             // Decrement the waitgroup
             waitGroup.Done()
         } ()
@@ -426,18 +460,20 @@ func processTransfer(connection net.Conn, buffer []byte,
 }
 
 
-// Sets up messaging buffer, receives the hash and ruleset files (if optional ruleset applied).
-// Goes into continual loop where it checks the disk space and the size on the ongoing file
-// transfers where the combined information is used to decide whether there is a proper amount
-// of disk space to initiate the transfer (if not there is a brief sleep to reiterate). After
-// the loop concludes the cracked hashes and log files are sent back to the server.
+// Sets up messaging buffer, receives the hash and ruleset files (if optional
+// ruleset applied). Goes into continual loop where it checks the disk space
+// and the size on the ongoing file transfers where the combined information
+// is used to decide whether there is a proper amount of disk space to initiate
+// the transfer (if not there is a brief sleep to reiterate). After the loop
+// concludes the cracked hashes and log files are sent back to the server.
 //
 // @Parameters
-//  - connection:  Active socket connection for reading data to be stored and processed
-//  - hashcatOptChannel:  Channel to signal when the hash and ruleset files has been received
-//  - transferChannel:  Channel to transmit filenames after transfer to initiate data processing
+//  - connection:  Socket connection for reading data to be stored and processed
+//  - hashcatOptChannel:  Channel to signal when hash and ruleset files are received
+//  - transferChannel:  Channel to transmit file names after transfer to
+//                      initiate data processing
 //  - waitGroup:  Used to synchronize the Goroutines running
-//  - transferManager:  Manages calculating the amount of data being transferred locally
+//  - transferManager:  Manages calculating the amount of data being transferred
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
@@ -563,10 +599,13 @@ func handleConnection(connection net.Conn,
 // remote brain server, then pass the connection to Goroutine handler.
 //
 // @Parameters
-//  - ipAddr:  The ip address of the remote server
+//  - ipAddrs:  The CSV list of potential server addresses
 //  - port:  The port of the remote server
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //  - maxFileSize:  The maximum allowed size for a file to be transferred
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
 //
 func connectRemote(ipAddrs string, port int,
                    logMan *kloudlogs.LoggerManager,
@@ -600,7 +639,7 @@ func connectRemote(ipAddrs string, port int,
 
         // Set up goroutines for receiving and processing data
         handleConnection(connection, logMan, maxFileSizeInt64)
-        return err
+        return nil
     }
 
     return errors.New("unable to connect to any of the address, check log for more info")
@@ -634,7 +673,6 @@ func main() {
     var awsRegion string
     var certSsmParam string
     var ipAddrs string
-    var isTesting bool
     var logMode string
     var maxFileSizeInt64 int64
     var maxTransfers int
@@ -652,11 +690,12 @@ func main() {
     flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
     flag.StringVar(&HashcatArgs.CharSet4, "charSet4", "", "Custom character set 4 for masks")
     flag.StringVar(&HashcatArgs.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
+    flag.StringVar(&Ec2SecurityGroupId, "ec2SecurityGroupId", "", "ID for Security Group for EC2 clients")
     flag.StringVar(&HashcatArgs.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
-    flag.StringVar(&HashcatArgs.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
+    flag.StringVar(&HashcatArgs.HashType, "hashType", "1000", "Hashcat hash type to crack")
     flag.StringVar(&ipAddrs, "ipAddrs", "localhost", "IP addresses of server to connect to in CSV format")
-    flag.BoolVar(&isTesting, "isTesting", false, "Toggle to enable testing mode")
+    flag.BoolVar(&IsTesting, "isTesting", false, "Toggle to enable testing mode")
     flag.StringVar(&logMode, "logMode", "local",
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
@@ -673,7 +712,7 @@ func main() {
     MaxTransfersInt32 = int32(maxTransfers)
 
     // If the program is being run in full mode
-    if !isTesting {
+    if !IsTesting {
         DataPath = "/mnt/instance-store"
     // If the program is being run in testing mode
     } else {
@@ -692,8 +731,8 @@ func main() {
     var err error
     var serverCertPemBlock []byte
 
-    // If the program is being run in full mode (not testing)
-    if !isTesting {
+    // If the program is being run in full mode
+    if !IsTesting {
         // If parameter for SSM param store is not present
         if certSsmParam == "" {
             log.Fatal("Missing parameter to retrieve TLS from SSM param store")
@@ -716,6 +755,9 @@ func main() {
 
         // Convert retrieved TLS cert PEM block to bytes
         serverCertPemBlock = []byte(certPemString)
+
+        // Establish client to EC2 service
+        Ec2Client = ec2utils.Ec2NewManager(awsConfig)
 
     // If the program is being run in testing mode
     } else {
@@ -745,11 +787,15 @@ func main() {
         log.Fatalf("Error adding PEM cert to pool:  %v", err)
     }
 
+    tags := map[string]string{
+        "kloud-kraken": "true",
+        "Name": "kloud-kraken-logs",
+    }
+
     // Initialize the LoggerManager based on the flags
     logMan, err := kloudlogs.NewLoggerManager(logMode, LogPath, awsConfig,
-                                              "kloud-kraken-logs",
-                                              "kloud-kraken-logs",
-                                              false)
+                                              "kloud-kraken-logs", 1,
+                                              tags, false)
     if err != nil {
         log.Fatalf("Error initializing logger manager:  %v", err)
     }
