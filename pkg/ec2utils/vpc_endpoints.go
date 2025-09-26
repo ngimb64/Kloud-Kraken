@@ -16,10 +16,16 @@ import (
 // Generic creator for Gateway endpoints (S3).
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - policyDocument:  The JSON policy document used for access control
+//  - vpcId:  The ID of the VPC associated with Endpoint to be provisioned
+//  - serviceName:  The name of the service the Endpoint is being used for
+//  - routeTableIds:  List of route table IDs to apply to VPC Endpoint
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - ID of the created Gateway VPC Endpoint
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
                                                policyDocument string,
@@ -66,13 +72,20 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
     return aws.ToString(out.VpcEndpoint.VpcEndpointId), nil
 }
 
-// Generic creator for Interface endpoints (SSM, ssmmessages, ec2messages, etc.).
+// Generic creator for Interface VPC Endpoints (SSM, ec2messages, etc.).
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - policyDocument:  The JSON policy document used for access control
+//  - vpcId:  The ID of the VPC associated with Endpoint to be provisioned
+//  - serviceName:  The name of the service the Endpoint is being used for
+//  - subnetIds:  List of subnet IDs to apply to VPC Endpoint
+//  - securityGroupIds:  List of security group IDs to apply to VPC Endpoint
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - ID of the created Interface VPC Endpoint
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
                                                  policyDocument string,
@@ -122,13 +135,21 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
     return aws.ToString(out.VpcEndpoint.VpcEndpointId), nil
 }
 
-// S3 provisioner: tiny function that reuses vpcEndpointExists + gatewayEndpointCreate.
+// Provision S3 VPC Gateway Endpoint by checking for existence and
+// creating if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - endpointId:  The ID of the VPC Endpoint to provision
+//  - region:  The region where the S3 Endpoint will be provisioned
+//  - vpcId:  The ID of the VPC associated with Endpoint to be provisioned
+//  - policyDocument:  The JSON policy document used for access control
+//  - routeTableIds:  List of route table IDs to apply to VPC Endpoint
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - VPC Endpoint ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
                                              endpointId string,
@@ -153,15 +174,15 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
     // If VPC Endpoint ID is present in state file
     if endpointId != "" {
         // Check to see if it exists in AWS environment
-        exists, epId, err := Ec2Man.VpcEndpointExists(callTime, endpointId,
-                                                      vpcId, serviceName)
+        exists, err := Ec2Man.VpcEndpointExists(callTime, endpointId,
+                                                vpcId, serviceName)
         if err != nil {
             return "", err
         }
 
         // If the VPC Endpoint ID already exists, exit early
         if exists {
-            return epId, nil
+            return "", nil
         }
     }
 
@@ -169,13 +190,22 @@ func (Ec2Man *Ec2Manger) S3EndpointProvision(callTime time.Duration,
                                         serviceName, routeTableIds, tags)
 }
 
-// SSM provisioner: tiny function that reuses vpcEndpointExists + interfaceEndpointCreate.
+// Provision SSM VPC Interface Endpoint by checking for existence and
+// creating if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - endpointId:  The ID of the VPC Endpoint to provision
+//  - region:  The region where the S3 Endpoint will be provisioned
+//  - vpcId:  The ID of the VPC associated with Endpoint to be provisioned
+//  - policyDocument:  The JSON policy document used for access control
+//  - subnetIds:  List of subnet IDs to apply to VPC Endpoint
+//  - securityGroupIds:  List of security group IDs to apply to VPC Endpoint
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - VPC Endpoint ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
                                               endpointId string, region string,
@@ -200,15 +230,15 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
     // If VPC Endpoint ID is present in state file
     if endpointId != "" {
         // Check to see if it exists in AWS environment
-        exists, epId, err := Ec2Man.VpcEndpointExists(callTime, endpointId,
-                                                      vpcId, serviceName)
+        exists, err := Ec2Man.VpcEndpointExists(callTime, endpointId,
+                                                vpcId, serviceName)
         if err != nil {
             return "", err
         }
 
         // If the VPC Endpoint ID already exists, exit early
         if exists {
-            return epId, nil
+            return "", nil
         }
     }
 
@@ -218,21 +248,25 @@ func (Ec2Man *Ec2Manger) SsmEndpointProvision(callTime time.Duration,
                                           securityGroupIds, tags)
 }
 
-// Generic existence checker usable by S3, SSM, etc.
+// Checks whether passed in VPC Endpoint ID exists.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - endpointId:  The VPC Endpoint ID
+//  - vpcId:  The ID of the VPC where the Endpoint should exist
+//  - serviceName:  The name of the service the Endpoint is being used for
 //
 // @Returns
-//
+//  - Toggle for whether VPC Endpoint already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
                                            endpointId string, vpcId string,
                                            serviceName string) (
-                                           bool, string, error) {
+                                           bool, error) {
     // Ensure required args are present
     if endpointId == "" || vpcId == "" || serviceName == "" {
-        return false, "", errors.New("endpointId or vpcId or serviceName is missing")
+        return false, errors.New("endpointId or vpcId or serviceName is missing")
     }
 
     // Ensure API calls do not hang for than longer specified timeout
@@ -264,28 +298,29 @@ func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
         // If the VPC Endpoint was not found
         if errors.As(err, &apiErr) &&
         apiErr.ErrorCode() == "InvalidVpcEndpoint.NotFound" {
-            return false, "", nil
+            return false, nil
         }
 
-        return false, "", fmt.Errorf("describe vpc endpoints - %w", err)
+        return false, fmt.Errorf("describe vpc endpoints - %w", err)
     }
 
     // If no VPC Endpoints were retrieved
     if out == nil || len(out.VpcEndpoints) == 0 {
-        return false, "", nil
+        return false, nil
     }
 
-    return true, aws.ToString(out.VpcEndpoints[0].VpcEndpointId), nil
+    return true, nil
 }
 
 
-//
+// Delete the VPC Endpoint.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcEndpointIds:  The list of endpoint IDs to delete
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man Ec2Manger) VpcEndpointsTerminator(callTime time.Duration,
                                                vpcEndpointIds []string) error {

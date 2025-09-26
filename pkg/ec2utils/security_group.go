@@ -13,13 +13,18 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
 
-//
+// Create a security group in specified VPC.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The VPC ID where the security group will be applied
+//  - groupName:  The name of the security group
+//  - description:  Description of security purpose
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - The Security Group ID of created resource
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
                                              vpcId string,
@@ -94,13 +99,15 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     return sgId, nil
 }
 
-//
+// Check to see if security group exists.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - sgId:  The ID of the Security Group
 //
 // @Returns
-//
+//  - Toggle for whether security group already exists or not
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) SecurityGroupExists(callTime time.Duration,
                                              sgId string) (
@@ -141,13 +148,18 @@ func (Ec2Man *Ec2Manger) SecurityGroupExists(callTime time.Duration,
     return true, nil
 }
 
-//
+// Provision a security group by checking for existence and creating one if missing.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - vpcId:  The VPC ID where the security group will be applied
+//  - groupName:  The name of the security group
+//  - description:  Description of security purpose
+//  - tags:  String map of tag key-values to configure
 //
 // @Returns
-//
+//  - Security Group ID if the resource is created, "" if it already exists
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
                                                 sgId string, vpcId string,
@@ -179,13 +191,14 @@ func (Ec2Man *Ec2Manger) SecurityGroupProvision(callTime time.Duration,
 }
 
 
-//
+// Delete the security group.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - securityGroupId:  The ID of the security group to delete
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func (Ec2Man Ec2Manger) SecurityGroupTerminator(callTime time.Duration,
                                                 securityGroupId string) error {
@@ -202,7 +215,7 @@ func (Ec2Man Ec2Manger) SecurityGroupTerminator(callTime time.Duration,
         GroupId: aws.String(securityGroupId),
     }
 
-    // Delete the security group by ID
+    // Delete the Security Group by ID
     _, err := Ec2Man.client.DeleteSecurityGroup(ctx, deleteCallInput)
     if err != nil {
         return fmt.Errorf("failed to delete security group %s - %w",
