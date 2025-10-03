@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -144,7 +145,7 @@ func validateClientConfig(clientConfig *ClientConfig) error {
     }
 
     // If an improper region was specified in client config
-    if !validate.ValidateRegion(clientConfig.Region) {
+    if !awsutils.ValidateRegion(clientConfig.Region) {
         return fmt.Errorf("improper region specified")
     }
 
@@ -218,7 +219,7 @@ func validateLocalConfig(localConfig *LocalConfig) error {
     }
 
     // Ensure a proper region was specified in the local config
-    if !validate.ValidateRegion(localConfig.Region) {
+    if !awsutils.ValidateRegion(localConfig.Region) {
         return fmt.Errorf("improper region specified")
     }
 

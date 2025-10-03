@@ -170,6 +170,19 @@ func ServerPermPolicyGen(region string, accountId string,
       }
     },
     {
+      "Sid": "PricingGetProducts",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/kloud-kraken": "true"
+        }
+      }
+    },
+    {
       "Sid": "EC2PassRoleForInstanceProfile",
       "Effect": "Allow",
       "Action": [

@@ -1,9 +1,9 @@
+- Implement system of calculating cost of resources
+    - Ensure to update permissions policies as needed
+
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
 - Run system testing in AWS environment
-
-- Implement system of calculating cost of resources
-    - Ensure to update permissions policies as needed
 
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
@@ -25,6 +25,8 @@ NOTE:  below list is reference for research item in list
 Server Bootstrap role
 ----------------------
 vpc_setup.go/main.go:
+    - Manage resource cost and calculate total
+        - GetProducts
     - Create VPC with CIDR block
         - CreateTags
         - CreateVpc

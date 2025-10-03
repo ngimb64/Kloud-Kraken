@@ -146,6 +146,12 @@ func VpcBootstrap(appConfig conf.AppConfig,
         yamlUpdates["aws_env.region"] = appConfig.LocalConfig.Region
     }
 
+    // Get the human readable location string based off region for cost calculation
+    location, exists := awsutils.RegionToLocation(appConfig.LocalConfig.Region)
+    if !exists {
+        return outStruct, errors.New("region does not exist in region map in awsutils")
+    }
+
     // VPC setup
     //-----------
     tags := map[string]string{

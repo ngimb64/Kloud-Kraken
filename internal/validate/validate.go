@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
@@ -28,10 +27,6 @@ var RePrivateCidr = regexp.MustCompile(
       // 192.168.0.0/16 - 192.168.255.255/28
       `192\.168\.(?:[0-9]{1,3}\.)[0-9]{1,3}` +
     `)\/(?:1[6-9]|2[0-8])$`,
-)
-var ReSecurityGroupId = regexp.MustCompile(`^sg-[0-9a-f]{8,}$`)
-var ReSecurityGroupName = regexp.MustCompile(
-    `^[A-Za-z0-9\s\.\_\-\:\/\(\)\#\,\@\[\]\+\=\&\;\{\}\!\$\*]{1,255}$`,
 )
 
 
@@ -518,22 +513,6 @@ func ValidatePath(path string) (string, error) {
     }
 
     return cleanedPath, nil
-}
-
-
-// Ensure the passed in region is a valid AWS region.
-//
-// @Parameters
-//  - region:  The AWS region to be validated
-//
-// @Returns
-//  - Toggle for whether the AWS region is valid or not
-//
-func ValidateRegion(region string) bool {
-    resolver := s3.NewDefaultEndpointResolver()
-    // Resolve S3 endpoint to confirm region exists
-    _, err := resolver.ResolveEndpoint(region, s3.EndpointResolverOptions{})
-    return err == nil
 }
 
 
