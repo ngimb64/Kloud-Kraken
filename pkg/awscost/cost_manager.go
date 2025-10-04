@@ -32,25 +32,24 @@ func NewAwsCostManager(priceMan *PriceManager,
                        ) *AwsCostManager {
     formulas := map[string]string{
         // NAT Gateway hourly + data transfer
-        "nat_gateway":       "price * hours + price_data * gb_transfer",
+        "nat_gateway":      "price * hours + price_data * gb_transfer",
 
         // S3 storage
-        "s3_bucket":         "price * gb_months",
+        "s3_bucket":        "price * gb_months",
 
         // EC2 instance usage
-        "ec2_instance":      "price * hours",
+        "ec2_instance":     "price * hours",
 
         // Elastic IP (if applicable, hourly)
-        "elastic_ip":        "price * hours",
+        "elastic_ip":       "price * hours",
 
         // VPC endpoints (S3, SSM, etc.), hourly or per-GB pricing
-        "vpc_endpoint_s3":   "price * hours",
-        "vpc_endpoint_ssm":  "price * hours",
+        "vpc_endpoint_s3":  "price * hours",
+        "vpc_endpoint_ssm": "price * hours",
 
         // VPC Flow Logs (charged per GB of logs ingested)
-        "vpc_flow_log":      "price * gb_ingested",
+        "vpc_flow_log":     "price * gb_ingested",
     }
-
 
     // If there are formulas to add, add them to map
     if len(addFormulas) > 0 {
@@ -74,7 +73,7 @@ func NewAwsCostManager(priceMan *PriceManager,
 //  - Pointer to created resource in slice
 //  - Error if it occurs, otherwise nil on success
 //
-func (costMan *AwsCostManager) AddCostResourceToManager(serviceName string,
+func (costMan *AwsCostManager) addCostResourceToManager(serviceName string,
                                                         filters map[string]string) (
                                                         *AwsCostResource, error) {
     // Retrieve formula from map based on AWS servie name
@@ -123,6 +122,31 @@ func (costMan *AwsCostManager) AddCostResourceToManager(serviceName string,
     costMan.awsCostResources = append(costMan.awsCostResources, resource)
     idx := len(costMan.awsCostResources) - 1
     return &costMan.awsCostResources[idx], nil
+}
+
+// Handler for adding cost resource to cost manager, adds any errors that
+// occur to error string.
+//
+// @Parameters
+//  - serviceName:  The name of the AWS resource to add to the cost manager
+//  - filterMap:  The map used to stored filters applied to cache key
+//  - err:  The error string to add any errors that occur to
+//
+// @Returns
+//  - Pointer to the AWS resource added to cost manager
+//  - Error if it occurs, otherwise nil on success
+//
+func (costMan *AwsCostManager) AddCostResourceToManagerHandler(serviceName string,
+                                                               filterMap map[string]string,
+                                                               err *error) (
+                                                               *AwsCostResource) {
+    // Add the cost resource to cost manager
+    resource, addErr := costMan.addCostResourceToManager(serviceName, filterMap)
+    if addErr != nil {
+        *err = errors.Join(*err, fmt.Errorf("adding resource to cost manager - %w", addErr))
+    }
+
+    return resource
 }
 
 // Iterates all resources and accumulates costs into costTable and adds sum.
