@@ -567,8 +567,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 	stsClient := sts.NewFromConfig(awsConfig)
 
     // Set up the kloud kraken VPC and its associated components
-    bootstrapOut, err = vpcsetup.VpcBootstrap(*appConfig, awsConfig, *ec2Client,
-                                              *iamClient, *stsClient)
+    bootstrapOut, err = vpcsetup.VpcBootstrap(appConfig, awsConfig, ec2Client,
+                                              iamClient, *stsClient)
     if err != nil {
         return awsConfig, bootstrapOut, err
     }

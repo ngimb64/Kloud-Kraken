@@ -7,10 +7,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
-	"github.com/ngimb64/Kloud-Kraken/internal/policies"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
@@ -80,10 +78,10 @@ type VpcBootstrapOutput struct {
 //  - The VPC bootstrap output struct
 //  - Error if it occurs, otherwise nil on success
 //
-func VpcBootstrap(appConfig conf.AppConfig,
+func VpcBootstrap(appConfig *conf.AppConfig,
                   awsConfig aws.Config,
-                  ec2Client ec2utils.Ec2Manger,
-                  iamClient iamutils.IamManager,
+                  ec2Client *ec2utils.Ec2Manger,
+                  iamClient *iamutils.IamManager,
                   stsClient sts.Client) (
                   *VpcBootstrapOutput, error) {
     outStruct := &VpcBootstrapOutput{}
@@ -160,20 +158,20 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup the VPC
-    vpcId, err := SetupVpcHandler(ec2Client, stateConfig, appConfig, yamlUpdates)
+    vpcId, err := SetupVpcHandler(ec2Client, &stateConfig, appConfig, yamlUpdates)
     if err != nil {
         return outStruct, fmt.Errorf("setting up VPC - %w", err)
     }
 
     // Setup the Internet Gateway
-    igwId, err := SetupInternetGatewayHandler(ec2Client, stateConfig, appConfig,
+    igwId, err := SetupInternetGatewayHandler(ec2Client, &stateConfig, appConfig,
                                               yamlUpdates, vpcId)
     if err != nil {
         return outStruct, fmt.Errorf("setting up Internet Gateway - %w", err)
     }
 
     // Setup the Elastic IP
-    eipId, err := SetupElasticIpHandler(ec2Client, stateConfig, appConfig,
+    eipId, err := SetupElasticIpHandler(ec2Client, &stateConfig, appConfig,
                                         yamlUpdates, outStruct,
                                         location, &costErr, costMan)
     if err != nil {
@@ -181,7 +179,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Set up the Public and Private Subnets
-    pubSubnetId, privSubnetId, err := SetupSubnetsHandler(ec2Client, stateConfig,
+    pubSubnetId, privSubnetId, err := SetupSubnetsHandler(ec2Client, &stateConfig,
                                                           appConfig, yamlUpdates,
                                                           outStruct, vpcId)
     if err != nil {
@@ -189,7 +187,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup the NAT Gateway
-    natGatewayId, err := SetupNatGatewayHandler(ec2Client, stateConfig, appConfig,
+    natGatewayId, err := SetupNatGatewayHandler(ec2Client, &stateConfig, appConfig,
                                                 yamlUpdates, outStruct, pubSubnetId,
                                                 eipId, location, &costErr, costMan)
     if err != nil {
@@ -197,7 +195,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup Public & Private Route Tables
-    publicRouteId, privateRouteId, err := SetupRouteTablesHandler(ec2Client, stateConfig,
+    publicRouteId, privateRouteId, err := SetupRouteTablesHandler(ec2Client, &stateConfig,
                                                                   appConfig, yamlUpdates,
                                                                   vpcId, igwId, natGatewayId)
     if err != nil {
@@ -205,7 +203,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup Public & Private Route Table associations
-    err = SetupRouteTableAssociationsHandler(ec2Client, stateConfig, appConfig,
+    err = SetupRouteTableAssociationsHandler(ec2Client, &stateConfig, appConfig,
                                              yamlUpdates, publicRouteId, pubSubnetId,
                                              privateRouteId, privSubnetId)
     if err != nil {
@@ -213,21 +211,21 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup the EC2 Security Group
-    ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, stateConfig, appConfig,
+    ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, &stateConfig, appConfig,
                                                  yamlUpdates, outStruct, vpcId)
     if err != nil {
         return outStruct, fmt.Errorf("setting up EC2 security group - %w", err)
     }
 
     // Setup EC2 Security Group Rules
-    err = SetupEc2SecurityGroupRulesHandler(ec2Client, stateConfig, appConfig,
+    err = SetupEc2SecurityGroupRulesHandler(ec2Client, &stateConfig, appConfig,
                                             yamlUpdates, ec2SgId)
     if err != nil {
         return outStruct, fmt.Errorf("setting up EC2 security group rules - %w", err)
     }
 
     // Setup the SSM Security Group
-    ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, stateConfig, appConfig,
+    ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, &stateConfig, appConfig,
                                                  yamlUpdates, vpcId)
     if err != nil {
         return outStruct, fmt.Errorf("setting up SSM security group - %w", err)
@@ -240,14 +238,14 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup the S3 Bucket
-    bucketName, err := SetupS3BucketHandler(ec2Client, stateConfig, appConfig,
+    bucketName, err := SetupS3BucketHandler(ec2Client, &stateConfig, appConfig,
                                             yamlUpdates, outStruct, awsConfig)
     if err != nil {
         return outStruct, fmt.Errorf("setting up S3 bucket - %w", err)
     }
 
     // Setup the S3 VPC Gateway Endpoint
-    err = SetupS3VpcGatewayEndpointHandler(ec2Client, stateConfig, appConfig,
+    err = SetupS3VpcGatewayEndpointHandler(ec2Client, &stateConfig, appConfig,
                                            yamlUpdates, bucketName, vpcId,
                                            privateRouteId, location, &costErr,
                                            costMan)
@@ -256,7 +254,7 @@ func VpcBootstrap(appConfig conf.AppConfig,
     }
 
     // Setup the SSM VPC Interface Endpoint
-    err = SetupSsmVpcInterfaceEndpointHandler(ec2Client, stateConfig, appConfig,
+    err = SetupSsmVpcInterfaceEndpointHandler(ec2Client, &stateConfig, appConfig,
                                               yamlUpdates, outStruct, vpcId,
                                               privSubnetId, ssmSgId, location,
                                               &costErr, costMan)
@@ -264,138 +262,34 @@ func VpcBootstrap(appConfig conf.AppConfig,
         return outStruct, fmt.Errorf("setting up SSM VPC Interface Endpoint - %w", err)
     }
 
-
-    // TODO:  finish refactoring below code into handlers
-
-
-    // VPC Flow Logs IAM Role setup
-    //------------------------------
-    tags := map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-iam-vpc-flow-logs",
-    }
-
-    // Get the account ID associated with API credentials
-    outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
+    // Setup VPC Flow Logs IAM Role
+    vpcFlowLogArn, err := SetupVpcFlowLogsIamRoleHandler(iamClient, stsClient,
+                                                         &stateConfig, appConfig,
+                                                         yamlUpdates, outStruct)
     if err != nil {
-        return outStruct, err
+        return outStruct, fmt.Errorf("setting up VPC Flow Logs IAM role - %w", err)
     }
 
-    // Generate the VPC Flow Logs trust and permissions policy templates
-    trustPolicy := policies.VpcFlowLogsTrustPolicyGen()
-    permissionsPolicy := policies.VpcFlowLogsPermPolicyGen(appConfig.LocalConfig.Region,
-                                                           outStruct.AccountId,
-                                                           "kloud-kraken-vpc-flow-logs")
-    // Create and appy the VPC flow logs role
-    vpcFlowLogArn, err := iamClient.IamRoleProvision(5 * time.Minute,
-                                                     stateConfig.AwsEnv.IamArnVpcFlowLogs,
-                                                     "KloudKrakenVpcFlowLogsRole", trustPolicy,
-                                                     "KloudKrakenVpcFlowLogPerms",
-                                                     permissionsPolicy, tags, false)
+    // Setup the VPC Flow Logs
+    err = SetupVpcFlowLogsHandler(ec2Client, &stateConfig, appConfig,
+                                  yamlUpdates, awsConfig, vpcId,
+                                  vpcFlowLogArn)
     if err != nil {
-        return outStruct, err
+        return outStruct, fmt.Errorf("setting up VPC Flow Logs - %w", err)
     }
 
-    // If IAM ARN for VPC Flow Logs was created, add name to yaml updates map
-    if vpcFlowLogArn != "" {
-        yamlUpdates["aws_env.iam_arn_vpc_flow_logs"] = vpcFlowLogArn
-    // Otherwise use the one from YAML since it was found
-    } else {
-        vpcFlowLogArn = stateConfig.AwsEnv.IamArnVpcFlowLogs
-    }
-
-    // VPC Flow Logs setup
-    //---------------------
-    tags = map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-vpc-flow-logs",
-    }
-
-    // Set up client to CloudWatch Logs
-    cwlClient := cwl.NewFromConfig(awsConfig)
-
-    // Create and enable the VPC Flow Logs via CloudWatch if it does not exist
-    flowLogId, err := ec2Client.VpcFlowLogProvision(5 * time.Minute,
-                                                    stateConfig.AwsEnv.FlowLogId,
-                                                    vpcId, cwlClient,
-                                                    "kloud-kraken-vpc-flow-logs",
-                                                    vpcFlowLogArn, 1, tags)
+    // Setup Client IAM Role
+    err = SetupClientIamRoleHander(iamClient, &stateConfig, appConfig,
+                                   yamlUpdates, outStruct, bucketName)
     if err != nil {
-        return outStruct, err
+        return outStruct, fmt.Errorf("setting up Client IAM Role - %w", err)
     }
 
-    // If VPC Flow Logs group was created, add ID to yaml updates map
-    if flowLogId != "" {
-        yamlUpdates["aws_env.flow_log_id"] = flowLogId
-    // Otherwise use the one from YAML since it was found
-    } else {
-        flowLogId = stateConfig.AwsEnv.FlowLogId
-    }
-
-    // Client IAM Role setup
-    //-----------------------
-    tags = map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-iam-client",
-    }
-
-    // Generate the EC2 clients trust and permissions policy templates
-    trustPolicy = policies.ClientTrustPolicyGen()
-    permissionsPolicy = policies.ClientPermPolicyGen(bucketName,
-                                                     appConfig.ClientConfig.Region,
-                                                     outStruct.AccountId,
-                                                     "/kloud-kraken/tls-cert",
-                                                     "kloud-kraken")
-    // Create and apply the EC2 client role
-    clientArn, err := iamClient.IamRoleProvision(5 * time.Minute,
-                                                 stateConfig.AwsEnv.IamArnClient,
-                                                 "KloudKrakenClientRole", trustPolicy,
-                                                 "KloudKrakenClientPerms",
-                                                 permissionsPolicy,
-                                                 tags, true)
+    // Setup Server IAM Role
+    err = SetupServerIamRoleHandler(iamClient, &stateConfig, appConfig,
+                                    yamlUpdates, outStruct, bucketName)
     if err != nil {
-        return outStruct, err
-    }
-
-    // If IAM ARN for client was created, add name to yaml updates map
-    if clientArn != "" {
-        yamlUpdates["aws_env.iam_arn_client"] = clientArn
-    // Otherwise use the one from YAML since it was found
-    } else {
-        clientArn = stateConfig.AwsEnv.IamArnClient
-    }
-
-    // Server IAM Role setup
-    //-----------------------
-    tags = map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-iam-server",
-    }
-
-    // Generate the servers trust and permissions policy templates
-    trustPolicy = policies.ServerTrustPolicyGen(outStruct.AccountId,
-                                                appConfig.LocalConfig.IamUsername)
-    permissionsPolicy = policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
-                                                     outStruct.AccountId,
-                                                     "/kloud-kraken/tls-cert",
-                                                     bucketName, "KloudKrakenClientRole")
-    // Create and apply role for local server permissions
-    outStruct.ServerArn, err = iamClient.IamRoleProvision(5 * time.Minute,
-                                                          stateConfig.AwsEnv.IamArnServer,
-                                                          "KloudKrakenServerRole", trustPolicy,
-                                                          "KloudKrakenServerPerms",
-                                                          permissionsPolicy,
-                                                          tags, false)
-    if err != nil {
-        return outStruct, err
-    }
-
-    // If IAM ARN for server was created, add name to yaml updates map
-    if outStruct.ServerArn != "" {
-        yamlUpdates["aws_env.iam_arn_server"] = outStruct.ServerArn
-    // Otherwise use the one from YAML since it was found
-    } else {
-        outStruct.ServerArn = stateConfig.AwsEnv.IamArnServer
+        return outStruct, fmt.Errorf("setting up Server IAM Role - %w", err)
     }
 
     return outStruct, nil
