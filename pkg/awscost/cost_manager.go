@@ -31,23 +31,18 @@ func NewAwsCostManager(priceMan *PriceManager,
                        addFormulas map[string]string,
                        ) *AwsCostManager {
     formulas := map[string]string{
-        // NAT Gateway hourly + data transfer
-        "nat_gateway":      "price * hours + price_data * gb_transfer",
-
-        // S3 storage
-        "s3_bucket":        "price * gb_months",
-
-        // EC2 instance usage
         "ec2_instance":     "price * hours",
 
-        // Elastic IP (if applicable, hourly)
         "elastic_ip":       "price * hours",
 
-        // VPC endpoints (S3, SSM, etc.), hourly or per-GB pricing
-        "vpc_endpoint_s3":  "price * hours",
-        "vpc_endpoint_ssm": "price * hours",
+        "nat_gateway":      "price * hours + price_data * gb_transfer",
 
-        // VPC Flow Logs (charged per GB of logs ingested)
+        "s3_bucket":        "storage_price * gb_months + put_requests * " +
+                            "price_put + get_requests * price_get + " +
+                            " data_out_gb * price_egress",
+
+        "vpc_endpoint_ssm": "price_hour * hours + price_gb * gb_processed",
+
         "vpc_flow_log":     "price * gb_ingested",
     }
 
@@ -74,7 +69,8 @@ func NewAwsCostManager(priceMan *PriceManager,
 //  - Error if it occurs, otherwise nil on success
 //
 func (costMan *AwsCostManager) addCostResourceToManager(serviceName string,
-                                                        filters map[string]string) (
+                                                        filters map[string]string,
+                                                        startNow bool) (
                                                         *AwsCostResource, error) {
     // Retrieve formula from map based on AWS servie name
     formula, ok := costMan.formulas[serviceName]
@@ -108,10 +104,16 @@ func (costMan *AwsCostManager) addCostResourceToManager(serviceName string,
         }
     }
 
-    startTime := time.Now()
+    var startTime time.Time
+
+    // If the resource is to be started immediately
+    if startNow {
+        startTime = time.Now()
+    }
 
     resource := AwsCostResource{
         formula:     formula,
+        Metadata:    price.Metadata,
         price:       priceVal,
         priceData:   priceData,
         serviceName: serviceName,
@@ -130,6 +132,7 @@ func (costMan *AwsCostManager) addCostResourceToManager(serviceName string,
 // @Parameters
 //  - serviceName:  The name of the AWS resource to add to the cost manager
 //  - filterMap:  The map used to stored filters applied to cache key
+//  - startNow:  Toggler for whether to start resource timer immediately
 //  - err:  The error string to add any errors that occur to
 //
 // @Returns
@@ -138,10 +141,10 @@ func (costMan *AwsCostManager) addCostResourceToManager(serviceName string,
 //
 func (costMan *AwsCostManager) AddCostResourceToManagerHandler(serviceName string,
                                                                filterMap map[string]string,
-                                                               err *error) (
+                                                               startNow bool, err *error) (
                                                                *AwsCostResource) {
     // Add the cost resource to cost manager
-    resource, addErr := costMan.addCostResourceToManager(serviceName, filterMap)
+    resource, addErr := costMan.addCostResourceToManager(serviceName, filterMap, startNow)
     if addErr != nil {
         *err = errors.Join(*err, fmt.Errorf("adding resource to cost manager - %w", addErr))
     }
@@ -151,7 +154,10 @@ func (costMan *AwsCostManager) AddCostResourceToManagerHandler(serviceName strin
 
 // Iterates all resources and accumulates costs into costTable and adds sum.
 //
-func (costMan *AwsCostManager) CalculateTotalCost() {
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (costMan *AwsCostManager) CalculateTotalCost() error {
     costMan.totalCost = 0
     costMan.costTable = make(map[string]float64)
     var err error
@@ -160,14 +166,17 @@ func (costMan *AwsCostManager) CalculateTotalCost() {
     for _, resource := range costMan.awsCostResources {
         // Calculate the cost of the current AWS resource
         cost, cerr := resource.CalculateResourceTotal()
-        if err != nil {
+        if cerr != nil {
             err = errors.Join(err, fmt.Errorf("calculating AWS resource - %w", cerr))
+            cost = 0
         }
 
         // Save the cost calulcation result in cost table
         costMan.costTable[resource.serviceName] = cost
         costMan.totalCost += cost
     }
+
+    return err
 }
 
 // Returns a short summary of costs.

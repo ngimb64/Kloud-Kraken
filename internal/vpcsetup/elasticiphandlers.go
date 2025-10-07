@@ -52,6 +52,7 @@ func SetupElasticIpHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     // Add the elastic IP to cost manager
-    _ = costMan.AddCostResourceToManagerHandler("elastic_ip", filterMap, costErr)
+    _ = costMan.AddCostResourceToManagerHandler("elastic_ip", filterMap,
+                                                true, costErr)
     return eipId, nil
 }

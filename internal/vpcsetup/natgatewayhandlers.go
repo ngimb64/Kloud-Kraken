@@ -53,6 +53,7 @@ func SetupNatGatewayHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     // Add the elastic IP to cost manager
-    _ = costMan.AddCostResourceToManagerHandler("nat_gateway", filterMap, costErr)
+    _ = costMan.AddCostResourceToManagerHandler("nat_gateway", filterMap,
+                                                true, costErr)
     return natGatewayId, nil
 }

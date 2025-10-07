@@ -2,13 +2,21 @@
     X Elastic IPs (per-hour if idle).
     X NAT Gateways (per-hour + per-GB).
     X VPC Endpoints (interface endpoints per-hour + per-GB).
-    X VPC Flow Logs (storage/ingestion depending on destination).
-    - EC2 Instances (per-hour/second + storage + bandwidth).
     - S3 Buckets (only when storing data, making requests, or transferring).
+    X EC2 Instances (per-hour/second + storage + bandwidth).
 
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
 - Run system testing in AWS environment
+
+- Ensure README is fully updated and try to make flowchart diagrams to visually explain everything
+
+- Switch VPC setup to launch instances in public subnet with public IP for cost optimization (remove NAT gateway costs)
+    - Reroute logic to create instances in public subnet
+    - Ensure EC2 instances are adding & revoking security group rules for initial internet access for updates and per file transfer connection
+    - Remove NAT Gateway
+    - Remove private subnet
+    - Remove private route table
 
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed

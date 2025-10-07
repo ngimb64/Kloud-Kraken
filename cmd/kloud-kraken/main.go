@@ -567,8 +567,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 	stsClient := sts.NewFromConfig(awsConfig)
 
     // Set up the kloud kraken VPC and its associated components
-    bootstrapOut, err = vpcsetup.VpcBootstrap(appConfig, awsConfig, ec2Client,
-                                              iamClient, *stsClient)
+    bootstrapOut, costMan,
+    s3Cost, costErr, err := vpcsetup.VpcBootstrap(appConfig, awsConfig, ec2Client,
+                                                  iamClient, *stsClient)
     if err != nil {
         return awsConfig, bootstrapOut, err
     }
@@ -666,6 +667,15 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     if err != nil {
         return awsConfig, bootstrapOut, err
     }
+
+    filterMap := map[string]string{
+        "instanceType": appConfig.LocalConfig.InstanceType,
+        "location": awsConfig.Region,
+		"operatingSystem":"Linux",
+    }
+
+    // Add the Ec2 instances to the cost manager
+    _ = costMan.AddCostResourceToManagerHandler("ec2_instance", filterMap, true, &costErr)
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",

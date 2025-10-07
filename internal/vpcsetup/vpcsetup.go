@@ -76,6 +76,9 @@ type VpcBootstrapOutput struct {
 //
 // @Returns
 //  - The VPC bootstrap output struct
+//  - The AWS cost manager that manages resource costs
+//  - The S3 cost resource
+//  - Errors associated with cost manager
 //  - Error if it occurs, otherwise nil on success
 //
 func VpcBootstrap(appConfig *conf.AppConfig,
@@ -83,7 +86,10 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                   ec2Client *ec2utils.Ec2Manger,
                   iamClient *iamutils.IamManager,
                   stsClient sts.Client) (
-                  *VpcBootstrapOutput, error) {
+                  *VpcBootstrapOutput,
+                  *awscost.AwsCostManager,
+                  *awscost.AwsCostResource,
+                  error, error) {
     outStruct := &VpcBootstrapOutput{}
     var stateConfig AwsEnv
     var stateData []byte
@@ -93,7 +99,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     // Check to see if the yaml state file exists
     exists, isDir, hasData, err := disk.PathExists(stateFilePath)
     if err != nil {
-        return outStruct, err
+        return outStruct, nil, nil, nil, err
     }
 
     // If the yaml state file exists and has data
@@ -101,13 +107,13 @@ func VpcBootstrap(appConfig *conf.AppConfig,
         // Read the data from yaml state file
         stateData, err = os.ReadFile(stateFilePath)
         if err != nil {
-            return outStruct, err
+            return outStruct, nil, nil, nil, err
         }
 
         // Decode raw bytes into StateConfig struct
         err = yaml.Unmarshal(stateData, &stateConfig)
         if err != nil {
-            return outStruct, err
+            return outStruct, nil, nil, nil, err
         }
     }
 
@@ -132,42 +138,46 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }()
 
     // Check to see if region in the state file matches one from config
-    if stateConfig.AwsEnv.Region != appConfig.LocalConfig.Region &&
+    if stateConfig.AwsEnv.Region != awsConfig.Region &&
     stateConfig.AwsEnv.Region != "" {
-        return outStruct, errors.New("region in YAML config does not match state file, " +
-                                     "run teardown program first before running again")
+        return outStruct, nil, nil, nil,
+               errors.New("region in YAML config does not match state file, " +
+                          "run teardown program first before running again")
     }
 
     // If the region is not present in the state file
     if stateConfig.AwsEnv.Region == "" {
         // Add the region to the updates map for YAML state file
-        yamlUpdates["aws_env.region"] = appConfig.LocalConfig.Region
+        yamlUpdates["aws_env.region"] = awsConfig.Region
     }
 
     var costErr error
     // Create a PriceManager with a 1 hour cache TTL
 	priceMan := awscost.NewPriceManager(1 * time.Hour)
-	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(appConfig.LocalConfig.Region))
+	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(awsConfig.Region))
 	// Create the AwsCostManager using live-only PriceManager
 	costMan := awscost.NewAwsCostManager(priceMan, nil)
 
-    // Get the human readable location string based off region for cost calculation
-    location, exists := awsutils.RegionToLocation(appConfig.LocalConfig.Region)
+    // Get human readable location string based off region for cost calculation
+    location, exists := awsutils.RegionToLocation(awsConfig.Region)
     if !exists {
-        return outStruct, errors.New("region does not exist in region map in awsutils")
+        return outStruct, costMan, nil, costErr,
+               errors.New("region does not exist in region map in awsutils")
     }
 
     // Setup the VPC
     vpcId, err := SetupVpcHandler(ec2Client, &stateConfig, appConfig, yamlUpdates)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up VPC - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up VPC - %w", err)
     }
 
     // Setup the Internet Gateway
     igwId, err := SetupInternetGatewayHandler(ec2Client, &stateConfig, appConfig,
                                               yamlUpdates, vpcId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up Internet Gateway - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up Internet Gateway - %w", err)
     }
 
     // Setup the Elastic IP
@@ -175,7 +185,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                         yamlUpdates, outStruct,
                                         location, &costErr, costMan)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up Elastic IP - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up Elastic IP - %w", err)
     }
 
     // Set up the Public and Private Subnets
@@ -183,7 +194,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                                           appConfig, yamlUpdates,
                                                           outStruct, vpcId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up subnets - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up subnets - %w", err)
     }
 
     // Setup the NAT Gateway
@@ -191,7 +203,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                                 yamlUpdates, outStruct, pubSubnetId,
                                                 eipId, location, &costErr, costMan)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up NAT Gateway - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up NAT Gateway - %w", err)
     }
 
     // Setup Public & Private Route Tables
@@ -199,7 +212,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                                                   appConfig, yamlUpdates,
                                                                   vpcId, igwId, natGatewayId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up route tables - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up route tables - %w", err)
     }
 
     // Setup Public & Private Route Table associations
@@ -207,41 +221,50 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                              yamlUpdates, publicRouteId, pubSubnetId,
                                              privateRouteId, privSubnetId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up route table associations - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up route table associations - %w", err)
     }
 
     // Setup the EC2 Security Group
     ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, &stateConfig, appConfig,
                                                  yamlUpdates, outStruct, vpcId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up EC2 security group - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up EC2 security group - %w", err)
     }
 
     // Setup EC2 Security Group Rules
     err = SetupEc2SecurityGroupRulesHandler(ec2Client, &stateConfig, appConfig,
                                             yamlUpdates, ec2SgId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up EC2 security group rules - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up EC2 security group rules - %w", err)
     }
 
     // Setup the SSM Security Group
     ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, &stateConfig, appConfig,
                                                  yamlUpdates, vpcId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up SSM security group - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up SSM security group - %w", err)
     }
 
     // Setup SSM Security Group Rules
     err = SetupSsmSecurityGroupRuleHandler(ec2Client, ssmSgId)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up SSM security group rules - %w", err)
+        return outStruct, costMan, nil, costErr,
+               fmt.Errorf("setting up SSM security group rules - %w", err)
     }
 
     // Setup the S3 Bucket
-    bucketName, err := SetupS3BucketHandler(ec2Client, &stateConfig, appConfig,
-                                            yamlUpdates, outStruct, awsConfig)
+    bucketName, s3CostResource, err := SetupS3BucketHandler(ec2Client, &stateConfig,
+                                                            appConfig, yamlUpdates,
+                                                            outStruct, awsConfig.Region,
+                                                            &costErr, costMan,
+                                                            awsConfig)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up S3 bucket - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up S3 bucket - %w", err)
     }
 
     // Setup the S3 VPC Gateway Endpoint
@@ -250,7 +273,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                            privateRouteId, location, &costErr,
                                            costMan)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up S3 VPC Gateway Endpoint - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up S3 VPC Gateway Endpoint - %w", err)
     }
 
     // Setup the SSM VPC Interface Endpoint
@@ -259,7 +283,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                               privSubnetId, ssmSgId, location,
                                               &costErr, costMan)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up SSM VPC Interface Endpoint - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up SSM VPC Interface Endpoint - %w", err)
     }
 
     // Setup VPC Flow Logs IAM Role
@@ -267,7 +292,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                                          &stateConfig, appConfig,
                                                          yamlUpdates, outStruct)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up VPC Flow Logs IAM role - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up VPC Flow Logs IAM role - %w", err)
     }
 
     // Setup the VPC Flow Logs
@@ -275,22 +301,25 @@ func VpcBootstrap(appConfig *conf.AppConfig,
                                   yamlUpdates, awsConfig, vpcId,
                                   vpcFlowLogArn)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up VPC Flow Logs - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up VPC Flow Logs - %w", err)
     }
 
     // Setup Client IAM Role
     err = SetupClientIamRoleHander(iamClient, &stateConfig, appConfig,
                                    yamlUpdates, outStruct, bucketName)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up Client IAM Role - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up Client IAM Role - %w", err)
     }
 
     // Setup Server IAM Role
     err = SetupServerIamRoleHandler(iamClient, &stateConfig, appConfig,
                                     yamlUpdates, outStruct, bucketName)
     if err != nil {
-        return outStruct, fmt.Errorf("setting up Server IAM Role - %w", err)
+        return outStruct, costMan, s3CostResource, costErr,
+               fmt.Errorf("setting up Server IAM Role - %w", err)
     }
 
-    return outStruct, nil
+    return outStruct, costMan, s3CostResource, costErr, nil
 }

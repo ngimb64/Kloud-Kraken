@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
 )
@@ -22,8 +23,10 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
                           appConfig *conf.AppConfig,
                           yamlUpdates map[string]string,
                           outStruct *VpcBootstrapOutput,
-                          awsConfig aws.Config) (
-                          string, error) {
+                          location string, costErr *error,
+                          costMan *awscost.AwsCostManager,
+                          awsConfig aws.Config) (string,
+                          *awscost.AwsCostResource, error) {
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-s3",
@@ -36,7 +39,7 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
                                                   stateConfig.AwsEnv.S3BucketName,
                                                   "kloud-kraken-s3", tags)
     if err != nil {
-        return bucketName, err
+        return bucketName, nil, err
     }
 
     // If S3 buccket created, add name to yaml updates map
@@ -48,5 +51,15 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     outStruct.S3BucketName = bucketName
-    return bucketName, nil
+
+    filterMap := map[string]string{
+        "location": location,
+        "storageClass": "STANDARD",
+    }
+
+    // Add the Elastic IP to cost manager
+    s3Resource := costMan.AddCostResourceToManagerHandler("s3_bucket", filterMap,
+                                                          false, costErr)
+
+    return bucketName, s3Resource, nil
 }

@@ -51,12 +51,6 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
         s3VpcEndPointId = stateConfig.AwsEnv.S3VpcEndpointId
     }
 
-    filterMap := map[string]string{
-        "location": location,
-    }
-
-    // Add the elastic IP to cost manager
-    _ = costMan.AddCostResourceToManagerHandler("vpc_endpoint_s3", filterMap, costErr)
     return  nil
 }
 
@@ -114,6 +108,7 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     // Add the elastic IP to cost manager
-    _ = costMan.AddCostResourceToManagerHandler("vpc_endpoint_ssm", filterMap, costErr)
+    _ = costMan.AddCostResourceToManagerHandler("vpc_endpoint_ssm", filterMap,
+                                                true, costErr)
     return nil
 }
