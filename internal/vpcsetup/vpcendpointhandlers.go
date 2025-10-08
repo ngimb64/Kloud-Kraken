@@ -22,8 +22,8 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                       appConfig *conf.AppConfig,
                                       yamlUpdates map[string]string,
                                       bucketName string, vpcId string,
-                                      privateRouteId string,
-                                      location string, costErr *error,
+                                      routeId string, location string,
+                                      costErr *error,
                                       costMan *awscost.AwsCostManager) error {
     tags := map[string]string{
         "kloud-kraken": "true",
@@ -38,7 +38,7 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                                           stateConfig.AwsEnv.S3VpcEndpointId,
                                                           appConfig.LocalConfig.Region,
                                                           vpcId, policyDocument,
-                                                          []string{privateRouteId}, tags)
+                                                          []string{routeId}, tags)
     if err != nil {
         return err
     }
@@ -68,7 +68,7 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                          appConfig *conf.AppConfig,
                                          yamlUpdates map[string]string,
                                          outStruct *VpcBootstrapOutput,
-                                         vpcId string, privSubnetId string,
+                                         vpcId string, subnetId string,
                                          ssmSgId string, location string,
                                          costErr *error,
                                          costMan *awscost.AwsCostManager) error {
@@ -85,9 +85,8 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // Create VPC endpoint for SSM if it does not exist
     ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(10 * time.Minute,
                                                             stateConfig.AwsEnv.SsmVpcEndpointId,
-                                                            appConfig.LocalConfig.Region,
-                                                            vpcId, policyDocument,
-                                                            []string{privSubnetId},
+                                                            appConfig.LocalConfig.Region, vpcId,
+                                                            policyDocument, []string{subnetId},
                                                             []string{ssmSgId}, tags)
     if err != nil {
         return err

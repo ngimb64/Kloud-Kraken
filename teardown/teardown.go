@@ -171,75 +171,27 @@ func main() {
         }
     }
 
-    if stateConfig.AwsEnv.NatGatewayId != "" {
-        // Terminate the NAT Gateway
-        err = ec2Client.NatGatewayTerminator(10 * time.Minute,
-                                             stateConfig.AwsEnv.NatGatewayId)
-        if err != nil {
-            log.Printf("Error deleting NAT Gateway:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.nat_gateway_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.EipId != "" {
-        // Release the Elastic IP
-        err = ec2Client.ElasticIpTerminator(1 * time.Minute,
-                                            stateConfig.AwsEnv.EipId)
-        if err != nil {
-            log.Printf("Error releasing Elastic IP:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.eip_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.PrivateAssociationId != "" {
+    if stateConfig.AwsEnv.RouteAssociationId != "" {
         // Disassociate private route table <-> subnet
         err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
-                                                      stateConfig.AwsEnv.PrivateAssociationId)
+                                                      stateConfig.AwsEnv.RouteAssociationId)
         if err != nil {
-            log.Printf("Error disassociating private route table <-> subnet:  %v", err)
+            log.Printf("Error disassociating route table <-> subnet:  %v", err)
             hadError = true
         } else {
-            yamlUpdates["aws_env.private_association_id"] = ""
+            yamlUpdates["aws_env.route_association_id"] = ""
         }
     }
 
-    if stateConfig.AwsEnv.PublicAssociationId != "" {
-        // Disassociate public route table <-> public subnet
-        err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
-                                                      stateConfig.AwsEnv.PublicAssociationId)
-        if err != nil {
-            log.Printf("Error disassociating public route table <-> subnet:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.public_association_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.PrivateRouteId != "" {
+    if stateConfig.AwsEnv.RouteTableId != "" {
         // Delete the private route table
         err = ec2Client.RouteTableTerminator(1 * time.Minute,
-                                             stateConfig.AwsEnv.PrivateRouteId)
+                                             stateConfig.AwsEnv.RouteTableId)
         if err != nil {
-            log.Printf("Error deleting Private Route Table:  %v", err)
+            log.Printf("Error deleting Route Table:  %v", err)
             hadError = true
         } else {
-            yamlUpdates["aws_env.private_route_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.PublicRouteId != "" {
-        // Delete the public route table
-        err = ec2Client.RouteTableTerminator(1 * time.Minute,
-                                             stateConfig.AwsEnv.PublicRouteId)
-        if err != nil {
-            log.Printf("Error deleting Public Route Table:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.public_route_id"] = ""
+            yamlUpdates["aws_env.route_table_id"] = ""
         }
     }
 
@@ -256,27 +208,15 @@ func main() {
         }
     }
 
-    if stateConfig.AwsEnv.PrivateSubnetId != "" {
-        // Delete the private subnet
-        err = ec2Client.SubnetTerminator(1 * time.Minute,
-                                         stateConfig.AwsEnv.PrivateSubnetId)
-        if err != nil {
-            log.Printf("Error deleting private subnet:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.private_subnet_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.PublicSubnetId != "" {
+    if stateConfig.AwsEnv.SubnetId != "" {
         // Delete the public subnet
         err = ec2Client.SubnetTerminator(1 * time.Minute,
-                                         stateConfig.AwsEnv.PublicSubnetId)
+                                         stateConfig.AwsEnv.SubnetId)
         if err != nil {
-            log.Printf("Error deleting public subnet:  %v", err)
+            log.Printf("Error deleting subnet:  %v", err)
             hadError = true
         } else {
-            yamlUpdates["aws_env.public_subnet_id"] = ""
+            yamlUpdates["aws_env.subnet_id"] = ""
         }
     }
 
