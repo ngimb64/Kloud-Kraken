@@ -157,15 +157,17 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the VPC
-    vpcId, err := SetupVpcHandler(ec2Client, &stateConfig, appConfig, yamlUpdates)
+    vpcId, err := SetupVpcHandler(ec2Client, &stateConfig,
+                                  appConfig, yamlUpdates)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up VPC - %w", err)
     }
 
     // Setup the Internet Gateway
-    igwId, err := SetupInternetGatewayHandler(ec2Client, &stateConfig, appConfig,
-                                              yamlUpdates, vpcId)
+    igwId, err := SetupInternetGatewayHandler(ec2Client, &stateConfig,
+                                              appConfig, yamlUpdates,
+                                              vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up Internet Gateway - %w", err)
@@ -196,24 +198,27 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the EC2 security group
-    ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, &stateConfig, appConfig,
-                                                 yamlUpdates, outStruct, vpcId)
+    ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, &stateConfig,
+                                                 appConfig, yamlUpdates,
+                                                 outStruct, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up EC2 security group - %w", err)
     }
 
     // Setup EC2 security group Rules
-    err = SetupEc2SecurityGroupRulesHandler(ec2Client, &stateConfig, appConfig,
-                                            yamlUpdates, ec2SgId)
+    err = SetupEc2SecurityGroupRulesHandler(ec2Client, &stateConfig,
+                                            appConfig, yamlUpdates,
+                                            ec2SgId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up EC2 security group rules - %w", err)
     }
 
     // Setup the SSM security group
-    ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, &stateConfig, appConfig,
-                                                 yamlUpdates, vpcId)
+    ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, &stateConfig,
+                                                 appConfig, yamlUpdates,
+                                                 vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up SSM security group - %w", err)

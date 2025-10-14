@@ -1,9 +1,4 @@
-- Implement system of calculating cost of resources
-    X Elastic IPs (per-hour if idle).
-    X NAT Gateways (per-hour + per-GB).
-    X VPC Endpoints (interface endpoints per-hour + per-GB).
-    - S3 Buckets (only when storing data, making requests, or transferring).
-    X EC2 Instances (per-hour/second + storage + bandwidth).
+- Finish reviewing and testing awscost_test.go stuff
 
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
@@ -126,8 +121,6 @@ vpc_setup.go/main.go:
         - DeleteLogGroup
     - Delete S3 bucket and SSM parameter store VPC endpoint
         - DeleteVpcEndpoints
-    - Delete Elastic IP
-        - ReleaseAddress
     - Delete public route table association with their subnet
         - DisassociateRouteTable
     - Delete public route table
@@ -167,8 +160,6 @@ Server role
         - RunInstances
     - Terminate EC2 instances
         - TerminateInstances
-    - Terminate Elastic IP
-        - ReleaseAddress
     - Terminate SSM VPC Endpoint
         - DeleteVpcEndpoints
     - Terminate S3 bucket and its contents

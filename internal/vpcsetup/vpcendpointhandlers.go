@@ -107,7 +107,7 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     // Add the elastic IP to cost manager
-    _ = costMan.AddCostResourceToManagerHandler("vpc_endpoint_ssm", filterMap,
-                                                true, costErr)
+    _ = costMan.AddCostResourceToManagerHandler("vpc_endpoint_ssm_hourly",
+                                                filterMap, true, costErr)
     return nil
 }

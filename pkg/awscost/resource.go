@@ -2,6 +2,8 @@ package awscost
 
 import (
 	"fmt"
+	"maps"
+	"math"
 	"strings"
 	"time"
 
@@ -11,12 +13,12 @@ import (
 // AwsCostResource represents a tracked resource and usage fields.
 //
 type AwsCostResource struct {
-    formula     string
+    Formula     string
     Metadata    map[string]string
-    price       float64  // Primary price (e.g., $/hour or $/GB-month)
-    priceData   float64  // Optional second price (e.g., $/GB transfer)
-    serviceName string
-    startTime   time.Time
+    Price       float64  // Primary price (e.g., $/hour or $/GB-month)
+    PriceData   float64  // Optional second price (e.g., $/GB transfer)
+    ServiceName string
+    StartTime   time.Time
     timeUsed    time.Duration
 
     // Usage fields
@@ -36,14 +38,14 @@ type AwsCostResource struct {
 //
 func (resource *AwsCostResource) CalculateResourceTotal() (float64, error) {
     // If timer was not called ensure it is to prevent errors
-    if resource.startTime.IsZero() {
-        resource.startTime = time.Now()
+    if resource.StartTime.IsZero() {
+        resource.StartTime = time.Now()
     }
 
-    resource.timeUsed = time.Since(resource.startTime)
+    resource.timeUsed = time.Since(resource.StartTime)
 
     // Get hours used and calculate out of a month
-    hours := resource.timeUsed.Hours()
+    hours := math.Ceil(resource.timeUsed.Hours())
     months := hours / (24.0 * 30.0)
 
     gbMonths := resource.gbMonths
@@ -52,61 +54,77 @@ func (resource *AwsCostResource) CalculateResourceTotal() (float64, error) {
         gbMonths = resource.Gb * months
     }
 
-    env := map[string]any{
-        "price":        resource.price,      // Default primary price
-        "price_data":   resource.priceData,  // Secondary price (if any)
-        "hours":        hours,               // Hours of uptime
-        "months":       months,
-        "gb_months":    gbMonths,
+    defaults := map[string]any{
+        "price":         0.0,  // Default primary price
+        "price_data":    0.0,  // Secondary price (if any)
+        "price_egress":  0.0,
+        "price_gb":      0.0,
+        "price_hour":    0.0,
+        "price_put":     0.0,
+        "price_get":     0.0,
+        "storage_price": 0.0,
+
+        "data_out_gb":  resource.GbTransfer,
         "gb":           resource.Gb,
+        "gb_months":    gbMonths,
+        "gb_processed": resource.GbTransfer,
         "gb_transfer":  resource.GbTransfer,
-        "data_out_gb":  resource.GbTransfer, // Alias used in some formulas
-        "requests":     resource.Requests,
-        "put_requests": resource.PutRequests,
         "get_requests": resource.GetRequests,
+        "hours":        hours,
+        "months":       months,
+        "put_requests": resource.PutRequests,
+        "requests":     resource.Requests,
     }
 
+    // Start with the defaults
+    env := make(map[string]any, len(defaults))
+    maps.Copy(env, defaults)
+
     // Ensure all formula aliases are set
-    env["storage_price"] = resource.price
-    env["price_hour"] = resource.price
-    env["price_gb"] = resource.price
-    env["price_egress"] = resource.priceData
-    env["price_data_unit"] = resource.priceData
+    env["price"] = resource.Price
+    env["price_data"] = resource.PriceData
+    env["storage_price"] = resource.Price       // alias
+    env["price_egress"] = resource.PriceData    // alias
+    env["price_hour"] = resource.Price
+    env["price_gb"] = resource.Price
+    env["price_data_unit"] = resource.PriceData
 
-    // Add parsed numeric metadata (if present). We add both raw string and parsed numeric
-    // as underscored keys, e.g. meta_put_price -> 0.005
-    for key, value := range resource.Metadata {
-        // Make canonical lowercased key with underscores for spaces/dashes
-        normKey := strings.ToLower(key)
-        normKey = strings.ReplaceAll(normKey, " ", "_")
-        normKey = strings.ReplaceAll(normKey, "-", "_")
+    if resource.Metadata != nil {
+        // Add parsed numeric metadata (if present), add both raw string and
+        // parsed numeric as underscored keys, e.g. meta_put_price -> 0.005
+        for key, value := range resource.Metadata {
+            // Make canonical lowercased key with underscores for spaces/dashes
+            normKey := strings.ToLower(key)
+            normKey = strings.ReplaceAll(normKey, " ", "_")
+            normKey = strings.ReplaceAll(normKey, "-", "_")
 
-        // Put raw string metadata entry in env under "meta_<key>"
-        env["meta_" + normKey] = value
+            // Put raw string metadata entry in env under "meta_<key>"
+            env["meta_" + normKey] = value
 
-        // Try to parse numeric values and add them as
-        // float env entries (if numeric)
-        parsed, err := parseFloatSafe(value)
-        if err == nil {
-            // Add with and without price_ prefix
-            // if key suggests pricing
-            env[normKey] = parsed
-            env["price_"+normKey] = parsed
+            // Try to parse numeric values and add them as
+            // float env entries (if numeric)
+            parsed, err := parseFloatSafe(value)
+            if err == nil {
+                // Add with and without price_ prefix
+                // if key suggests pricing
+                env[normKey] = parsed
+                env["price_"+normKey] = parsed
+            }
         }
     }
 
     // Compile the cost formula to be evaluated
-    prog, err := expr.Compile(resource.formula, expr.AsFloat64())
+    prog, err := expr.Compile(resource.Formula, expr.AsFloat64())
     if err != nil {
         return 0, fmt.Errorf("failed to compile formula for %s - %v (formula: %q)",
-                             resource.serviceName, err, resource.formula)
+                             resource.ServiceName, err, resource.Formula)
     }
 
     // Run the cost forumla to generate resource cost
     costCalcOut, err := expr.Run(prog, env)
     if err != nil {
         return 0, fmt.Errorf("failed to run formula for %s - %v (formula: %q)",
-                             resource.serviceName, err, resource.formula)
+                             resource.ServiceName, err, resource.Formula)
     }
 
     // Accept numeric types convertible to float64
@@ -123,12 +141,12 @@ func (resource *AwsCostResource) CalculateResourceTotal() (float64, error) {
         return float64(value), nil
     default:
         return 0, fmt.Errorf("unexpected formula result type for %s - %T",
-                             resource.serviceName, costCalcOut)
+                             resource.ServiceName, costCalcOut)
     }
 }
 
 //  Begin recording time resource is in usage.
 //
 func (resource *AwsCostResource) StartResourceTimer() {
-    resource.startTime = time.Now()
+    resource.StartTime = time.Now()
 }

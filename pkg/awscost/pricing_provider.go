@@ -37,12 +37,11 @@ func NewAWSPricingProvider(region string) *AWSPricingProvider {
     // Maps friendly names to AWS SKU service codes
     serviceNameToSkuMap := map[string]string{
         "ec2_instance":     "AmazonEC2",
-        "elastic_ip":       "AmazonEC2",
-        "nat_gateway":      "AmazonEC2",
-        "s3_bucket":        "AmazonS3",
-        "vpc_endpoint_s3":  "AmazonEC2",
+        "s3_egress":        "AmazonS3",
+        "s3_get_requests":  "AmazonS3",
+        "s3_put_requests":  "AmazonS3",
+        "s3_storage":       "AmazonS3",
         "vpc_endpoint_ssm": "AmazonEC2",
-        "vpc_flow_log":     "CloudWatchLogs",
     }
 
     return &AWSPricingProvider{
