@@ -1,5 +1,3 @@
-- Finish reviewing and testing awscost_test.go stuff
-
 - Mess around with GPU instance manually ensuring instance drive raid setup process in user data script is correct
 
 - Run system testing in AWS environment

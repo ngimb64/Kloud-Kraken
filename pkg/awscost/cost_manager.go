@@ -31,15 +31,15 @@ func NewAwsCostManager(priceMan *PriceManager,
                        addFormulas map[string]string,
                        ) *AwsCostManager {
     formulas := map[string]string{
-        "ec2_instance":     "price * hours",
+        "ec2_instance":    "price * hours",
 
         "s3_egress":       "data_out_gb * price_egress",
         "s3_get_requests": "get_requests * price_get",
         "s3_put_requests": "put_requests * price_put",
         "s3_storage":      "storage_price * gb_months",
 
-        "vpc_endpoint_ssm_hourly": "price_hour * hours",
         "vpc_endpoint_ssm_data":   "price_gb * gb_processed",
+        "vpc_endpoint_ssm_hourly": "price_hour * hours",
     }
 
     // If there are formulas to add, add them to map
@@ -135,10 +135,10 @@ func (costMan *AwsCostManager) addCostResourceToManager(serviceName string,
 //  - Pointer to the AWS resource added to cost manager
 //  - Error if it occurs, otherwise nil on success
 //
-func (costMan *AwsCostManager) AddCostResourceToManagerHandler(serviceName string,
-                                                               filterMap map[string]string,
-                                                               startNow bool, err *error) (
-                                                               *AwsCostResource) {
+func (costMan *AwsCostManager) AddCostResourceToManager(serviceName string,
+                                                        filterMap map[string]string,
+                                                        startNow bool, err *error) (
+                                                        *AwsCostResource) {
     // Add the cost resource to cost manager
     resource, addErr := costMan.addCostResourceToManager(serviceName, filterMap, startNow)
     if addErr != nil {

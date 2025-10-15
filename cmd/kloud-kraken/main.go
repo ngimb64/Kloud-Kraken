@@ -639,8 +639,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Add the Ec2 instances to the cost manager
-    s3Cost := costMan.AddCostResourceToManagerHandler("s3_put_requests", filterMap,
-                                                      false, &costErr)
+    s3Cost := costMan.AddCostResourceToManager("s3_put_requests", filterMap,
+                                               false, &costErr)
     s3Cost.PutRequests += 1
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -688,8 +688,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Add the Ec2 instances to the cost manager
-    _ = costMan.AddCostResourceToManagerHandler("ec2_instance", filterMap,
-                                                true, &costErr)
+    _ = costMan.AddCostResourceToManager("ec2_instance", filterMap, true, &costErr)
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
