@@ -8,7 +8,7 @@ error_exit() {
     local message="$1"
     # Default exit code is 1 if not provided
     local code="${2:-1}"
-    echo "[*] Error:  $message"
+    printf "\n[*] ERROR:  %s" "$message"
     exit "$code"
 }
 

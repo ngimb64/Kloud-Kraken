@@ -16,14 +16,14 @@ import (
 // Struct for storing Ec2CreateInstances call input
 type Ec2CreateInstancesInput struct {
     AMI              string
-    InstanceType     string             // Optionial
+    InstanceType     string             // Optional
     MaxCount         int32
     MinCount         int32
-    RoleName         string             // Optionial
-    SecurityGroupIds []string           // Optionial
-    SubnetId         string             // Optionial
-    Tags             map[string]string  // Optionial
-    UserData         []byte             // Optionial
+    RoleName         string             // Optional
+    SecurityGroupIds []string           // Optional
+    SubnetId         string             // Optional
+    Tags             map[string]string  // Optional
+    UserData         []byte             // Optional
 }
 
 // Struct for managing EC2 operations

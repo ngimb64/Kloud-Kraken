@@ -2,8 +2,7 @@
 
 - Run system testing in AWS environment
 
-- Implement system of calculating cost of resources
-    - Ensure to update permissions policies as needed
+- Ensure README is fully updated and try to make flowchart diagrams to visually explain everything
 
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
@@ -25,6 +24,8 @@ NOTE:  below list is reference for research item in list
 Server Bootstrap role
 ----------------------
 vpc_setup.go/main.go:
+    - Manage resource cost and calculate total
+        - GetProducts
     - Create VPC with CIDR block
         - CreateTags
         - CreateVpc
@@ -36,36 +37,23 @@ vpc_setup.go/main.go:
         - CreateTags
         - DescribeInternetGateways
         - NewInternetGatewayExistsWaiter
-    - Allocate Elastic IP for NAT Gateway
-        - AllocateAddress
-        - CreateTags
-        - DescribeAddresses
     - Get the availability zones for the region
         - DescribeAvailabilityZones
-    - Create public and private subnets within the VPC
+    - Create public subnet in VPC
         - CreateSubnet
         - CreateTags
         - DescribeSubnets
         - ModifySubnetAttribute
         - NewSubnetAvailableWaiter
-    - Create NAT Gateway in public subnet (uses Elastic IP)
-        - CreateNatGateway
-        - CreateTags
-        - DescribeNatGateways
-        - NewNatGatewayAvailableWaiter
-    - Create route table for public subnets: 0.0.0.0/0 → IGW
+    - Create route table for public subnet: 0.0.0.0/0 → IGW
         - AssociateRouteTable
         - CreateRouteTable
         - CreateRoute
         - CreateTags
         - DescribeRouteTables
-    - Create route tables for private subnets (per AZ): 0.0.0.0/0 → NAT Gateway
-        - Same as above
     - Associate **public** subnets to public route table
         - AssociateRouteTable
         - DescribeRouteTables
-    - Associate **private** subnets to private route tables
-        - Same as above
     - Create security groups for EC2
         - CreateSecurityGroup
         - CreateTags
@@ -131,18 +119,14 @@ vpc_setup.go/main.go:
         - DeleteLogGroup
     - Delete S3 bucket and SSM parameter store VPC endpoint
         - DeleteVpcEndpoints
-    - Delete NAT Gateway
-        - DeleteNatGateway
-    - Delete Elastic IP
-        - ReleaseAddress
-    - Delete private and public route table associations with their subnets
+    - Delete public route table association with their subnet
         - DisassociateRouteTable
-    - Delete private and public route tables
+    - Delete public route table
         - DeleteRouteTable
     - Delete Internet Gateway
         - DetachInternetGateway
         - DeleteInternetGateway
-    - Delete private and public subnets
+    - Delete public subnet
         - DeleteSubnet
     - Delete EC2 and SSM parameter store security groups
         - DeleteSecurityGroup
@@ -172,12 +156,8 @@ Server role
         - CreateTags
         - NewInstanceExistsWaiter
         - RunInstances
-    - Terminate NAT Gateway
-        - DeleteNatGateway
     - Terminate EC2 instances
         - TerminateInstances
-    - Terminate Elastic IP
-        - ReleaseAddress
     - Terminate SSM VPC Endpoint
         - DeleteVpcEndpoints
     - Terminate S3 bucket and its contents

@@ -155,10 +155,6 @@ func ServerPermPolicyGen(region string, accountId string,
         "ec2:TerminateInstances",
         "ec2:DescribeInstances",
         "ec2:CreateTags",
-        "ec2:DeleteNatGateway",
-        "ec2:DescribeNatGateways",
-        "ec2:ReleaseAddress",
-        "ec2:DescribeAddresses",
         "ec2:DeleteVpcEndpoints",
         "ec2:DescribeVpcEndpoints"
       ],
@@ -166,6 +162,19 @@ func ServerPermPolicyGen(region string, accountId string,
       "Condition": {
         "StringEquals": {
           "ec2:ResourceTag/kloud-kraken": "true"
+        }
+      }
+    },
+    {
+      "Sid": "PricingGetProducts",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalTag/kloud-kraken": "true"
         }
       }
     },

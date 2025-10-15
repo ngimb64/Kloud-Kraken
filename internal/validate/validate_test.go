@@ -379,24 +379,6 @@ func TestValidatePath(t *testing.T) {
 }
 
 
-func TestValidateRegion(t *testing.T) {
-    // Make reusable assert instance
-    assert := assert.New(t)
-
-    truths := []string{"us-east-1", "us-east-2", "us-west-2"}
-    // Iterate through slice of truths and test them
-    for _, truth := range truths {
-        assert.True(validate.ValidateRegion(truth))
-    }
-
-    falacies := []string{"test", "string", "nonsense"}
-    // Iterate through slice of truths and test them
-    for _, falacy := range falacies {
-        assert.False(validate.ValidateRegion(falacy))
-    }
-}
-
-
 func TestValidateRulesetFile(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)

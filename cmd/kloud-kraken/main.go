@@ -23,6 +23,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
+	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
@@ -548,17 +549,20 @@ $CWD/client -applyOptimization=%t \
 // @Returns
 //  - The initialized AWS configuration instance
 //  - The VPC bootstrap output struct
+//  - AWS cost manager struct
+//  - Errors associated with cost manager
 //  - Error if it occurs, otherwise nil on success
 //
 func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               awsConfig aws.Config,
               bootstrapOut *vpcsetup.VpcBootstrapOutput,
-              err error) {
-    // Set up the AWS credentials based on local chain or environment variables
+              costMan *awscost.AwsCostManager,
+              costErr error, err error) {
+    // Set up AWS credentials based on local chain or environment variables
     awsConfig, err = awsutils.AwsConfigSetup(1 * time.Minute,
                                              appConfig.LocalConfig.Region)
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, nil, err
     }
 
 	// Establish clients to various services
@@ -566,11 +570,12 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 	iamClient := iamutils.IamNewManager(awsConfig)
 	stsClient := sts.NewFromConfig(awsConfig)
 
-    // Set up the kloud kraken VPC and its associated components
-    bootstrapOut, err = vpcsetup.VpcBootstrap(*appConfig, awsConfig, *ec2Client,
-                                              *iamClient, *stsClient)
+    // Set up Kloud Kraken VPC and its associated components
+    bootstrapOut, costMan, costErr, err = vpcsetup.VpcBootstrap(appConfig, awsConfig,
+                                                                ec2Client, iamClient,
+                                                                *stsClient)
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     bootstrapOut.Ec2Client = ec2Client
@@ -585,7 +590,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
     )
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     tags := map[string]string{
@@ -597,11 +602,11 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
     ssmParam, err := ssmClient.SsmPutParameter(1 * time.Minute,
-                                            "/kloud-kraken/tls-cert",
-                                            string(TlsMan.CertPemBlock),
-                                            tags)
+                                               "/kloud-kraken/tls-cert",
+                                               string(TlsMan.CertPemBlock),
+                                               tags)
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     bootstrapOut.SsmClient = ssmClient
@@ -614,7 +619,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Read the client binary into memory
     binData, err := os.ReadFile("./kloud-kraken-client")
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     // Re-establish client to S3 with new API key set
@@ -624,10 +629,19 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                          bootstrapOut.S3BucketName,
                                          "client", binData)
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     bootstrapOut.S3Client = s3Client
+
+    filterMap := map[string]string{
+        "location": awsConfig.Region,
+    }
+
+    // Add the Ec2 instances to the cost manager
+    s3Cost := costMan.AddCostResourceToManager("s3_put_requests", filterMap,
+                                               false, &costErr)
+    s3Cost.PutRequests += 1
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
@@ -639,7 +653,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                     keyName, publicIps, ssmParam,
                                     bootstrapOut.Ec2SgId)
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     tags = map[string]string{
@@ -654,7 +668,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         MinCount:         appConfig.LocalConfig.NumberInstances,
         RoleName:         "KloudKrakenClientRole",
         SecurityGroupIds: []string{bootstrapOut.Ec2SgId},
-        SubnetId:         bootstrapOut.PrivSubnetId,
+        SubnetId:         bootstrapOut.SubnetId,
         Tags:             tags,
         UserData:         []byte(userData),
     }
@@ -664,14 +678,23 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Create number of EC2 instances based on passed in data
     err = ec2Client.Ec2CreateInstances(15 * time.Minute, ec2CreateInstancesInput)
     if err != nil {
-        return awsConfig, bootstrapOut, err
+        return awsConfig, bootstrapOut, costMan, costErr, err
     }
+
+    filterMap = map[string]string{
+        "instanceType": appConfig.LocalConfig.InstanceType,
+        "location": awsConfig.Region,
+		"operatingSystem":"Linux",
+    }
+
+    // Add the Ec2 instances to the cost manager
+    _ = costMan.AddCostResourceToManager("ec2_instance", filterMap, true, &costErr)
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 instance creation completed"))
 
-    return awsConfig, bootstrapOut, nil
+    return awsConfig, bootstrapOut, costMan, costErr, nil
 }
 
 
@@ -755,7 +778,6 @@ func parseArgs() *conf.AppConfig {
         log.Fatalf("Error loading YAML data:  %v", err)
     }
 
-    // Load the configuration from the YAML file
     return appConfig
 }
 
@@ -834,11 +856,25 @@ func main() {
                                                            color.LightCyan, "$"), "",
                                        color.NeonAzure, "Server TLS PEM certificate " +
                                        "and key generated"))
+        var costErr error
+        var costMan *awscost.AwsCostManager
 
         // Call handler function that sets up AWS IAM user permissions,
         // transfers client binary via S3, set TLS certificate via SSM
         // parameter store, and launches EC2 instances
-        awsConfig, bootstrapOut, err = awsSetup(appConfig, publicIps)
+        awsConfig, bootstrapOut, costMan, costErr, err = awsSetup(appConfig, publicIps)
+        // If error occured during AWS resource cost calculation
+        if costErr != nil {
+            defer func() {
+                if logMan != nil {
+                    logMan.LogMessage("error", "Error occured during AWS cost" +
+                                        " calulcation:  %v", costErr)
+                } else {
+                    log.Printf("Error occured during AWS cost calulcation:  %v", costErr)
+                }
+            }()
+        }
+
         if err != nil {
             log.Fatalf("Error with AWS setup:  %v", err)
         }
@@ -859,7 +895,8 @@ func main() {
             // Decode raw bytes into StateConfig struct
             err = yaml.Unmarshal(stateData, &stateConfig)
             if err != nil {
-                log.Printf("Error unmarshaling state file YAML data into state struct:  %v", err)
+                log.Printf("Error unmarshaling state file YAML data into " +
+                           "state struct:  %v", err)
             }
 
             defer func() {
@@ -908,29 +945,17 @@ func main() {
                 }
             }
 
-            // Terminate the NAT Gateway
-            err = bootstrapOut.Ec2Client.NatGatewayTerminator(10 * time.Minute,
-                                                              bootstrapOut.NatGatewayId)
-            if err != nil {
-                log.Printf("Error deleting NAT Gateway:  %v", err)
-            } else {
-                yamlUpdates["aws_env.nat_gateway_id"] = ""
-            }
-
-            // Release the Elastic IP
-            err = bootstrapOut.Ec2Client.ElasticIpTerminator(1 * time.Minute,
-                                                             bootstrapOut.EipId)
-            if err != nil {
-                log.Printf("Error releasing Elastic IP:  %v", err)
-            } else {
-                yamlUpdates["aws_env.eip_id"] = ""
-            }
-
             // Terminate SSM Parameter Store VPC Interface Endpoint
             err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
                                                                 []string{bootstrapOut.SsmVpcEndpointId})
             if err != nil {
-                log.Printf("Error deleting SSM Parameter Store VPC Interface Endpoint:  %v", err)
+                if logMan != nil {
+                    logMan.LogMessage( "error", "Error deleting SSM Parameter Store" +
+                                       " VPC Interface Endpoint:  %v", err)
+                } else {
+                    log.Printf("Error deleting SSM Parameter Store VPC" +
+                               " Interface Endpoint:  %v", err)
+                }
             } else {
                 yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ""
             }
@@ -939,7 +964,12 @@ func main() {
             err = bootstrapOut.S3Client.S3BucketTerminator(5 * time.Minute,
                                                            bootstrapOut.S3BucketName)
             if err != nil {
-                log.Printf("Error deleting S3 bucket and its contents:  %v", err)
+                if logMan != nil {
+                    logMan.LogMessage("error", "Error deleting S3 bucket and " +
+                                      "its contents:  %v", err)
+                } else {
+                    log.Printf("Error deleting S3 bucket and its contents:  %v", err)
+                }
             } else {
                 yamlUpdates["aws_env.s3_bucket_name"] = ""
             }
@@ -948,8 +978,51 @@ func main() {
             err = bootstrapOut.SsmClient.SsmDeleteAllParams(1 * time.Minute,
                                                             "/kloud-kraken/tls-cert")
             if err != nil {
-                log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
+                if logMan != nil {
+                    logMan.LogMessage("error", "Error deleting parameters from" +
+                                      " SSM Param Store:  %v", err)
+                } else {
+                    log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
+                }
             }
+
+            // Calculate the total cost of AWS resources
+            err = costMan.CalculateTotalCost()
+            if err != nil {
+                if logMan != nil {
+                    logMan.LogMessage("error", "Error calculating total AWS " +
+                                      "resource cost:  %v", err)
+                } else {
+                    log.Printf("Error calculating total AWS resource cost:  %v", err)
+                }
+            }
+
+            // Display total and individual AWS resource cost when program exits
+            fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                               color.LightCyan, "$"), "",
+                                           color.NeonAzure, "Total AWS resource cost:  ",
+                                           color.KrakenGlowGreen,
+                                           strconv.FormatFloat(costMan.TotalCost, 'E', -1, 64)))
+
+            fmt.Println(display.CtextMulti(color.LightCyan, "\n        AWS Cost Table\n",
+                                           color.KrakenPurple,
+                                           "-----------------------------------\n|      ",
+                                           color.NeonAzure, "Service Name      ",
+                                           color.KrakenPurple, "|", color.NeonAzure,
+                                           "  Cost  ", color.KrakenPurple, "|"))
+
+            // Iterate through contents of the service table
+            for service, price := range costMan.CostTable {
+                fmt.Printf("%s%-24s%s%-8.4f%s\n",
+                           display.Ctext(color.KrakenPurple, "|"),
+                           display.Ctext(color.KrakenGlowGreen, service),
+                           display.Ctext(color.KrakenPurple, "|"),
+                           display.Ctext(color.BrightLime,
+                                         strconv.FormatFloat(price, 'E', -1, 64)),
+                           display.Ctext(color.KrakenPurple, "|"))
+            }
+
+            fmt.Println(display.Ctext(color.KrakenPurple, "-----------------------------------"))
         } ()
 
     // If the program is being run in testing mode
