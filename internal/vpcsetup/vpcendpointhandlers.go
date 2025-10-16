@@ -9,13 +9,22 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
-//
+// Handler function for setting up S3 VPC Gateway Endpoint.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - bucketName:  The name of the S3 bucket being used by endpoint
+//  - vpcId:  The VPC ID where the endpoint will be deployed
+//  - routeId:  The ID of the route table associated with the endpoint
+//  - location:  The human readable version of region
+//  - costErr:  Pointer to error instance for cost manager
+//  - costMan:  Pointer to AWS cost manager instance
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                       stateConfig *AwsEnv,
@@ -55,13 +64,23 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
 }
 
 
-//
+// Handler function for setting up SSM VPC Interface Endpoint.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - outStruct:  Pointer to struct used for managing vcpsetup outputs
+//  - vpcId:  The VPC ID where the endpoint will be deployed
+//  - subnetId:  The subnet ID where endpoint will be deployed
+//  - ssmSgId:  The security group ID associated with the endpoint
+//  - location:  The human readable version of region
+//  - costErr:  Pointer to error instance for cost manager
+//  - costMan:  Pointer to AWS cost manager instance
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                          stateConfig *AwsEnv,

@@ -10,13 +10,19 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 )
 
-//
+// Handler function for generating permissions and trust policy for setting
+// up client IAM role.
 //
 // @Parameters
-//
+//  - iamClient:  Pointer to IAM service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - outStruct:  Pointer to struct used for managing vcpsetup outputs
+//  - bucketName:  Name of the S3 bucket used
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupClientIamRoleHander(iamClient *iamutils.IamManager,
                               stateConfig *AwsEnv,
@@ -41,8 +47,7 @@ func SetupClientIamRoleHander(iamClient *iamutils.IamManager,
                                                  stateConfig.AwsEnv.IamArnClient,
                                                  "KloudKrakenClientRole", trustPolicy,
                                                  "KloudKrakenClientPerms",
-                                                 permissionsPolicy,
-                                                 tags, true)
+                                                 permissionsPolicy, tags, true)
     if err != nil {
         return err
     }
@@ -59,13 +64,19 @@ func SetupClientIamRoleHander(iamClient *iamutils.IamManager,
 }
 
 
-//
+// Handler function for generating permissions and trust policy for setting
+// up server IAM role.
 //
 // @Parameters
-//
+//  - iamClient:  Pointer to IAM service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - outStruct:  Pointer to struct used for managing vcpsetup outputs
+//  - bucketName:  Name of the S3 bucket used
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
                                stateConfig *AwsEnv,
@@ -109,13 +120,20 @@ func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
 }
 
 
-//
+// Handler function for generating permissions and trust policy for setting
+// up VPC flow logs IAM role.
 //
 // @Parameters
-//
+//  - iamClient:  Pointer to IAM service client management struct
+//  - stsClient:  The STS service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - outStruct:  Pointer to struct used for managing vcpsetup outputs
 //
 // @Returns
-//
+//  - VPC flow logs role ARN
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupVpcFlowLogsIamRoleHandler(iamClient *iamutils.IamManager,
                                     stsClient sts.Client,

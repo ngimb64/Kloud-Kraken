@@ -10,13 +10,22 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
 )
 
-//
+// Handler function for setting up S3 bucket.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - outStruct:  Pointer to struct used for managing vcpsetup outputs
+//  - location:  The human readable version of region
+//  - costErr:  Pointer to error instance for cost manager
+//  - costMan:  Pointer to AWS cost manager instance
+//  - awsConfig:  The AWS configuration instance
 //
 // @Returns
-//
+//  - The S3 bucket name
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
                           stateConfig *AwsEnv,
