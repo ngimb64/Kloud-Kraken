@@ -469,7 +469,7 @@ fi
 
 retries=0
 # Update, upgrade, and install needed packages for hash cracking & RAID configuration
-until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade && apt install -y hashcat mdadm; do
+until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y awscli ca-certificates e2fsprogs hashcat mdadm util-linux; do
     (( retries++ ))
     # If the updates process fails 3 times due to network issues, log error and exit
     (( retries >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
