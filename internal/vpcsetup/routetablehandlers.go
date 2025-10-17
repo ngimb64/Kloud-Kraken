@@ -7,20 +7,25 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
-//
+// Handler function for setting up the route table associations.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - routeId:  The ID of the route table to associate
+//  - subnetId:  The ID of the subnet to associate
 //
 // @Returns
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func SetupRouteTableAssociationsHandler(ec2Client *ec2utils.Ec2Manger,
-                                        stateConfig *AwsEnv,
-                                        appConfig *conf.AppConfig,
-                                        yamlUpdates map[string]string,
-                                        routeId string, subnetId string) (
-                                        error) {
+func SetupRouteTableAssociationHandler(ec2Client *ec2utils.Ec2Manger,
+                                       stateConfig *AwsEnv,
+                                       appConfig *conf.AppConfig,
+                                       yamlUpdates map[string]string,
+                                       routeId string, subnetId string) (
+                                       error) {
     // Ensure route table is associated to subnet
     publicAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
                                                                    stateConfig.AwsEnv.RouteAssociationId,
@@ -41,20 +46,26 @@ func SetupRouteTableAssociationsHandler(ec2Client *ec2utils.Ec2Manger,
 }
 
 
-//
+// Handler function for setting up the route tables.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - vpcId:  The ID of the vpc to setup the route table in
+//  - igwId:  The ID of the internet gateway that the route table points to
 //
 // @Returns
+//  - Route table ID
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func SetupRouteTablesHandler(ec2Client *ec2utils.Ec2Manger,
-                             stateConfig *AwsEnv,
-                             appConfig *conf.AppConfig,
-                             yamlUpdates map[string]string,
-                             vpcId string, igwId string) (
-                             string, error) {
+func SetupRouteTableHandler(ec2Client *ec2utils.Ec2Manger,
+                            stateConfig *AwsEnv,
+                            appConfig *conf.AppConfig,
+                            yamlUpdates map[string]string,
+                            vpcId string, igwId string) (
+                            string, error) {
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-route-table",

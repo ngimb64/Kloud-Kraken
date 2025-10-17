@@ -7,13 +7,18 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
-//
+// Handler function for setting up the Internet Gateway.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - vpcId:  The ID of the VPC to setup the IGW in
 //
 // @Returns
-//
+//  - Internet Gateway ID
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupInternetGatewayHandler(ec2Client *ec2utils.Ec2Manger,
                                  stateConfig *AwsEnv,

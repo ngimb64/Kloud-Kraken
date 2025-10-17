@@ -9,13 +9,19 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
-//
+// Handler function for setting up the VPC flow logs.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - awsConfig:  The AWS configuration instance
+//  - vpcId:  The ID of the VPC where flow logs will be applied
+//  - vpcFlowLogArn:  The VPC flow logs ARN
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupVpcFlowLogsHandler(ec2Client *ec2utils.Ec2Manger,
                              stateConfig *AwsEnv,
@@ -53,13 +59,17 @@ func SetupVpcFlowLogsHandler(ec2Client *ec2utils.Ec2Manger,
 }
 
 
-//
+// Handler function for setting up the VPC.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
 //
 // @Returns
-//
+//  - The VPC ID
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupVpcHandler(ec2Client *ec2utils.Ec2Manger,
                      stateConfig *AwsEnv,

@@ -7,13 +7,19 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
-//
+// Handler function for setting up security group for EC2 instances.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - outStruct:  Pointer to struct used for managing vcpsetup outputs
+//  - vpcId:  The ID of the VPC wthere the security group will apply
 //
 // @Returns
-//
+//  - EC2 security group ID
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupEc2SecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
                                   stateConfig *AwsEnv,
@@ -49,6 +55,18 @@ func SetupEc2SecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
 }
 
 
+// Handler function for setting up security group rules for EC2 security group.
+//
+// @Parameters
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - ec2SgId:  The EC2 security group ID
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
 func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
                                        stateConfig *AwsEnv,
                                        appConfig *conf.AppConfig,
@@ -92,13 +110,18 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
 }
 
 
-//
+// Handler function for setting up security group rules for SSM security group.
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - stateConfig:  Pointer to config struct for state file
+//  - appConfig:  Pointer to program config instance from YAML data
+//  - yamlUpdates:  The map used for updating output YAML data
+//  - vpcId:  The ID of the VPC wthere the security group will apply
 //
 // @Returns
-//
+//  - SSM security group ID
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupSsmSecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
                                   stateConfig *AwsEnv,
@@ -133,13 +156,14 @@ func SetupSsmSecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
 }
 
 
-//
+// Handler function for setting up the security group for SSM access
 //
 // @Parameters
-//
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - ssmSgId:  The ID of the SSM security group
 //
 // @Returns
-//
+//  - Error if it occurs, otherwise nil on success
 //
 func SetupSsmSecurityGroupRuleHandler(ec2Client *ec2utils.Ec2Manger,
                                       ssmSgId string) error {

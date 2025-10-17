@@ -38,10 +38,10 @@
 <br>
 
 - Designed to setup isolated VPC in AWS environment
-  - Feature public/private subnet setup with NAT gateway for EC2 internet access
+  - Features public subnet setup Internet Gateway for EC2 internet access
   - VPC Endpoints for S3 bucket & SSM Parameter Store operations
   - Security groups for ensuring only outbound traffic occurs on EC2
-  - Minimalist IAM role utilization featuring bootstrap role for creating AWS resources
+  - Minimalist IAM role utilization featuring bootstrap role for creating and destroying AWS resources
   - Automatically assumes role for server operations with the Security Token Service
   - Client IAM role is created with associated instance profile
 <br>

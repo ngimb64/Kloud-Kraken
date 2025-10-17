@@ -55,16 +55,15 @@ type VpcBootstrapOutput struct {
 }
 
 
-// Sets up an entire VPC with private-public subnets for allowinf internet
-// access while keeping the EC2 instances in their own isolated environment.
+// Sets up an entire VPC with public subnet, isolated VPC Endpoints, etc.
 // The resulting IDs of created AWS resources are saved to a map then the
 // YAML state file is created or updated on subsequent uses.
 //
 // @Parameters
-//  - appConfig:  The program configuration instance with parsed YAML data
+//  - appConfig:  Pointer to program config instance from YAML data
 //  - awsConfig:  The configuration to access AWS environment
-//  - ec2Client:  The EC2 service client management struct
-//  - iamClient:  The IAM service client management struct
+//  - ec2Client:  Pointer to EC2 service client management struct
+//  - iamClient:  Pointer to IAM service client management struct
 //  - stsClient:  The STS service client management struct
 //
 // @Returns
@@ -182,16 +181,16 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the route table
-    routeId, err := SetupRouteTablesHandler(ec2Client, &stateConfig, appConfig,
-                                            yamlUpdates, vpcId, igwId)
+    routeId, err := SetupRouteTableHandler(ec2Client, &stateConfig, appConfig,
+                                           yamlUpdates, vpcId, igwId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up route table - %w", err)
     }
 
     // Setup route table associations
-    err = SetupRouteTableAssociationsHandler(ec2Client, &stateConfig, appConfig,
-                                             yamlUpdates, routeId, subnetId)
+    err = SetupRouteTableAssociationHandler(ec2Client, &stateConfig, appConfig,
+                                            yamlUpdates, routeId, subnetId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up route table associations - %w", err)
