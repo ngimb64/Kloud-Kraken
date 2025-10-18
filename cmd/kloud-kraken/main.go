@@ -791,11 +791,13 @@ func main() {
     // Begin recording program timing
     startTime := time.Now()
     // Display the total execution time when program exits
-    defer fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                             color.LightCyan, "$"), "",
-                                         color.NeonAzure, "Total runtime:  ",
-                                         color.KrakenGlowGreen,
-                                         time.Since(startTime).String()))
+    defer func() {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Total runtime:  ",
+                                       color.KrakenGlowGreen,
+                                       time.Since(startTime).String()))
+    }()
 
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
@@ -1013,7 +1015,7 @@ func main() {
 
             // Iterate through contents of the service table
             for service, price := range costMan.CostTable {
-                fmt.Printf("%s%-24s%s%-8.4f%s\n",
+                fmt.Printf("%s%-24s%s%-8s%s\n",
                            display.Ctext(color.KrakenPurple, "|"),
                            display.Ctext(color.KrakenGlowGreen, service),
                            display.Ctext(color.KrakenPurple, "|"),

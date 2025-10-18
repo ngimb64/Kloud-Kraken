@@ -3,7 +3,6 @@ package awscost
 import (
 	"fmt"
 	"maps"
-	"math"
 	"strings"
 	"time"
 
@@ -45,7 +44,7 @@ func (resource *AwsCostResource) CalculateResourceTotal() (float64, error) {
     resource.timeUsed = time.Since(resource.StartTime)
 
     // Get hours used and calculate out of a month
-    hours := math.Ceil(resource.timeUsed.Hours())
+    hours := resource.timeUsed.Hours()
     months := hours / (24.0 * 30.0)
 
     gbMonths := resource.gbMonths
