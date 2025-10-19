@@ -2,7 +2,7 @@
 
 # Kloud Kraken
 
-**NOTE:** This project is still a work in progress but at least 97-98% finished so expect it to be completed in the next few weeks
+**NOTE:** This project is still a work in progress but at least 99% finished so expect it to be completed in the next few weeks
 
 > A cloud based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 
@@ -101,9 +101,10 @@
 
 ## Usage
 
-- Make a copy of the `config.yml` file in the config folder to avoid modifying original
-- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in `config.yml`
+- Make a copy of the default `config.yml` file in the config folder
+- Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in your copy of `config.yml`
 - Ensure to use `instructions.yml` as a reference when configuring the recently made copy
+- For supported regions [Regions](#Regions) and instance families [Instances](#Instances)
 - Despite the tool not supporting Hashcat combinator mode (1), it can be easily achieved locally and combined with other wordlist data using the usual straight mode (0)
   - `hashcat --stdout -a 1 <left_wordlist> <right_wordlist> > combinator_out.txt`
 
@@ -121,6 +122,48 @@ To delete the project from AWS environment:
 ```
 ./bin/kloud-kraken-teardown
 ```
+<br>
+
+
+## Regions
+
+// US
+"us-east-1", "us-east-2", "us-west-1", "us-west-2"
+
+// Canada
+"ca-central-1"
+
+// South America
+"sa-east-1"
+
+// Europe
+"eu-central-1", "eu-west-1", "eu-west-2", "eu-west-3", "eu-north-1", "eu-south-1"
+
+// Middle East / Africa
+"me-south-1", "af-south-1"
+
+// Asia Pacific
+"ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-southeast-1", "ap-southeast-2", "ap-south-1"
+
+// China
+"cn-north-1", "cn-northwest-1"
+
+// GovCloud
+"us-gov-west-1, "us-gov-east-1"
+<br>
+
+
+## Instances
+
+**Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, g6)
+
+- g4ad.*
+- g4dn.*
+- g5.*
+- g5g.*
+- g6.*
+- g6e.*
+- g6f.*
 <br>
 
 

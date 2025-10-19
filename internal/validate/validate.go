@@ -356,37 +356,26 @@ func ValidateIamUsername(iamUsername string) error {
 //  - Toggle for whether instance type is valid or not
 //
 func ValidateInstanceType(instanceType string) bool {
-    var supportedInstances = []string{
-        // === G4dn (always NVMe) ===
-        "g4dn.xlarge",  "g4dn.2xlarge",  "g4dn.4xlarge",
-        "g4dn.8xlarge", "g4dn.12xlarge", "g4dn.16xlarge",
-
-        // === G5d (d-variant of G5) ===
-        "g5d.2xlarge",  "g5d.4xlarge",  "g5d.8xlarge",
-        "g5d.12xlarge", "g5d.16xlarge", "g5d.24xlarge",
-        "g5d.48xlarge",
-
-        // === G6gd (Graviton d-variant of G6) ===
-        "g6gd.xlarge",   "g6gd.2xlarge",  "g6gd.4xlarge",
-        "g6gd.8xlarge",  "g6gd.12xlarge", "g6gd.16xlarge",
-        "g6gd.24xlarge", "g6gd.48xlarge",
-
-        // === G6ed (Intel d-variant of G6e) ===
-        "g6ed.xlarge",   "g6ed.2xlarge",  "g6ed.4xlarge",
-        "g6ed.8xlarge",  "g6ed.12xlarge", "g6ed.16xlarge",
-        "g6ed.24xlarge", "g6ed.48xlarge",
-
-        // === P4 families ===
-        "p4d.24xlarge",  "p4de.24xlarge",
-
-        // === P5 families ===
-        "p5.48xlarge",   "p5e.48xlarge",
-
-        // === P6-B200 ===
-        "p6-b200.48xlarge",
+	// Support GPU families with NVMe drives
+    allowedPrefixes := []string{
+        "g4ad.",
+        "g4dn.",
+        "g5.",
+        "g5g.",
+        "g6.",
+        "g6e.",
+        "g6f.",
     }
 
-    return data.StringSliceHasItem(supportedInstances, instanceType)
+	// Iterate through list of allow prefixes
+    for _, p := range allowedPrefixes {
+    	// If the passed in instance type has prefix
+        if strings.HasPrefix(instanceType, p) {
+            return true
+        }
+    }
+
+    return false
 }
 
 

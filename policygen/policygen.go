@@ -205,8 +205,7 @@ func main() {
                                   "KloudKrakenBootstrapRole")
 
     // Write the generated permissions policy to output file
-    err := os.WriteFile("./../policygen/policy-out.json",
-                        []byte(bootPol), os.ModePerm)
+    err := os.WriteFile("policy-out.json", []byte(bootPol), os.ModePerm)
     if err != nil {
         log.Fatalf("Error writing policy to file:  %v", err)
     }
