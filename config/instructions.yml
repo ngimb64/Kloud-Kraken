@@ -12,7 +12,7 @@ client_config:
   log_mode: "The log mode to be utilized on the client" | "both" | "both", "cloudwatch", "local"
   max_file_size: "The max file size the client will ever expect to receive" | 0 | "200KB", "20MB", "2GB"
   max_transfers: "The maximum number of transfer to occur at the same time" | 3 | Make sure greater than 0
-  region: "The AWS region used for remote client operations" | "us-east-1" | "See supported regions in README"
+  region: "The AWS region used for remote client operations" | "us-east-2" | "See supported regions in README"
   workload: "The workload for hashcat cracking process" | 3 | 1, 2, 3, 4
 
 # Note:  each local config entry format   <label>: <description> | <options_or_examples>
@@ -28,5 +28,5 @@ local_config:
   max_merging_size: "The maximum file size (or within max range) where wordlist merging process occurs" | "200KB", "20MB", "2GB"
   max_size_range: "Percentage range withing used to determine if value is in upper percentile of max file size or max merging" | 15.0
   number_instances: "The number of EC2 instances to use for cracking" | 3
-  region: "The AWS region used for local server operations" | "us-east-1"
+  region: "The AWS region used for local server operations" | "us-east-2"
   ruleset_path: "Path to the hashcat ruleset file to be utilized" | "/home/test/ruleset"

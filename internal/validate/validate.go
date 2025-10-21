@@ -365,6 +365,13 @@ func ValidateInstanceType(instanceType string) bool {
         "g6.",
         "g6e.",
         "g6f.",
+        "p3.",
+        "p3dn.",
+        "p4d.",
+        "p4de.",
+        "p5.",
+        "p5en.",
+        "p6-b200.",
     }
 
 	// Iterate through list of allow prefixes

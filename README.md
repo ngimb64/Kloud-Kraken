@@ -26,24 +26,26 @@
 - Easy configuration with YAML templates
 - Supports hash cracking distributed workloads among multiple EC2 instances
 - Built-in wordlist merging with flexibility to skip larger files
-  - Merging process using `cat` -> `deduplicut`
-  - If the file goes over max file size, excess data is shaved with `cut` into a new file
+    - Merging process using `cat` -> `deduplicut`
+    - If the file goes over max file size, excess data is shaved with `cut` into a new file
 <br>
 
 - Custom TLS based file transfer service using SSM Parameter Store to transfer certificates
-  - Service continually transfers data requested by clients based on allowed max file size
-    - This process continues until the load directory has been completely processed
-  - Files are transferred directly to the local EC2 instance-store
-  - Facilitates multiple file transfers per EC2 client simultaneously
+    - Service continually transfers data requested by clients based on allowed max file size
+    - Server continues transfering until the load directory has been completely processed
+    - Client continues requesting data based on available disk space until instance store is full then sleeps until more space is available
+    - By using this process Kloud Kraken can handle as much data as desired reguardless of available storage on instance store
+    - Files are transferred directly to the local EC2 instance-store
+    - Facilitates multiple file transfers per EC2 client simultaneously
 <br>
 
 - Designed to setup isolated VPC in AWS environment
-  - Features public subnet setup Internet Gateway for EC2 internet access
-  - VPC Endpoints for S3 bucket & SSM Parameter Store operations
-  - Security groups for ensuring only outbound traffic occurs on EC2
-  - Minimalist IAM role utilization featuring bootstrap role for creating and destroying AWS resources
-  - Automatically assumes role for server operations with the Security Token Service
-  - Client IAM role is created with associated instance profile
+    - Features public subnet setup Internet Gateway for EC2 internet access
+    - VPC Endpoints for S3 bucket & SSM Parameter Store operations
+    - Security groups for ensuring only outbound traffic occurs on EC2
+    - Minimalist IAM role utilization featuring bootstrap role for creating and destroying AWS resources
+    - Automatically assumes role for server operations with the Security Token Service
+    - Client IAM role is created with associated instance profile
 <br>
 
 - EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
@@ -68,7 +70,7 @@
 - Begin by downloading the project with `git clone https://github.com/ngimb64/Kloud-Kraken.git`
 
 - Run the installation script
-	- `./setup.sh`
+    - `./setup.sh`
 
 ### Cloud Setup
 
@@ -76,17 +78,21 @@
 - In the search bar, search `budgets` which will find the budgets feature in "Billing and Cost Management"
 - Create a budget an set a monetary limit based on the intended budget
 - Run the policy generator program to generate policy for bootstrap role
-  - `./bin/policygen <account_id> <region>`
+    - `./bin/policygen <account_id> <region>`
 - Search `iam` to access the IAM services, create a user group with the permissions policy just generated in the policy editor
 - Create a user and assign them to the created user group with IAM permissions
-- Generate access keys for the newly created user
+- Generate and store access keys for the newly created user
+- By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for EC2 series based on the number of desired vCPUs to use (add them up if using multiple instances)
+    - Supported instance families can be found at [Instances](#Instances)
+    - AWS Doc on recommended GPU instances - https://docs.aws.amazon.com/dlami/latest/devguide/gpu.html
+    - AWS Doc on setting EC2 service quotas - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
 
 ### Local Setup
 
 - When running the program in full mode with AWS environment there are two options for credential setup
     - Configure API access credentials locally before running with `aws configure` (preferred)
     - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY
-    	- Keep in mind these will be stored in command line history unless configuration is done prior
+        - Keep in mind these will be stored in command line history unless configuration is done prior
 <br>
 
 - Before running the program it is also incredibly important to prepare wordlist data ahead of time
@@ -155,7 +161,7 @@ To delete the project from AWS environment:
 
 ## Instances
 
-**Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, g6)
+**Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, etc.)
 
 - g4ad.*
 - g4dn.*
@@ -164,6 +170,15 @@ To delete the project from AWS environment:
 - g6.*
 - g6e.*
 - g6f.*
+- p3.*
+- p3dn.*
+- p4d.*
+- p4de.*
+- p5.*
+- p5en.*
+- p6-b200.*
+
+My personal recommendation best bang for buck is to use multiple instances of an affordable type like g6f.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar if not better results than one expensive instance.
 <br>
 
 
