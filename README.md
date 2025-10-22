@@ -4,7 +4,7 @@
 
 **NOTE:** This project is still a work in progress but at least 99% finished so expect it to be completed in the next few weeks
 
-> A cloud based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
+> AWS based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenTextLogo.jpeg?raw=true)
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenLogo.jpeg?raw=true)
@@ -25,6 +25,7 @@
 - Easy setup with automated script
 - Easy configuration with YAML templates
 - Supports hash cracking distributed workloads among multiple EC2 instances
+- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
 - Built-in wordlist merging with flexibility to skip larger files
     - Merging process using `cat` -> `deduplicut`
     - If the file goes over max file size, excess data is shaved with `cut` into a new file
@@ -32,9 +33,9 @@
 
 - Custom TLS based file transfer service using SSM Parameter Store to transfer certificates
     - Service continually transfers data requested by clients based on allowed max file size
-    - Server continues transfering until the load directory has been completely processed
+    - Server continues transferring until the load directory has been completely processed
     - Client continues requesting data based on available disk space until instance store is full then sleeps until more space is available
-    - By using this process Kloud Kraken can handle as much data as desired reguardless of available storage on instance store
+    - By using this process Kloud Kraken can handle as much data as desired regardless of available storage on instance store
     - Files are transferred directly to the local EC2 instance-store
     - Facilitates multiple file transfers per EC2 client simultaneously
 <br>
@@ -48,10 +49,10 @@
     - Client IAM role is created with associated instance profile
 <br>
 
-- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
+- Cleans up AWS resources that incur cost over time when processing is complete
+- Features internal state file for tracking resources for intelligent creation if they do not already exist and a full teardown program that destroys all created resources
 - CLI features colorized TUI interface
 - Custom logging system with CloudWatch and local backup
-- Cleans up AWS resources that incur cost over time when processing is complete
 <br>
 
 
@@ -82,7 +83,8 @@
 - Search `iam` to access the IAM services, create a user group with the permissions policy just generated in the policy editor
 - Create a user and assign them to the created user group with IAM permissions
 - Generate and store access keys for the newly created user
-- By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for EC2 series based on the number of desired vCPUs to use (add them up if using multiple instances)
+- By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for on-demand EC2 G-series based on the number of desired vCPUs to use (add them up if using multiple instances)
+    - Keep in mind asking for too high a quote will likely result in the request being denied, best to add gradually or prepare to put together a convincing appeal
     - Supported instance families can be found at [Instances](#Instances)
     - AWS Doc on recommended GPU instances - https://docs.aws.amazon.com/dlami/latest/devguide/gpu.html
     - AWS Doc on setting EC2 service quotas - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
@@ -133,29 +135,45 @@ To delete the project from AWS environment:
 
 ## Regions
 
-// US
-"us-east-1", "us-east-2", "us-west-1", "us-west-2"
+#### US
+- us-east-1
+- us-east-2
+- us-west-1
+- us-west-2
 
-// Canada
-"ca-central-1"
+#### Canada
+- ca-central-1
 
-// South America
-"sa-east-1"
+#### South America
+- sa-east-1
 
-// Europe
-"eu-central-1", "eu-west-1", "eu-west-2", "eu-west-3", "eu-north-1", "eu-south-1"
+#### Europe
+- eu-central-1
+- eu-west-1
+- eu-west-2
+- eu-west-3
+- eu-north-1
+- eu-south-1
 
-// Middle East / Africa
-"me-south-1", "af-south-1"
+#### Middle East / Africa
+- me-south-1
+- af-south-1
 
-// Asia Pacific
-"ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-southeast-1", "ap-southeast-2", "ap-south-1"
+#### Asia Pacific
+- ap-northeast-1
+- ap-northeast-2
+- ap-northeast-3
+- ap-southeast-1
+- ap-southeast-2
+- ap-south-1
 
-// China
-"cn-north-1", "cn-northwest-1"
+#### China
+- cn-north-1
+- cn-northwest-1
 
-// GovCloud
-"us-gov-west-1, "us-gov-east-1"
+#### GovCloud
+- us-gov-west-1
+- us-gov-east-1
 <br>
 
 
@@ -178,7 +196,7 @@ To delete the project from AWS environment:
 - p5en.*
 - p6-b200.*
 
-My personal recommendation best bang for buck is to use multiple instances of an affordable type like g6f.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar if not better results than one expensive instance.
+My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g6f.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar if not better results than one expensive instance.
 <br>
 
 

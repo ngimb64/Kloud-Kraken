@@ -565,10 +565,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, bootstrapOut, costMan, nil, err
     }
 
-	// Establish clients to various services
-	ec2Client := ec2utils.Ec2NewManager(awsConfig)
-	iamClient := iamutils.IamNewManager(awsConfig)
-	stsClient := sts.NewFromConfig(awsConfig)
+    // Establish clients to various services
+    ec2Client := ec2utils.Ec2NewManager(awsConfig)
+    iamClient := iamutils.IamNewManager(awsConfig)
+    stsClient := sts.NewFromConfig(awsConfig)
 
     // Set up Kloud Kraken VPC and its associated components
     bootstrapOut, costMan, costErr, err = vpcsetup.VpcBootstrap(appConfig, awsConfig,
@@ -684,7 +684,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     filterMap = map[string]string{
         "instanceType": appConfig.LocalConfig.InstanceType,
         "location": awsConfig.Region,
-		"operatingSystem":"Linux",
+        "operatingSystem":"Linux",
     }
 
     // Add the Ec2 instances to the cost manager
