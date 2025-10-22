@@ -356,7 +356,7 @@ func ValidateIamUsername(iamUsername string) error {
 //  - Toggle for whether instance type is valid or not
 //
 func ValidateInstanceType(instanceType string) bool {
-	// Support GPU families with NVMe drives
+    // Support GPU families with NVMe drives
     allowedPrefixes := []string{
         "g4ad.",
         "g4dn.",
@@ -374,9 +374,9 @@ func ValidateInstanceType(instanceType string) bool {
         "p6-b200.",
     }
 
-	// Iterate through list of allow prefixes
+    // Iterate through list of allow prefixes
     for _, p := range allowedPrefixes {
-    	// If the passed in instance type has prefix
+        // If the passed in instance type has prefix
         if strings.HasPrefix(instanceType, p) {
             return true
         }
