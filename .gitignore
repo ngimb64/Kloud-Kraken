@@ -14,4 +14,4 @@ KloudKraken.log
 .kraken-state.yml
 
 # Generate permissions policies
-policygen/*.json
+*.json
