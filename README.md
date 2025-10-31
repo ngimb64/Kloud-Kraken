@@ -101,7 +101,7 @@
     - Keep in mind if your account does not have extensive history the request will be automatically denied initially
         - After it is denied explain the purpose of using Kloud Kraken so they can confirm you are legit and not intending to abuse the GPU instances for things like crypto mining, feel free to provide them with a link to the projects GitHub page
         - While writing the information in the message area is a good idea, they **must** be called to get the request process going
-    - Supported instance families can be found at [Instances Types](#Instance-Types)
+    - Supported instance families can be found at [Instance Types](#Instance-Types)
     - AWS Doc on recommended GPU instances - https://docs.aws.amazon.com/dlami/latest/devguide/gpu.html
     - AWS Doc on setting EC2 service quotas - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
 
@@ -193,7 +193,7 @@ To delete the project from AWS environment:
 <br>
 
 
-## Instances Types
+## Instance Types
 
 **Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, etc.)
 
