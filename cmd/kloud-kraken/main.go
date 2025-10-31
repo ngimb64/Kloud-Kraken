@@ -662,7 +662,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
-        AMI:              "ami-0eb94e3d16a6eea5f",
+        AMI:              "ami-0066f213d20342af9",
         InstanceType:     appConfig.LocalConfig.InstanceType,
         MaxCount:         appConfig.LocalConfig.NumberInstances,
         MinCount:         appConfig.LocalConfig.NumberInstances,

@@ -2,7 +2,7 @@
 
 - Run system testing in AWS environment
 
-- Ensure README is fully updated and try to make flowchart diagrams to visually explain everything
+- Optimize awscost and add cost prediction functionality
 
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
@@ -15,7 +15,6 @@
 - Implement unit tests for packages that need them
 
 - Optimize wordlist merging and file shaving logic with custom rust programs
-
 
 
 

@@ -11,14 +11,20 @@
 </div>
 <br>
 
+
 ## Table of Contents
 
 - [Features](#Features)
+- [Flowcharts](#Flowcharts)
+- [AWS Services Featured](#AWS-Services-Featured)
 - [Installation](#Installation)
 - [Usage](#Usage)
+- [Regions](#Regions)
+- [Instance Types](#Instance-Types)
 - [Contributing or Issues](#Contributing-or-Issues)
 - [License](#License)
 <br>
+
 
 ## Features
 
@@ -56,6 +62,14 @@
 <br>
 
 
+## Flowcharts
+
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Local-Server.drawio.svg?raw=true)
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/AWS-Setup.drawio.svg?raw=true)
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.drawio.svg?raw=true)
+<br>
+
+
 ## AWS Services Featured
 
 - CloudWatch
@@ -84,8 +98,10 @@
 - Create a user and assign them to the created user group with IAM permissions
 - Generate and store access keys for the newly created user
 - By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for on-demand EC2 G-series based on the number of desired vCPUs to use (add them up if using multiple instances)
-    - Keep in mind asking for too high a quote will likely result in the request being denied, best to add gradually or prepare to put together a convincing appeal
-    - Supported instance families can be found at [Instances](#Instances)
+    - Keep in mind if your account does not have extensive history the request will be automatically denied initially
+        - After it is denied explain the purpose of using Kloud Kraken so they can confirm you are legit and not intending to abuse the GPU instances for things like crypto mining, feel free to provide them with a link to the projects GitHub page
+        - While writing the information in the message area is a good idea, they **must** be called to get the request process going
+    - Supported instance families can be found at [Instance Types](#Instance-Types)
     - AWS Doc on recommended GPU instances - https://docs.aws.amazon.com/dlami/latest/devguide/gpu.html
     - AWS Doc on setting EC2 service quotas - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
 
@@ -93,7 +109,7 @@
 
 - When running the program in full mode with AWS environment there are two options for credential setup
     - Configure API access credentials locally before running with `aws configure` (preferred)
-    - OR set the environment variables  AWS_ACCESS_KEY & AWS_SECRET_KEY
+    - OR set the environment variables AWS_ACCESS_KEY & AWS_SECRET_KEY
         - Keep in mind these will be stored in command line history unless configuration is done prior
 <br>
 
@@ -112,7 +128,7 @@
 - Make a copy of the default `config.yml` file in the config folder
 - Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in your copy of `config.yml`
 - Ensure to use `instructions.yml` as a reference when configuring the recently made copy
-- For supported regions [Regions](#Regions) and instance families [Instances](#Instances)
+- For supported regions [Regions](#Regions) and instance families [Instance Types](#Instance-Types)
 - Despite the tool not supporting Hashcat combinator mode (1), it can be easily achieved locally and combined with other wordlist data using the usual straight mode (0)
   - `hashcat --stdout -a 1 <left_wordlist> <right_wordlist> > combinator_out.txt`
 
@@ -177,7 +193,7 @@ To delete the project from AWS environment:
 <br>
 
 
-## Instances
+## Instance Types
 
 **Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, etc.)
 
