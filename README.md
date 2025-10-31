@@ -64,9 +64,16 @@
 
 ## Flowcharts
 
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Local-Server.drawio.svg?raw=true)
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/AWS-Setup.drawio.svg?raw=true)
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.drawio.svg?raw=true)
+#### Local Server
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Local-Server.svg?raw=true)
+<br><br>
+
+#### AWS Setup
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/AWS-Setup.svg?raw=true)
+<br><br>
+
+#### Client
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.svg?raw=true)
 <br>
 
 
