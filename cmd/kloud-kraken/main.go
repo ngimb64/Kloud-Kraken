@@ -467,34 +467,51 @@ if (( ${#DEVICES[@]} == 0 )); then
     exit 1
 fi
 
-retries=0
-# Update, upgrade, and install needed packages for hash cracking & RAID configuration
-until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y awscli ca-certificates e2fsprogs hashcat mdadm util-linux; do
-    (( retries++ ))
+# Exclude the root NVMe drive
+DEVICES=("${ALL_DEVICES[@]:1}")
+
+RETRIES=0
+# Update, upgrade, and install needed packages for hash cracking
+until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y hashcat; do
+    (( RETRIES++ ))
     # If the updates process fails 3 times due to network issues, log error and exit
-    (( retries >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
+    (( RETRIES >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
     sleep 5
 done
 
-# Create RAID 0 setup with idenified drives if it does not already exist
-if ! mdadm --detail /dev/md0 &>/dev/null; then
-    yes | mdadm --create /dev/md0 --level=0 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
+STORAGE_DEVICE=""
+
+# Only attempt RAID0 if there are 2 or more drives
+if (( ${#DEVICES[@]} >= 2 )); then
+    for dev in "${DEVICES[@]}"; do
+        # Zero out old RAID superblocks
+        mdadm --zero-superblock --force "$dev"
+
+        # Remove any existing partition table (optional but safer)
+        wipefs -a "$dev"
+    done
+
+    # Create RAID 0 setup with idenified drives if it does not already exist
+    if ! mdadm --detail /dev/md0 &>/dev/null; then
+        yes | mdadm --create /dev/md0 --level=0 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
+    fi
+
+    # Set STORAGE_DEVICE to RAID0
+    STORAGE_DEVICE="/dev/md0"
+else
+    # Fallback to existing LVM ephemeral NVMe drive
+    STORAGE_DEVICE=$(lvs --noheadings -o lv_name,vg_name,lv_path | awk '$3!="/"' | awk '{print $3; exit}')
 fi
 
 # If filesystem for RAID drive does not exist, make it
-if ! blkid /dev/md0 &>/dev/null; then
-    mkfs.ext4 -F /dev/md0
+if ! blkid "$STORAGE_DEVICE" &>/dev/null; then
+    mkfs.ext4 -F "$STORAGE_DEVICE"
 fi
 
 # Create mount point for instances store
 mkdir -p /mnt/instance-store
-# Add mount point to fstab if it is not already in there
-grep -q '/mnt/instance-store' /etc/fstab || \
-    echo "/dev/md0  /mnt/instance-store  ext4  defaults,nofail  0 2" >> /etc/fstab
 # Mount the mount point if it is not already mounted
-mountpoint -q /mnt/instance-store || mount /mnt/instance-store
-
-echo "[!] Instance-store ready at /mnt/instance-store"
+mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
 
 # Application bootstrap
 CWD=$(pwd)

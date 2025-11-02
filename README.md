@@ -6,8 +6,8 @@
 
 > AWS based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenTextLogo.jpeg?raw=true)
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/images/KloudKrakenLogo.jpeg?raw=true)
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenTextLogo.jpeg?raw=true)
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenLogo.jpeg?raw=true)
 </div>
 <br>
 
@@ -15,8 +15,8 @@
 ## Table of Contents
 
 - [Features](#Features)
-- [Flowcharts](#Flowcharts)
 - [AWS Services Featured](#AWS-Services-Featured)
+- [Flowcharts](#Flowcharts)
 - [Installation](#Installation)
 - [Usage](#Usage)
 - [Regions](#Regions)
@@ -33,7 +33,7 @@
 - Supports hash cracking distributed workloads among multiple EC2 instances
 - EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
 - Built-in wordlist merging with flexibility to skip larger files
-    - Merging process using `cat` -> `deduplicut`
+    - Merging process using `cat` -> `deduplicut` until within percentage range of max file size (15% by default)
     - If the file goes over max file size, excess data is shaved with `cut` into a new file
 <br>
 
@@ -62,6 +62,17 @@
 <br>
 
 
+## AWS Services Featured
+
+- CloudWatch
+- EC2
+- IAM
+- S3 Buckets
+- Security Token Service
+- SSM Parameter Store
+<br>
+
+
 ## Flowcharts
 
 #### Local Server
@@ -76,16 +87,6 @@
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.svg?raw=true)
 <br>
 
-
-## AWS Services Featured
-
-- CloudWatch
-- EC2
-- IAM
-- S3 Buckets
-- Security Token Service
-- SSM Parameter Store
-<br>
 
 ## Installation
 
@@ -120,7 +121,7 @@
         - Keep in mind these will be stored in command line history unless configuration is done prior
 <br>
 
-- Before running the program it is also incredibly important to prepare wordlist data ahead of time
+- Before running the program it is also very helpful to prepare wordlist data ahead of time
     - Smaller wordlists easily merge but larger ones slow the process down **substantially**
     - In the YAML config it is best to set a reasonable `max_merging_size` (ex: 400MB) to prevent bottlenecks from merging large wordlists
     - It is also ideal to set a reasonable `max_file_size` (ex: 2GB) to prevent extensive delays in network latency as smaller files transfer quicker and distribute better among EC2 clients
