@@ -487,7 +487,7 @@ if (( ${#DEVICES[@]} >= 2 )); then
         # Zero out old RAID superblocks
         mdadm --zero-superblock --force "$dev"
 
-        # Remove any existing partition table (optional but safer)
+        # Remove any existing partition table
         wipefs -a "$dev"
     done
 

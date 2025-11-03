@@ -85,12 +85,13 @@
 
 #### Client
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.svg?raw=true)
-<br>
+<br><br>
 
 
 ## Installation
 
-- Begin by downloading the project with `git clone https://github.com/ngimb64/Kloud-Kraken.git`
+- Download the project
+    - `git clone https://github.com/ngimb64/Kloud-Kraken.git`
 
 - Run the installation script
     - `./setup.sh`

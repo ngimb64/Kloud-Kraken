@@ -14,7 +14,7 @@ client_config:
   workload: "4"
 
 local_config:
-  cidr_block: "192.168.0.0/24"
+  cidr_block: "192.168.0.0/25"
   hash_file_path: "/home/thebugfather/Documents/project_testing/test-hashes"
   iam_username: "test-user"
   instance_type: "g6f.xlarge"
