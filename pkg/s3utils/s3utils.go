@@ -51,6 +51,7 @@ func S3NewManager(config aws.Config) *S3Manager {
 //
 func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
                                        bucketName string,
+                                       region string,
                                        tags map[string]string) (
                                        string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -59,6 +60,9 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
 
     callInput := &s3.CreateBucketInput{
         Bucket: aws.String(bucketName),
+        CreateBucketConfiguration: &s3types.CreateBucketConfiguration{
+            LocationConstraint: s3types.BucketLocationConstraint(region),
+        },
     }
 
     // Create the bucket based on the bucket name in S3 manager
@@ -225,6 +229,7 @@ func (S3Man *S3Manager) S3GetObject(callTime time.Duration,
 func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
                                           bucketName string,
                                           defaultBucketName string,
+                                          region string,
                                           tags map[string]string) (
                                           string, error) {
     // If the bucket name is present in state file
@@ -242,7 +247,7 @@ func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
     }
 
     // Create S3 bucket with default name
-    return S3Man.s3BucketCreate(callTime, defaultBucketName, tags)
+    return S3Man.s3BucketCreate(callTime, defaultBucketName, region, tags)
 }
 
 // Put an object into a S3 bucket.

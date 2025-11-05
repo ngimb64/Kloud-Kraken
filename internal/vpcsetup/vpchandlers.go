@@ -78,7 +78,7 @@ func SetupVpcHandler(ec2Client *ec2utils.Ec2Manger,
                      string, error) {
     tags := map[string]string{
         "kloud-kraken": "true",
-        "Name":         "kloud-kraken-vpc",
+        "Name": "kloud-kraken-vpc",
     }
 
     // Check to see if the VPC exists, otherwise create one

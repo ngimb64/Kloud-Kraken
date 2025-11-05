@@ -141,10 +141,6 @@ func VpcBootstrap(appConfig *conf.AppConfig,
         yamlUpdates["aws_env.region"] = awsConfig.Region
     }
 
-
-    return outStruct, nil, nil, errors.New("Testing exit")
-
-
     var costErr error
     // Create a PriceManager with a 1 hour cache TTL
 	priceMan := awscost.NewPriceManager(1 * time.Hour)

@@ -46,7 +46,8 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
     // Create a S3 bucket if it does not exist
     bucketName, err := s3Client.S3BucketProvision(5 * time.Minute,
                                                   stateConfig.AwsEnv.S3BucketName,
-                                                  "kloud-kraken-s3", tags)
+                                                  "kloud-kraken-s3",
+                                                  awsConfig.Region, tags)
     if err != nil {
         return bucketName, err
     }
