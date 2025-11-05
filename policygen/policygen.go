@@ -126,12 +126,7 @@ func bootstrapPolicyGen(accountId string, bucketName string,
         "ec2:TerminateInstances",
         "ec2:DescribeInstances"
       ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "ec2:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "*"
     },
 
     {

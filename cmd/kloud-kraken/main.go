@@ -903,7 +903,7 @@ func main() {
             var stateConfig vpcsetup.AwsEnv
             var stateData []byte
             stateFilePath := "../.kraken-state.yml"
-            var yamlUpdates map[string]string
+            var yamlUpdates = map[string]string{}
 
             // Read the data from yaml state file
             stateData, err = os.ReadFile(stateFilePath)

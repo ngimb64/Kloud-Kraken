@@ -84,7 +84,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     var stateConfig AwsEnv
     var stateData []byte
     stateFilePath := "../.kraken-state.yml"
-    var yamlUpdates map[string]string
+    var yamlUpdates = map[string]string{}
 
     // Check to see if the yaml state file exists
     exists, isDir, hasData, err := disk.PathExists(stateFilePath)
@@ -140,6 +140,10 @@ func VpcBootstrap(appConfig *conf.AppConfig,
         // Add the region to the updates map for YAML state file
         yamlUpdates["aws_env.region"] = awsConfig.Region
     }
+
+
+    return outStruct, nil, nil, errors.New("Testing exit")
+
 
     var costErr error
     // Create a PriceManager with a 1 hour cache TTL
