@@ -633,6 +633,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                    color.NeonAzure, "TLS certificate uploaded to " +
                                    "SSM Parameter Store for client retrieval"))
 
+
+    // TODO:  fix path so it works for testing
+
+
     // Read the client binary into memory
     binData, err := os.ReadFile("./kloud-kraken-client")
     if err != nil {

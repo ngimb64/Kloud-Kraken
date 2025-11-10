@@ -37,9 +37,6 @@ func SetupRouteTableAssociationHandler(ec2Client *ec2utils.Ec2Manger,
     // If the public association occured, add ID to yaml updates map
     if publicAssocId != "" {
         yamlUpdates["aws_env.route_association_id"] = publicAssocId
-    // Otherwise use the one from YAML since it was found
-    } else {
-        publicAssocId = stateConfig.AwsEnv.RouteAssociationId
     }
 
     return nil

@@ -16,7 +16,6 @@ import (
 //  - stateConfig:  Pointer to config struct for state file
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
-//  - bucketName:  The name of the S3 bucket being used by endpoint
 //  - vpcId:  The VPC ID where the endpoint will be deployed
 //  - routeId:  The ID of the route table associated with the endpoint
 //  - location:  The human readable version of region
@@ -30,9 +29,8 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                       stateConfig *AwsEnv,
                                       appConfig *conf.AppConfig,
                                       yamlUpdates map[string]string,
-                                      bucketName string, vpcId string,
-                                      routeId string, location string,
-                                      costErr *error,
+                                      vpcId string, routeId string,
+                                      location string, costErr *error,
                                       costMan *awscost.AwsCostManager) error {
     tags := map[string]string{
         "kloud-kraken": "true",
@@ -40,7 +38,7 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     // Generate policy document for S3 VPC Endpoint
-    policyDocument := policies.VpcS3EndpointPolicyGen(bucketName, vpcId)
+    policyDocument := policies.VpcS3EndpointPolicyGen(vpcId)
 
     // Create VPC endpoint for S3 if it does not exist
     s3VpcEndPointId, err := ec2Client.S3EndpointProvision(10 * time.Minute,
@@ -55,9 +53,6 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // If S3 VPC endpoint created, add name to yaml updates map
     if s3VpcEndPointId != "" {
         yamlUpdates["aws_env.s3_vpc_endpoint_id"] = s3VpcEndPointId
-    // Otherwise use the one from YAML since it was found
-    } else {
-        s3VpcEndPointId = stateConfig.AwsEnv.S3VpcEndpointId
     }
 
     return  nil
@@ -97,9 +92,7 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     }
 
     // Generate policy document for SSM VPC Endpoint
-    policyDocument := policies.VpcSsmEndpointPolicyGen(outStruct.AccountId,
-                                                      appConfig.LocalConfig.Region,
-                                                      vpcId)
+    policyDocument := policies.VpcSsmEndpointPolicyGen(outStruct.AccountId)
 
     // Create VPC endpoint for SSM if it does not exist
     ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(10 * time.Minute,

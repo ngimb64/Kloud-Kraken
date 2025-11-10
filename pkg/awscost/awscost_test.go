@@ -1,7 +1,6 @@
 package awscost_test
 
 import (
-	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -44,8 +43,6 @@ func TestCalculateResourceTotal_EC2Hours(t *testing.T) {
 
     cost, err := resource.CalculateResourceTotal()
     assert.Equal(nil, err)
-
-    fmt.Println(cost)
 
     assert.True(almostEqual(cost, 0.3))
 }

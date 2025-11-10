@@ -67,7 +67,7 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     }
 
     if callInput.MaxCount > 1 || callInput.MinCount > 1 {
-        return errors.New("Max and min counts should be greater than 0")
+        return errors.New("max and min counts should be greater than 0")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout

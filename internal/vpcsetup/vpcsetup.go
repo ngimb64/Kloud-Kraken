@@ -231,10 +231,9 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the S3 bucket
-    bucketName, err := SetupS3BucketHandler(ec2Client, &stateConfig,
-                                            appConfig, yamlUpdates,
-                                            outStruct, awsConfig.Region,
-                                            &costErr, costMan, awsConfig)
+    err = SetupS3BucketHandler(ec2Client, &stateConfig, appConfig,
+                               yamlUpdates, outStruct, awsConfig.Region,
+                               &costErr, costMan, awsConfig)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up S3 bucket - %w", err)
@@ -242,9 +241,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the S3 VPC Gateway Endpoint
     err = SetupS3VpcGatewayEndpointHandler(ec2Client, &stateConfig, appConfig,
-                                           yamlUpdates, bucketName, vpcId,
-                                           routeId, location, &costErr,
-                                           costMan)
+                                           yamlUpdates, vpcId, routeId,
+                                           location, &costErr, costMan)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up S3 VPC Gateway Endpoint - %w", err)
@@ -280,7 +278,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup Client IAM role
     err = SetupClientIamRoleHander(iamClient, &stateConfig, appConfig,
-                                   yamlUpdates, outStruct, bucketName)
+                                   yamlUpdates, outStruct)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up Client IAM Role - %w", err)
@@ -288,7 +286,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup Server IAM role
     err = SetupServerIamRoleHandler(iamClient, &stateConfig, appConfig,
-                                    yamlUpdates, outStruct, bucketName)
+                                    yamlUpdates, outStruct)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up Server IAM Role - %w", err)

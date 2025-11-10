@@ -1,5 +1,9 @@
 - Run system testing in AWS environment
 
+- Look into having a unified region in local section of config instead of for both local and client
+
+- Figure out errors with GetPrice API call and fix pricing system while trying to fix it for cost prediction
+
 - Optimize awscost and add cost prediction functionality
 
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging

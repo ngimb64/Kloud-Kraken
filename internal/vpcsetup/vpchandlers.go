@@ -50,9 +50,6 @@ func SetupVpcFlowLogsHandler(ec2Client *ec2utils.Ec2Manger,
     // If VPC Flow Logs group was created, add ID to yaml updates map
     if flowLogId != "" {
         yamlUpdates["aws_env.flow_log_id"] = flowLogId
-    // Otherwise use the one from YAML since it was found
-    } else {
-        flowLogId = stateConfig.AwsEnv.FlowLogId
     }
 
     return nil

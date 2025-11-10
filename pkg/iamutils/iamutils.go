@@ -114,7 +114,7 @@ func (IamMan *IamManager) createInstanceProfile(callTime time.Duration,
 
         // If the error is not that the instance profile already exists
         if !errors.As(err, &entityExists) {
-            return fmt.Errorf("instance profile already exists - %w", err)
+            return fmt.Errorf("error creating instance profile - %w", err)
         }
     }
 

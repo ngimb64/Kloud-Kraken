@@ -24,7 +24,6 @@ import (
 //  - awsConfig:  The AWS configuration instance
 //
 // @Returns
-//  - The S3 bucket name
 //  - Error if it occurs, otherwise nil on success
 //
 func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
@@ -34,8 +33,7 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
                           outStruct *VpcBootstrapOutput,
                           location string, costErr *error,
                           costMan *awscost.AwsCostManager,
-                          awsConfig aws.Config) (
-                          string, error) {
+                          awsConfig aws.Config) error {
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-s3",
@@ -49,7 +47,7 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
                                                   "kloud-kraken-s3",
                                                   awsConfig.Region, tags)
     if err != nil {
-        return bucketName, err
+        return err
     }
 
     // If S3 buccket created, add name to yaml updates map
@@ -62,5 +60,5 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
 
     outStruct.S3BucketName = bucketName
 
-    return bucketName, nil
+    return nil
 }

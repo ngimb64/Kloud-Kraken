@@ -5,18 +5,13 @@ import "fmt"
 // Generates permissions policy for the client EC2.
 //
 // @Parameters
-//  - bucketName:  The name of the S3 bucket where actions will be performed
 //  - region:  The AWS region where actions will be performed
 //  - accountId:  The AWS account ID where actions will be performed
-//  - paramPath:  The path where the certificate is stored in SSM param store
-//  - logGroup:  The name of the CloudWatch group being utilized
 //
 // @Returns
 //  - The generated permissions policy with args formatted into it
 //
-func ClientPermPolicyGen(bucketName string, region string,
-                         accountId string, paramPath string,
-                         logGroup string) string {
+func ClientPermPolicyGen(region string, accountId string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -26,13 +21,9 @@ func ClientPermPolicyGen(bucketName string, region string,
       "Action": [
         "s3:GetObject"
       ],
-      "Resource": "arn:aws:s3:::%s/*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "arn:aws:s3:::kloud-kraken-s3/*"
     },
+
     {
       "Sid": "SSMFetchParameters",
       "Effect": "Allow",
@@ -41,13 +32,9 @@ func ClientPermPolicyGen(bucketName string, region string,
         "ssm:GetParameters",
         "ssm:GetParametersByPath"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter%s*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
     },
+
     {
       "Sid": "CloudWatchLogging",
       "Effect": "Allow",
@@ -59,13 +46,9 @@ func ClientPermPolicyGen(bucketName string, region string,
         "logs:PutRetentionPolicy",
         "logs:CreateTags"
       ],
-      "Resource": "arn:aws:logs:%s:%s:log-group:/%s*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "arn:aws:logs:%s:%s:log-group:/kloud-kraken*"
     },
+
     {
       "Sid": "ManageSecurityGroupEgress",
       "Effect": "Allow",
@@ -74,16 +57,10 @@ func ClientPermPolicyGen(bucketName string, region string,
         "ec2:RevokeSecurityGroupEgress",
         "ec2:DescribeSecurityGroups"
       ],
-      "Resource": "arn:aws:ec2:%s:%s:security-group/*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "arn:aws:ec2:%s:%s:security-group/*"
     }
   ]
-}`, bucketName, region, accountId, paramPath, region,
-    accountId, logGroup, region, accountId)
+}`, region, accountId, region, accountId, region, accountId)
 }
 
 
@@ -109,16 +86,11 @@ func ClientTrustPolicyGen() string {
 // @Parameters
 //  - region:  The AWS region where actions will be performed
 //  - accountId:  The AWS account ID where actions will be performed
-//  - ssmParam:  The path where the certificate is stored in SSM param store
-//  - bucketName:  The name of the S3 bucket where actions will be performed
-//  - clientRoleName:  The name of IAM role the client will be using
 //
 // @Returns
 //  - The generated permissions policy with args formatted into it
 //
-func ServerPermPolicyGen(region string, accountId string,
-                         ssmParam string, bucketName string,
-                         clientRoleName string) string {
+func ServerPermPolicyGen(region string, accountId string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -130,8 +102,9 @@ func ServerPermPolicyGen(region string, accountId string,
         "ssm:DeleteParameter",
         "ssm:AddTagsToResource"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter%s*"
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
     },
+
     {
       "Sid": "S3Operations",
       "Effect": "Allow",
@@ -143,10 +116,11 @@ func ServerPermPolicyGen(region string, accountId string,
         "s3:DeleteBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::%s",
-        "arn:aws:s3:::%s/*"
+        "arn:aws:s3:::kloud-kraken-s3",
+        "arn:aws:s3:::kloud-kraken-s3/*"
       ]
     },
+
     {
       "Sid": "EC2LifecycleControl",
       "Effect": "Allow",
@@ -158,37 +132,28 @@ func ServerPermPolicyGen(region string, accountId string,
         "ec2:DeleteVpcEndpoints",
         "ec2:DescribeVpcEndpoints"
       ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "ec2:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "*"
     },
+
     {
       "Sid": "PricingGetProducts",
       "Effect": "Allow",
       "Action": [
         "pricing:GetProducts"
       ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "aws:PrincipalTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "*"
     },
+
     {
       "Sid": "EC2PassRoleForInstanceProfile",
       "Effect": "Allow",
       "Action": [
         "iam:PassRole"
       ],
-      "Resource": "arn:aws:iam::%s:role/%s"
+      "Resource": "arn:aws:iam::%s:role/KloudKrakenClientRole"
     }
   ]
-}`, region, accountId, ssmParam, bucketName,
-    bucketName, accountId, clientRoleName)
+}`, region, accountId, accountId)
 }
 
 
@@ -220,13 +185,11 @@ func ServerTrustPolicyGen(accountId string, iamUser string) string {
 // @Parameters
 //  - region:  The AWS region where the VPC Flow Logs are utilized
 //  - accountId:  The AWS account ID number
-//  - logGroupName:  The CloudWatch log group name where the logs are stored
 //
 // @Returns
 //  - The generated permissions policy with args formatted into it
 //
-func VpcFlowLogsPermPolicyGen(region string, accountId string,
-                              logGroupName string) string {
+func VpcFlowLogsPermPolicyGen(region string, accountId string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -241,17 +204,14 @@ func VpcFlowLogsPermPolicyGen(region string, accountId string,
         "logs:DescribeLogStreams"
       ],
       "Resource": [
-        "arn:aws:logs:%s:%s:log-group:%s",
-        "arn:aws:logs:%s:%s:log-group:%s:*",
-        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/%s",
-        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/%s:*"
+        "arn:aws:logs:%s:%s:log-group:kloud-kraken-vpc-flow-logs",
+        "arn:aws:logs:%s:%s:log-group:kloud-kraken-vpc-flow-logs:*",
+        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/kloud-kraken-vpc-flow-logs",
+        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/kloud-kraken-vpc-flow-logs:*"
       ]
     }
   ]
-}`, region, accountId, logGroupName,
-    region, accountId, logGroupName,
-    region, accountId, logGroupName,
-    region, accountId, logGroupName)
+}`, region, accountId, region, accountId, region, accountId, region, accountId)
 }
 
 
@@ -279,34 +239,36 @@ func VpcFlowLogsTrustPolicyGen() string {
 // Generate permissions policy for the S3 VPC Endpoint.
 //
 // @Parameters
-//  - bucketName:  The name of the S3 bucket
 //  - iamArn:  The IAM ARN of S3 VPC Endpoint
 //
 // @Returns
 //  - The generated permissions policy with args formatted into it
 //
-func VpcS3EndpointPolicyGen(bucketName string, iamArn string) string {
+func VpcS3EndpointPolicyGen(iamArn string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
     {
       "Sid": "AllowKKUserToKKBucketOnly",
       "Effect": "Allow",
-      "Principal": {
-        "AWS": "%s"
-      },
+      "Principal": "*",
       "Action": [
         "s3:GetObject",
         "s3:PutObject",
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::%s",
-        "arn:aws:s3:::%s/*"
-      ]
+        "arn:aws:s3:::kloud-kraken-s3",
+        "arn:aws:s3:::kloud-kraken-s3/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalArn": "%s"
+        }
+      }
     }
   ]
-}`, iamArn, bucketName, bucketName)
+}`, iamArn)
 }
 
 
@@ -314,21 +276,18 @@ func VpcS3EndpointPolicyGen(bucketName string, iamArn string) string {
 //
 // @Parameters
 //  - accountId:  The AWS account ID number
-//  - iamArn:  The IAM ARN of the SSM VPC Endpoint
 //
 // @Returns
 //  - The generated permissions policy with args formatted into it
 //
-func VpcSsmEndpointPolicyGen(accountId, region, iamArn string) string {
+func VpcSsmEndpointPolicyGen(accountId string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
     {
       "Sid": "AllowKKUserSSMParams",
       "Effect": "Allow",
-      "Principal": {
-        "AWS": "%s"
-      },
+      "Principal": "*",
       "Action": [
         "ssm:GetParameter",
         "ssm:GetParameters",
@@ -336,9 +295,14 @@ func VpcSsmEndpointPolicyGen(accountId, region, iamArn string) string {
         "ssm:PutParameter",
         "ssm:DeleteParameter"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/*"
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalAccount": "%s"
+        }
+      }
     }
   ]
-}`, iamArn, region, accountId)
+}`, accountId)
 }
 

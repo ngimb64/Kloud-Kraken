@@ -64,6 +64,24 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
         return vpcId, err
     }
 
+    // Enable DNS support so interface endpoints with Private DNS work
+    _, err = Ec2Man.client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
+        VpcId: aws.String(vpcId),
+        EnableDnsSupport: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
+    })
+    if err != nil {
+        return vpcId, fmt.Errorf("failed to enable DNS support - %w", err)
+    }
+
+    // Enable DNS hostnames VPC attribute
+    _, err = Ec2Man.client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
+        VpcId: aws.String(vpcId),
+        EnableDnsHostnames: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
+    })
+    if err != nil {
+        return vpcId, fmt.Errorf("failed to enable DNS hostnames - %w", err)
+    }
+
     return vpcId, nil
 }
 

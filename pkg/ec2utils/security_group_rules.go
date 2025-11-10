@@ -102,7 +102,7 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
 func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
                                                  sgId string, cidr string,
                                                  proto string, minPort int32,
-                                                 maxPort int32,) (
+                                                 maxPort int32) (
                                                  bool, error) {
     // Ensure required args are present
     if sgId == "" || cidr == "" || proto == "" {
@@ -110,18 +110,20 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
     }
 
     // Ensure protocol is all lowercase
-    proto = strings.ToLower(proto)
-    // If the protocol is not proper format
-    if proto != "tcp" && proto != "udp" && proto != "-1" && proto != "all" {
+    proto = strings.ToLower(strings.TrimSpace(proto))
+    if proto == "all" {
+        proto = "-1"
+    }
+
+    // Ensure supported protocol is present
+    if proto != "tcp" && proto != "udp" && proto != "-1" {
         return false, fmt.Errorf("unsupported protocol - %q", proto)
     }
 
-    // Validate TCP/UDP ports
+    // Ensure TCP/UDP ports are in proper range
     if proto == "tcp" || proto == "udp" {
-        // Ensure min/max ports are above 0 and the min is above max
         if minPort <= 0 || maxPort <= 0 || minPort > maxPort {
-            return false, fmt.Errorf("invalid port range: %d-%d",
-                                     minPort, maxPort)
+            return false, fmt.Errorf("invalid port range: %d-%d", minPort, maxPort)
         }
     }
 
@@ -129,77 +131,103 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    callInput := &ec2.DescribeSecurityGroupsInput{
-        GroupIds: []string{sgId},
-    }
-
     // Get the Security Group based on passed in ID
-    out, err := Ec2Man.client.DescribeSecurityGroups(ctx, callInput)
+    out, err := Ec2Man.client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
+        GroupIds: []string{sgId},
+    })
     if err != nil {
         var apiErr smithy.APIError
 
-        // If the Security Group ID was not found
-        if errors.As(err, &apiErr) &&
-        apiErr.ErrorCode() == "InvalidGroup.NotFound" {
+        if errors.As(err, &apiErr) && apiErr.ErrorCode() == "InvalidGroup.NotFound" {
             return false, nil
         }
 
         return false, fmt.Errorf("describe security groups - %w", err)
     }
 
-    // If no security groups were retrieved
     if out == nil || len(out.SecurityGroups) == 0 {
         return false, nil
     }
 
-    // Iterate through security groups
-    for _, sg := range out.SecurityGroups {
-        // Iterate through rules in each security group
-        for _, perm := range sg.IpPermissions {
-            // If the protocol is empty, skip to next rule
+    // Detect if cidr is IPv6
+    isV6 := strings.Contains(cidr, ":")
+
+    // Compare IP ranges inside a permission
+    matchIPRanges := func(p ec2types.IpPermission) bool {
+        if isV6 {
+            for _, r := range p.Ipv6Ranges {
+                if r.CidrIpv6 != nil && *r.CidrIpv6 == cidr {
+                    return true
+                }
+            }
+        } else {
+            for _, r := range p.IpRanges {
+                if r.CidrIp != nil && *r.CidrIp == cidr {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    // Check slice of permissions (works for ingress or egress)
+    checkPerms := func(perms []ec2types.IpPermission) bool {
+        for _, perm := range perms {
             if perm.IpProtocol == nil {
                 continue
             }
 
-            permProto := *perm.IpProtocol
+            permProto := strings.ToLower(*perm.IpProtocol)
 
-            // If permission is "all" (-1) treat as match if CIDR present
-            if (permProto == "-1" || permProto == "all") &&
-            (proto == "-1" || proto == "all" || proto == "tcp" || proto == "udp") {
-                // Iterate through the IP ranges in the outbound rules
-                for _, ipr := range perm.IpRanges {
-                    // If the network CIDR is present and matches arg
-                    if ipr.CidrIp != nil && *ipr.CidrIp == cidr {
-                        return true, nil
+            // permProto "-1" (all protocols) should match tcp/udp/all requests
+            if permProto == "-1" {
+                // if user wants any protocol or TCP/UDP, an "all" permission matches
+                if proto == "-1" || proto == "tcp" || proto == "udp" {
+                    if matchIPRanges(perm) {
+                        return true
                     }
                 }
 
                 continue
             }
 
-            // Require protocol to match arg
+            // Direct protocol match required
             if permProto != proto {
                 continue
             }
 
-            // Ensure to and from ports are present
-            if perm.FromPort == nil || perm.ToPort == nil {
-                continue
-            }
+            // For tcp/udp ensure ports present and encompass requested range
+            if proto == "tcp" || proto == "udp" {
+                if perm.FromPort == nil || perm.ToPort == nil {
+                    continue
+                }
 
-            from := *perm.FromPort
-            to := *perm.ToPort
+                from := *perm.FromPort
+                to := *perm.ToPort
 
-            // If the to and from ports are within IP range
-            if from <= minPort && to >= maxPort {
-                // Iterate through outbound rules IP ranges
-                for _, ipr := range perm.IpRanges {
-                    // If the CIDR IP is present and matches args
-                    if ipr.CidrIp != nil && *ipr.CidrIp == cidr {
-                        return true, nil
+                if from <= minPort && to >= maxPort {
+                    if matchIPRanges(perm) {
+                        return true
                     }
                 }
+
+                continue
             }
+        }
+
+        return false
+    }
+
+    for _, sg := range out.SecurityGroups {
+        // Check ingress permissions
+        if checkPerms(sg.IpPermissions) {
+            return true, nil
+        }
+
+        // Check egress permissions
+        if checkPerms(sg.IpPermissionsEgress) {
+            return true, nil
         }
     }
 
