@@ -1,9 +1,12 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
@@ -26,6 +29,11 @@ func SetupRouteTableAssociationHandler(ec2Client *ec2utils.Ec2Manger,
                                        yamlUpdates map[string]string,
                                        routeId string, subnetId string) (
                                        error) {
+    fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching route table association provisioner"))
+
     // Ensure route table is associated to subnet
     publicAssocId, err := ec2Client.RouteTableAssociationProvision(1 * time.Minute,
                                                                    stateConfig.AwsEnv.RouteAssociationId,
@@ -37,6 +45,17 @@ func SetupRouteTableAssociationHandler(ec2Client *ec2utils.Ec2Manger,
     // If the public association occured, add ID to yaml updates map
     if publicAssocId != "" {
         yamlUpdates["aws_env.route_association_id"] = publicAssocId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "          \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Route table association was created"))
+    // If route table association already exists
+    } else {
+        fmt.Println(display.CtextMulti(color.FoamWhite, "          \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Route table association was created"))
     }
 
     return nil
@@ -68,6 +87,11 @@ func SetupRouteTableHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-route-table",
     }
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching route table provisioner"))
+
     // Create route table for subnets to internet gateway if does not exist
     routeTableId, err := ec2Client.RouteTableProvision(1 * time.Minute,
                                                        stateConfig.AwsEnv.RouteTableId,
@@ -79,9 +103,19 @@ func SetupRouteTableHandler(ec2Client *ec2utils.Ec2Manger,
     // If the public route table was created, add ID to yaml updates map
     if routeTableId != "" {
         yamlUpdates["aws_env.route_table_id"] = routeTableId
-    // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Route table was created"))
+    // If route table already exists, use the existing ID
     } else {
         routeTableId = stateConfig.AwsEnv.RouteTableId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Route table already exists"))
     }
 
     return routeTableId, nil

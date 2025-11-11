@@ -1,11 +1,14 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/policies"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
@@ -40,6 +43,10 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // Generate policy document for S3 VPC Endpoint
     policyDocument := policies.VpcS3EndpointPolicyGen(vpcId)
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching VPC S3 endpoint provisioner"))
+
     // Create VPC endpoint for S3 if it does not exist
     s3VpcEndPointId, err := ec2Client.S3EndpointProvision(10 * time.Minute,
                                                           stateConfig.AwsEnv.S3VpcEndpointId,
@@ -53,6 +60,17 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // If S3 VPC endpoint created, add name to yaml updates map
     if s3VpcEndPointId != "" {
         yamlUpdates["aws_env.s3_vpc_endpoint_id"] = s3VpcEndPointId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "S3 VPC endpoint was created"))
+    // If S3 VPC endpoint already exists
+    } else {
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "S3 VPC endpoint already exists"))
     }
 
     return  nil
@@ -94,6 +112,10 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // Generate policy document for SSM VPC Endpoint
     policyDocument := policies.VpcSsmEndpointPolicyGen(outStruct.AccountId)
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching VPC SSM endpoint provisioner"))
+
     // Create VPC endpoint for SSM if it does not exist
     ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(10 * time.Minute,
                                                             stateConfig.AwsEnv.SsmVpcEndpointId,
@@ -107,9 +129,19 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // If SSM VPC endpoint was created, add name to yaml updates map
     if ssmVpcEndpointId != "" {
         yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ssmVpcEndpointId
-    // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "SSM VPC endpoint was created"))
+    // If SSM VPC endpoint already exists, use the existing ID
     } else {
         ssmVpcEndpointId = stateConfig.AwsEnv.SsmVpcEndpointId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "SSM VPC endpoint already exists"))
     }
 
     outStruct.SsmVpcEndpointId = ssmVpcEndpointId

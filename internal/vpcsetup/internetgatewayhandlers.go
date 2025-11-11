@@ -1,9 +1,12 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
@@ -31,6 +34,11 @@ func SetupInternetGatewayHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-internet-gateway",
     }
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching Internet Gateway provisioner"))
+
     // Check to see if IGW exists, otherwise create & attach one
     igwId, err := ec2Client.InternetGatewayProvision(5 * time.Minute,
                                                      stateConfig.AwsEnv.IgwId,
@@ -42,9 +50,19 @@ func SetupInternetGatewayHandler(ec2Client *ec2utils.Ec2Manger,
     // If a Internet Gateway was created, add ID to yaml updates map
     if igwId != "" {
         yamlUpdates["aws_env.igw_id"] = igwId
-    // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Internet Gateway was created"))
+    // If Internet Gateway already exists, use the existing ID
     } else {
         igwId = stateConfig.AwsEnv.IgwId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Internet Gateway already exists"))
     }
 
     return igwId, nil

@@ -1,11 +1,14 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
 )
@@ -39,6 +42,10 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-s3",
     }
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching S3 bucket provisioner"))
+
     // Set up client to S3 service
     s3Client := s3utils.S3NewManager(awsConfig)
     // Create a S3 bucket if it does not exist
@@ -53,9 +60,19 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
     // If S3 buccket created, add name to yaml updates map
     if bucketName != "" {
         yamlUpdates["aws_env.s3_bucket_name"] = bucketName
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "S3 bucket was created"))
     // Otherwise use the one from YAML since it was found
     } else {
         bucketName = stateConfig.AwsEnv.S3BucketName
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "S3 bucket already exists"))
     }
 
     outStruct.S3BucketName = bucketName

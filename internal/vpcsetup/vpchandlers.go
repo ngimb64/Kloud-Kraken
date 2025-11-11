@@ -1,11 +1,14 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
@@ -34,9 +37,12 @@ func SetupVpcFlowLogsHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-vpc-flow-logs",
     }
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching VPC flow logs provisioner"))
+
     // Set up client to CloudWatch Logs
     cwlClient := cwl.NewFromConfig(awsConfig)
-
     // Create and enable the VPC Flow Logs via CloudWatch if it does not exist
     flowLogId, err := ec2Client.VpcFlowLogProvision(5 * time.Minute,
                                                     stateConfig.AwsEnv.FlowLogId,
@@ -50,6 +56,17 @@ func SetupVpcFlowLogsHandler(ec2Client *ec2utils.Ec2Manger,
     // If VPC Flow Logs group was created, add ID to yaml updates map
     if flowLogId != "" {
         yamlUpdates["aws_env.flow_log_id"] = flowLogId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "VPC flow logs was created"))
+    // If VPC flow logs already exists
+    } else {
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "VPC flow logs already exists"))
     }
 
     return nil
@@ -78,6 +95,10 @@ func SetupVpcHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-vpc",
     }
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching VPC provisioner"))
+
     // Check to see if the VPC exists, otherwise create one
     vpcId, err := ec2Client.VpcProvision(10*time.Minute,
                                          stateConfig.AwsEnv.VpcId,
@@ -90,9 +111,19 @@ func SetupVpcHandler(ec2Client *ec2utils.Ec2Manger,
     // If a VPC was created, add ID to yaml updates map
     if vpcId != "" {
         yamlUpdates["aws_env.vpc_id"] = vpcId
-        // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "VPC was created"))
+    // If VPC already exists, use the existing ID
     } else {
         vpcId = stateConfig.AwsEnv.VpcId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "VPC already exists"))
     }
 
     return vpcId, nil

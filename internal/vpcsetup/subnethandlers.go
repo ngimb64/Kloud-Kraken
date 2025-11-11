@@ -1,10 +1,13 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
@@ -43,6 +46,11 @@ func SetupSubnetHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-subnet",
     }
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching subnet provisioner"))
+
     // Create public subnet if it does not exist
     subnetId, err := ec2Client.SubnetProvision(5 * time.Minute,
                                                stateConfig.AwsEnv.SubnetId, vpcId,
@@ -55,9 +63,19 @@ func SetupSubnetHandler(ec2Client *ec2utils.Ec2Manger,
     // If a public subnet was created, add ID to yaml updates map
     if subnetId != "" {
         yamlUpdates["aws_env.subnet_id"] = subnetId
-    // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Subnet was created"))
+    // If subnet already exists, use the existing ID
     } else {
         subnetId = stateConfig.AwsEnv.SubnetId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "Subnet already exists"))
     }
 
     outStruct.SubnetId = subnetId
