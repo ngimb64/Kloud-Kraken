@@ -44,7 +44,8 @@ func ClientPermPolicyGen(region string, accountId string) string {
         "logs:PutLogEvents",
         "logs:DescribeLogStreams",
         "logs:PutRetentionPolicy",
-        "logs:CreateTags"
+        "logs:TagLogGroup",
+        "logs:TagResource"
       ],
       "Resource": "arn:aws:logs:%s:%s:log-group:/kloud-kraken*"
     },

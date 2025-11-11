@@ -85,7 +85,7 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
     return vpcId, nil
 }
 
-// Checks to see if the VP ID exists.
+// Checks to see if the VPC ID exists.
 //
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute

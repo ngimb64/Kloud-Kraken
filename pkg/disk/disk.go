@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
@@ -12,9 +13,12 @@ import (
 )
 
 // Package level variables
-var SelectedFiles sync.Map		  // Global map to track selected files
-var FileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
-
+var (
+    FileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
+    InitOnce          sync.Once   // Ensures function is only called one time
+    ProjectRoot       string      // Path to project root dir
+    SelectedFiles     sync.Map	  // Global map to track selected files
+)
 
 // AppendFile appends contents of srcFile to destFile if source file has data.
 //
@@ -240,6 +244,24 @@ func CreateRandFile(dirPath string, nameLen int, baseName string,
 }
 
 
+// Handler for resolving symlink paths to ensure absolute is returned.
+//
+// @Parameters
+//  - symPath:  Symlink path to be evaluated
+//
+// @Returns
+//  - The resolved symlink path
+//
+func evalSymlinks(symPath string) string {
+    resolved, err := filepath.EvalSymlinks(symPath)
+    if err != nil {
+        return symPath
+    }
+
+    return resolved
+}
+
+
 // Gets the total and available space on the root disk.
 //
 // @Parameters
@@ -269,6 +291,125 @@ func GetDiskSpace(path string) (
     remaining := free - CalcReserveBytes(total)
 
     return remaining, total, nil
+}
+
+
+// Handler that ensures getProjectRootDir is only called once and
+// handles the return value.
+//
+// @Returns
+//  - The root dir of the project
+//
+func GetProjectRootDir() string {
+    InitOnce.Do(func() {
+        ProjectRoot = getProjectRootDir()
+    })
+
+    return ProjectRoot
+}
+
+
+// Retrieves the root dir of the project by reverse crawling symlinks and
+// checking for common files in root directory of project.
+//
+// @Returns
+//  - Path to the projects root directory
+//
+func getProjectRootDir() string {
+    // Check for environment variable override
+    envVar := os.Getenv("KRAKEN_ROOT")
+    if envVar != "" {
+        // Get the absolute path of variable
+        abs, err := filepath.Abs(envVar)
+        if err != nil {
+            return envVar
+        }
+
+        return evalSymlinks(abs)
+    }
+
+    var searchPoints []string
+
+    // Get the working directory
+    wordDir, err := os.Getwd()
+    if err == nil {
+        // Get the absolute path
+        abs, err := filepath.Abs(wordDir)
+        if err == nil {
+            searchPoints = append(searchPoints, abs)
+        } else {
+            searchPoints = append(searchPoints, wordDir)
+        }
+    }
+
+    // Get the path of the executable that was called
+    exe, err := os.Executable()
+    if err == nil {
+        searchPoints = append(searchPoints, filepath.Dir(exe))
+    }
+
+    // Search upward for project markers
+    seenMap := map[string]struct{}{}
+
+    // Iterate through the slice of search points to reverse crawl symlinks
+    for _, searchPoint := range searchPoints {
+        // Resolve the symlink for the current search point
+        point := evalSymlinks(searchPoint)
+
+        for {
+            // Check to see if the point exists in filter map
+            _, ok := seenMap[point]
+            if ok {
+                break
+            }
+
+            seenMap[point] = struct{}{}
+
+            // Check to see if point has root files
+            if hasRootFile(point) {
+                return point
+            }
+
+            // Get the dir where point resides
+            parent := filepath.Dir(point)
+            if parent == point {
+                break
+            }
+
+            point = parent
+        }
+    }
+
+    // Fallback to first candidate or "."
+    if len(searchPoints) > 0 {
+        return searchPoints[0]
+    }
+
+    return "."
+}
+
+
+// Checks to see if the directory has a file that indicates it is root.
+//
+// @Parameters
+//  - dir:  The directory to check for files common in root
+//
+// @Returns
+//  - Toggle for whether the directory has a root file or not
+//
+func hasRootFile(dir string) bool {
+    markers := []string{"go.mod", ".git", "Makefile", "README.md"}
+
+    // Iterate through root marker files
+    for _, marker := range markers {
+        // Check to see if the file has statistics
+        _, err := os.Stat(filepath.Join(dir, marker))
+        if err == nil {
+            return true
+        }
+    }
+
+    return false
 }
 
 

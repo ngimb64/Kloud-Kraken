@@ -615,6 +615,11 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "Name": "kloud-kraken-ssm-tls-cert",
     }
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Uploading TLS certificate to " +
+                                   "SSM Paramter Store for client retrieval"))
+
     // Setup client to SSM
     ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
@@ -628,20 +633,21 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     bootstrapOut.SsmClient = ssmClient
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "TLS certificate uploaded to " +
-                                   "SSM Parameter Store for client retrieval"))
-
-
-    // TODO:  fix path so it works for testing
-
+                                   "SSM Parameter Store"))
 
     // Read the client binary into memory
-    binData, err := os.ReadFile("./kloud-kraken-client")
+    binData, err := os.ReadFile(globals.BIN_DIR + "/kloud-kraken-client")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Uploading client binary to S3 bucket"))
 
     // Re-establish client to S3 with new API key set
     s3Client := s3utils.S3NewManager(awsConfig)
@@ -655,19 +661,20 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     bootstrapOut.S3Client = s3Client
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "Uploaded client binary to S3 bucket ",
+                                   color.RadiantAmethyst, bootstrapOut.S3BucketName))
+
     filterMap := map[string]string{
         "location": awsConfig.Region,
     }
 
-    // Add the Ec2 instances to the cost manager
+    // Add the S3 put request to the cost manager
     s3Cost := costMan.AddCostResourceToManager("s3_put_requests", filterMap,
                                                false, &costErr)
     s3Cost.PutRequests += 1
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "Uploaded client binary to S3 bucket ",
-                                   color.RadiantAmethyst, bootstrapOut.S3BucketName))
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
@@ -694,6 +701,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         UserData:         []byte(userData),
     }
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Creating EC2 instance(s)"))
+
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
@@ -711,7 +722,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Add the Ec2 instances to the cost manager
     _ = costMan.AddCostResourceToManager("ec2_instance", filterMap, true, &costErr)
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 instance creation completed"))
 
@@ -756,6 +768,14 @@ func makeServerDirs() {
     if err != nil {
         log.Fatalf("Error creating server dirs:  %v", err)
     }
+}
+
+
+// Set important paths for project to be globally accessable.
+//
+func setProjectPaths() {
+    globals.ROOT_DIR = disk.GetProjectRootDir()
+    globals.BIN_DIR = globals.ROOT_DIR + "/bin"
 }
 
 
@@ -823,6 +843,8 @@ func main() {
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
+    // Set paths to project dirs
+    setProjectPaths()
     // Make the server directories
     makeServerDirs()
     // Display the kloud kraken banner
@@ -859,15 +881,24 @@ func main() {
 
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Retrieving server public IP addresses"))
+
         // Query IP lookup APIs for public IP addresses
         publicIps, err := tlsutils.GetPublicIps()
         if err != nil {
             log.Fatalf("Error getting public IP addresses:  %v", err)
         }
 
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
                                                            color.LightCyan, "$"), "",
                                        color.NeonAzure, "Server public IP addresses retrieved"))
+
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Generating server TLS PEM certificate"))
 
         // Generate the servers TLS PEM certificate and key and save in TLS manager
         err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
@@ -875,7 +906,8 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
         }
 
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
                                                            color.LightCyan, "$"), "",
                                        color.NeonAzure, "Server TLS PEM certificate " +
                                        "and key generated"))
@@ -906,7 +938,7 @@ func main() {
         defer func() {
             var stateConfig vpcsetup.AwsEnv
             var stateData []byte
-            stateFilePath := "../.kraken-state.yml"
+            stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
             var yamlUpdates = map[string]string{}
 
             // Read the data from yaml state file

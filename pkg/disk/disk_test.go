@@ -3,6 +3,7 @@ package disk_test
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
@@ -113,6 +114,51 @@ func TestGetDiskSpace(t *testing.T) {
     assert.Less(int64(0), total)
     // Ensure the free size is greater than 0
     assert.Less(int64(0), free)
+}
+
+
+func TestGetProjectRootDir(t *testing.T) {
+    // Make reusable assert instance
+	assert := assert.New(t)
+
+	// Create temp root directory
+	tmpRoot := t.TempDir()
+	// Create marker file (go.mod) in tmpRoot so it will be recognized as root
+	markerPath := filepath.Join(tmpRoot, "go.mod")
+	err := os.WriteFile(markerPath, []byte("module example.com/fake"), 0644)
+	assert.Nil(err)
+	// Create a nested working directory under tmpRoot and chdir into it
+	nested := filepath.Join(tmpRoot, "cmd", "kloud-kraken")
+	err = os.MkdirAll(nested, 0755)
+	assert.Nil(err)
+
+	// Save current working directory and restore at the end of the test
+	origWd, err := os.Getwd()
+	assert.Nil(err)
+	defer func() {
+		_ = os.Chdir(origWd)
+	}()
+
+	// Change to the nested directory
+	err = os.Chdir(nested)
+	assert.Nil(err)
+
+	// Ensure KRAKEN_ROOT env var won't override detection
+	origEnv := os.Getenv("KRAKEN_ROOT")
+	_ = os.Unsetenv("KRAKEN_ROOT")
+	defer func() {
+		// restore original env var (empty or previous)
+		_ = os.Setenv("KRAKEN_ROOT", origEnv)
+	}()
+
+	projectRoot := disk.GetProjectRootDir()
+
+	// Expected absolute path of the temp root
+	expectedRoot, err := filepath.Abs(tmpRoot)
+	assert.Nil(err)
+
+	// Assert the detection found the tmpRoot
+	assert.Equal(expectedRoot, projectRoot)
 }
 
 

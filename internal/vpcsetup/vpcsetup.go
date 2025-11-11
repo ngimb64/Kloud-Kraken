@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
@@ -83,7 +84,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     outStruct := &VpcBootstrapOutput{}
     var stateConfig AwsEnv
     var stateData []byte
-    stateFilePath := "../.kraken-state.yml"
+    stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
     var yamlUpdates = map[string]string{}
 
     // Check to see if the yaml state file exists
