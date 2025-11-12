@@ -41,7 +41,7 @@ func (Ec2Man *Ec2Manger) associateRouteTableToSubnet(callTime time.Duration,
     }
 
     // Associate the route table to the subnet
-    out, err := Ec2Man.client.AssociateRouteTable(ctx, associateCallInput)
+    out, err := Ec2Man.Client.AssociateRouteTable(ctx, associateCallInput)
     if err != nil {
         return "", fmt.Errorf("associate route table %s to subnet %s - %w",
                               routeTableId, subnetId, err)
@@ -92,7 +92,7 @@ func (Ec2Man *Ec2Manger) RouteTableAssociationExists(callTime time.Duration,
     }
 
     // Get the route tables associated with the passed in Association ID
-    out, err := Ec2Man.client.DescribeRouteTables(ctx, input)
+    out, err := Ec2Man.Client.DescribeRouteTables(ctx, input)
     if err != nil {
         return false, fmt.Errorf("describing route tables - %w", err)
     }
@@ -192,7 +192,7 @@ func (Ec2Man Ec2Manger) RouteTableAssociateTerminator(callTime time.Duration,
     }
 
     // Disassociate subnet from route table
-    _, err := Ec2Man.client.DisassociateRouteTable(ctx, disassocCallInput)
+    _, err := Ec2Man.Client.DisassociateRouteTable(ctx, disassocCallInput)
     if err != nil {
         return fmt.Errorf("failed to disassociate route table (%s) - %w",
                           associationId, err)

@@ -46,7 +46,7 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
     }
 
     // Create a new VPC since no valid ID was provided
-    createOut, err := Ec2Man.client.CreateVpc(ctx, createCallInput)
+    createOut, err := Ec2Man.Client.CreateVpc(ctx, createCallInput)
     if err != nil {
         return "", err
     }
@@ -58,14 +58,14 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
     }
 
     // Allocate waiter and wait until the VPC exists
-    waiter := ec2.NewVpcExistsWaiter(Ec2Man.client)
+    waiter := ec2.NewVpcExistsWaiter(Ec2Man.Client)
     err = waiter.Wait(ctx, waiterCallInput, callTime)
     if err != nil {
         return vpcId, err
     }
 
     // Enable DNS support so interface endpoints with Private DNS work
-    _, err = Ec2Man.client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
+    _, err = Ec2Man.Client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
         VpcId: aws.String(vpcId),
         EnableDnsSupport: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
     })
@@ -74,7 +74,7 @@ func (Ec2Man *Ec2Manger) vpcCreate(callTime time.Duration, cidrBlock string,
     }
 
     // Enable DNS hostnames VPC attribute
-    _, err = Ec2Man.client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
+    _, err = Ec2Man.Client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
         VpcId: aws.String(vpcId),
         EnableDnsHostnames: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
     })
@@ -111,7 +111,7 @@ func (Ec2Man *Ec2Manger) VpcExists(callTime time.Duration, vpcId string) (
     }
 
     // Check to see if the VPC exists based on ID
-    out, err := Ec2Man.client.DescribeVpcs(ctx, callInput)
+    out, err := Ec2Man.Client.DescribeVpcs(ctx, callInput)
     if err != nil {
         var apiErr smithy.APIError
 
@@ -258,7 +258,7 @@ func (Ec2Man Ec2Manger) VpcTerminator(callTime time.Duration,
     }
 
     // Delete the VPC by passed in ID
-    _, err := Ec2Man.client.DeleteVpc(ctx, deleteCallInput)
+    _, err := Ec2Man.Client.DeleteVpc(ctx, deleteCallInput)
     if err != nil {
         return fmt.Errorf("failed to delete VPC %s - %w", vpcId, err)
     }

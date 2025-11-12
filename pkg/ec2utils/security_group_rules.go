@@ -60,7 +60,7 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
         }
 
         // Add new egress rule to security group
-        _, err := Ec2Man.client.AuthorizeSecurityGroupEgress(ctx, callInput)
+        _, err := Ec2Man.Client.AuthorizeSecurityGroupEgress(ctx, callInput)
         if err != nil {
             return fmt.Errorf("authorize security group egress - %w", err)
         }
@@ -72,7 +72,7 @@ func (Ec2Man *Ec2Manger) securityGroupRuleCreate(callTime time.Duration,
         }
 
         // Add new ingress rule to security group
-        _, err := Ec2Man.client.AuthorizeSecurityGroupIngress(ctx, callInput)
+        _, err := Ec2Man.Client.AuthorizeSecurityGroupIngress(ctx, callInput)
         if err != nil {
             return fmt.Errorf("authorize security group ingress - %w", err)
         }
@@ -132,7 +132,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupRuleExists(callTime time.Duration,
     defer cancel()
 
     // Get the Security Group based on passed in ID
-    out, err := Ec2Man.client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
+    out, err := Ec2Man.Client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{
         GroupIds: []string{sgId},
     })
     if err != nil {
@@ -327,7 +327,7 @@ func (Ec2Man Ec2Manger) RevokeSecurityGroupRule(callTime time.Duration,
         }
 
         // Revoke the egress security group rule
-        _, err := Ec2Man.client.RevokeSecurityGroupEgress(ctx, revokeCallInput)
+        _, err := Ec2Man.Client.RevokeSecurityGroupEgress(ctx, revokeCallInput)
         if err != nil {
             return fmt.Errorf("revoke egress on %s failed - %w", sgId, err)
         }
@@ -339,7 +339,7 @@ func (Ec2Man Ec2Manger) RevokeSecurityGroupRule(callTime time.Duration,
         }
 
         // Revoke the ingress security group rule
-        _, err := Ec2Man.client.RevokeSecurityGroupIngress(ctx, revokeCallInput)
+        _, err := Ec2Man.Client.RevokeSecurityGroupIngress(ctx, revokeCallInput)
         if err != nil {
             return fmt.Errorf("revoke ingress on %s failed - %w", sgId, err)
         }

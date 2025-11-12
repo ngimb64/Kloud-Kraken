@@ -101,9 +101,15 @@ func ServerPermPolicyGen(region string, accountId string) string {
       "Action": [
         "ssm:PutParameter",
         "ssm:DeleteParameter",
-        "ssm:AddTagsToResource"
+        "ssm:AddTagsToResource",
+        "ssm:GetParameter",
+        "ssm:GetParametersByPath"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
+      "Resource": [
+        "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*",
+        "arn:aws:ssm:%s:aws:parameter/aws/service/deeplearning/*",
+        "arn:aws:ssm:%s::parameter/aws/service/deeplearning/*"
+      ]
     },
 
     {
@@ -129,6 +135,7 @@ func ServerPermPolicyGen(region string, accountId string) string {
         "ec2:RunInstances",
         "ec2:TerminateInstances",
         "ec2:DescribeInstances",
+        "ec2:DescribeImages",
         "ec2:CreateTags",
         "ec2:DeleteVpcEndpoints",
         "ec2:DescribeVpcEndpoints"
@@ -154,7 +161,7 @@ func ServerPermPolicyGen(region string, accountId string) string {
       "Resource": "arn:aws:iam::%s:role/KloudKrakenClientRole"
     }
   ]
-}`, region, accountId, accountId)
+}`, region, accountId, region, region, accountId)
 }
 
 

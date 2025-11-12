@@ -2,9 +2,11 @@ package awsutils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,9 +14,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -236,6 +240,43 @@ func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
 }
 
 
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func findImageByName(ctx context.Context, ec2Client *ec2.Client,
+                     namePattern string) (string, error) {
+    describeImagesInput := &ec2.DescribeImagesInput{
+        Owners: []string{"amazon"},
+        Filters: []ec2types.Filter{
+            {Name: aws.String("name"), Values: []string{namePattern}},
+            {Name: aws.String("state"), Values: []string{"available"}},
+        },
+    }
+
+    // Get the AMI images by specified filters
+    out, err := ec2Client.DescribeImages(ctx, describeImagesInput)
+    if err != nil {
+        return "", err
+    }
+
+    if len(out.Images) == 0 {
+        return "", fmt.Errorf("no images matched pattern %q", namePattern)
+    }
+
+    // Sort list of AMIs by descending order by creation date
+    sort.Slice(out.Images, func(i, j int) bool {
+        return *out.Images[i].CreationDate > *out.Images[j].CreationDate
+    })
+
+    return *out.Images[0].ImageId, nil
+}
+
+
 // Gets the account ID from STS client.
 //
 // @Parameters
@@ -257,6 +298,71 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
     }
 
     return *out.Account, nil
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func GetDeepLearningAmi(callTime time.Duration, awsConfig aws.Config,
+                        ec2Client *ec2.Client, region string, arch string,
+                        amiType string, fallbackNamePattern string) (
+                        string, error) {
+    var err error
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Attempt to retrieve AMI via SSM parameter store
+    amiID, err := getImageFromSSM(ctx, awsConfig, arch, amiType)
+    if err == nil && amiID != "" {
+        return amiID, nil
+    }
+
+    // Backup method using DescribeImages if SSM method fails
+    amiID, ferr := findImageByName(ctx, ec2Client, fallbackNamePattern)
+    if ferr != nil {
+        err = errors.Join(err, fmt.Errorf("fallback DescribeImages failed - %w", ferr))
+        return "", err
+    }
+
+    return amiID, nil
+}
+
+
+//
+//
+// @Parameters
+//
+//
+// @Returns
+//
+//
+func getImageFromSSM(ctx context.Context, awsConfig aws.Config,
+                     arch string, amiType string) (
+                     string, error) {
+    // Establish client to SSM service
+    client := ssm.NewFromConfig(awsConfig)
+    paramName := "/aws/service/deeplearning/ami/" + arch + "/" + amiType + "/latest/ami-id"
+
+    // Attempt to retrieve the AMI ID via SSM parameter store
+    out, err := client.GetParameter(ctx, &ssm.GetParameterInput{
+        Name: aws.String(paramName),
+    })
+    if err != nil {
+        return "", fmt.Errorf("ssm get-parameter %q - %w", paramName, err)
+    }
+
+    if out.Parameter == nil || out.Parameter.Value == nil {
+        return "", errors.New("ssm parameter value missing")
+    }
+
+    return *out.Parameter.Value, nil
 }
 
 

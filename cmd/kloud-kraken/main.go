@@ -674,7 +674,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Add the S3 put request to the cost manager
     s3Cost := costMan.AddCostResourceToManager("s3_put_requests", filterMap,
                                                false, &costErr)
-    s3Cost.PutRequests += 1
+    if s3Cost != nil {
+        s3Cost.PutRequests += 1
+    }
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
@@ -689,8 +691,19 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "Name": "kloud-kraken-ec2-client",
     }
 
+    // Re-setup new client to EC2 service with newly assumed role
+    ec2Client = ec2utils.Ec2NewManager(awsConfig)
+    // Get the latest AMI for the ubuntu deep
+    deepLearningAmi, err := awsutils.GetDeepLearningAmi(1 * time.Minute, awsConfig,
+                                                        ec2Client.Client, appConfig.LocalConfig.Region,
+                                                        "x86_64", "base-oss-nvidia-driver-ubuntu-22.04",
+                                                        "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*")
+    if err != nil {
+        return awsConfig, bootstrapOut, costMan, costErr, err
+    }
+
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
-        AMI:              "ami-0066f213d20342af9",
+        AMI:              deepLearningAmi,
         InstanceType:     appConfig.LocalConfig.InstanceType,
         MaxCount:         appConfig.LocalConfig.NumberInstances,
         MinCount:         appConfig.LocalConfig.NumberInstances,
@@ -705,8 +718,6 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                                        color.LightCyan, "!"), "",
                                    color.NeonAzure, "Creating EC2 instance(s)"))
 
-    // Re-setup new client to EC2 service with newly assumed role
-    ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Create number of EC2 instances based on passed in data
     err = ec2Client.Ec2CreateInstances(15 * time.Minute, ec2CreateInstancesInput)
     if err != nil {
@@ -923,7 +934,7 @@ func main() {
             defer func() {
                 if logMan != nil {
                     logMan.LogMessage("error", "Error occured during AWS cost" +
-                                        " calulcation:  %v", costErr)
+                                      " calulcation:  %v", costErr)
                 } else {
                     log.Printf("Error occured during AWS cost calulcation:  %v", costErr)
                 }

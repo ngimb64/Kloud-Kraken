@@ -62,7 +62,7 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration,
     }
 
     // Create route table in passed in VPC ID
-    createOut, err := Ec2Man.client.CreateRouteTable(ctx, createRouteTableCallInput)
+    createOut, err := Ec2Man.Client.CreateRouteTable(ctx, createRouteTableCallInput)
     if err != nil {
         return "", fmt.Errorf("create route table - %w", err)
     }
@@ -85,7 +85,7 @@ func (Ec2Man *Ec2Manger) routeTableCreateAndAttach(callTime time.Duration,
     }
 
     // Create route to the chosen target
-    _, err = Ec2Man.client.CreateRoute(ctx, createRouteCallInput)
+    _, err = Ec2Man.Client.CreateRoute(ctx, createRouteCallInput)
     if err != nil {
         return "", fmt.Errorf("create route to target on rt %s - %w", rtID, err)
     }
@@ -125,7 +125,7 @@ func (Ec2Man *Ec2Manger) RouteTableExists(callTime time.Duration,
     }
 
     // Describe route tables based on passed in ID
-    out, err := Ec2Man.client.DescribeRouteTables(ctx, callInput)
+    out, err := Ec2Man.Client.DescribeRouteTables(ctx, callInput)
     if err != nil {
         var apiErr smithy.APIError
 
@@ -231,7 +231,7 @@ func (Ec2Man Ec2Manger) RouteTableTerminator(callTime time.Duration,
         RouteTableId: aws.String(routeTableId),
     }
 
-    _, err := Ec2Man.client.DeleteRouteTable(ctx, deleteRouteCallInput)
+    _, err := Ec2Man.Client.DeleteRouteTable(ctx, deleteRouteCallInput)
     if err != nil {
         return fmt.Errorf("failed to delete route table (%s) - %w",
                           routeTableId, err)

@@ -285,15 +285,15 @@ func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
         // Cancel context per API call
         cancel()
         if err != nil {
+            var apiErr smithy.APIError
+
+            // If the object already exists
+            if errors.As(err, &apiErr) &&
+            apiErr.ErrorCode() == "PreconditionFailed" {
+                continue
+            }
+
             return "", err
-        }
-
-        var apiErr smithy.APIError
-
-        // If API error says object already exists
-        if errors.As(err, &apiErr) &&
-        apiErr.ErrorCode() == "PreconditionFailed" {
-            continue
         }
 
         return candidate, nil
