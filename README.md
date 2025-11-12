@@ -116,10 +116,9 @@
 
 ### Local Setup
 
-- When running the program in full mode with AWS environment there are two options for credential setup
-    - Configure API access credentials locally before running with `aws configure` (preferred)
-    - OR set the environment variables AWS_ACCESS_KEY & AWS_SECRET_KEY
-        - Keep in mind these will be stored in command line history unless configuration is done prior
+- When running the program in full mode with AWS environment the AWS API keys must be configured for SDK calls to work
+    - Configure API access credentials locally before running with `aws configure --profile kloud-kraken`
+    - It is import to set the credentials under the kloud-kraken profile as the program searches for that specific one
 <br>
 
 - Before running the program it is also very helpful to prepare wordlist data ahead of time

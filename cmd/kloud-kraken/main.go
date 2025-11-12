@@ -577,7 +577,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               costErr error, err error) {
     // Set up AWS credentials based on local chain or environment variables
     awsConfig, err = awsutils.AwsConfigSetup(1 * time.Minute,
-                                             appConfig.LocalConfig.Region)
+                                             appConfig.LocalConfig.Region,
+                                             "kloud-kraken")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, nil, err
     }
@@ -606,6 +607,12 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         config.WithRegion(appConfig.LocalConfig.Region),
         config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
     )
+    if err != nil {
+        return awsConfig, bootstrapOut, costMan, costErr, err
+    }
+
+    // Ensure STS token is refreshed per execution
+    _, err = awsConfig.Credentials.Retrieve(context.Background())
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
@@ -694,9 +701,9 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Get the latest AMI for the ubuntu deep
-    deepLearningAmi, err := awsutils.GetDeepLearningAmi(1 * time.Minute, awsConfig,
-                                                        ec2Client.Client, appConfig.LocalConfig.Region,
-                                                        "x86_64", "base-oss-nvidia-driver-ubuntu-22.04",
+    deepLearningAmi, err := awsutils.GetDeepLearningAmi(5 * time.Minute, ssmClient.Client,
+                                                        ec2Client.Client, "x86_64",
+                                                        "base-oss-nvidia-driver-ubuntu-22.04",
                                                         "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err

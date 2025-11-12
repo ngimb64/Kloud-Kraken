@@ -75,15 +75,17 @@ var RegionCodeToLocation = map[string]string{
 // @Parameters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - region:  The AWS region wherer the API credential are to be utilized
+//  - profileName:  The name of the AWS config profile to load from credentials file
 //
 // @Returns
 //  - The AWS credentials config
 //  - Toggle for whether the credentials exist or not in default keychain
 //
-func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
-                                 aws.Config, bool) {
+func AttemptLoadDefaultCredChain(callTime time.Duration, region string,
+                                 profileName string) (aws.Config, bool) {
     // Load the local credential chain (env, ~/.aws, etc.)
-    cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+    cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region),
+                                         config.WithSharedConfigProfile(profileName))
     if err != nil {
         return cfg, false
     }
@@ -107,15 +109,16 @@ func AttemptLoadDefaultCredChain(callTime time.Duration, region string) (
 // @Paramters
 //  - callTime:  The length of time the API call is allowed to execute
 //  - region:  The AWS region wherer the API credential are to be utilized
+//  - profileName:  The name of the AWS config profile to load from credentials file
 //
 // @Returns:
 //  - The initialized AWS credentials config
 //  - Error if it occurs, otherwise nil on success
 //
-func AwsConfigSetup(callTime time.Duration, region string) (
+func AwsConfigSetup(callTime time.Duration, region string, profileName string) (
                     aws.Config, error) {
     // Attempt to load credentials from default credential chain
-    cfg, exists := AttemptLoadDefaultCredChain(callTime, region)
+    cfg, exists := AttemptLoadDefaultCredChain(callTime, region, profileName)
     if exists {
         return cfg, nil
     }
@@ -309,17 +312,16 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
 // @Returns
 //
 //
-func GetDeepLearningAmi(callTime time.Duration, awsConfig aws.Config,
-                        ec2Client *ec2.Client, region string, arch string,
-                        amiType string, fallbackNamePattern string) (
-                        string, error) {
+func GetDeepLearningAmi(callTime time.Duration, ssmClient *ssm.Client,
+                        ec2Client *ec2.Client, arch string, amiType string,
+                        fallbackNamePattern string) (string, error) {
     var err error
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
     // Attempt to retrieve AMI via SSM parameter store
-    amiID, err := getImageFromSSM(ctx, awsConfig, arch, amiType)
+    amiID, err := getImageFromSSM(ctx, ssmClient, arch, amiType)
     if err == nil && amiID != "" {
         return amiID, nil
     }
@@ -343,12 +345,10 @@ func GetDeepLearningAmi(callTime time.Duration, awsConfig aws.Config,
 // @Returns
 //
 //
-func getImageFromSSM(ctx context.Context, awsConfig aws.Config,
-                     arch string, amiType string) (
-                     string, error) {
-    // Establish client to SSM service
-    client := ssm.NewFromConfig(awsConfig)
-    paramName := "/aws/service/deeplearning/ami/" + arch + "/" + amiType + "/latest/ami-id"
+func getImageFromSSM(ctx context.Context, client *ssm.Client, arch string,
+                     amiType string) (string, error) {
+    paramName := "/aws/service/deeplearning/ami/" + arch +
+                 "/" + amiType + "/latest/ami-id"
 
     // Attempt to retrieve the AMI ID via SSM parameter store
     out, err := client.GetParameter(ctx, &ssm.GetParameterInput{

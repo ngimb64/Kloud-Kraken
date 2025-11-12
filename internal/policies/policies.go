@@ -73,11 +73,13 @@ func ClientPermPolicyGen(region string, accountId string) string {
 func ClientTrustPolicyGen() string {
     return `{
   "Version": "2012-10-17",
-  "Statement": [{
-    "Effect":    "Allow",
-    "Principal": { "Service": "ec2.amazonaws.com" },
-    "Action":    "sts:AssumeRole"
-  }]
+  "Statement": [
+    {
+      "Effect":    "Allow",
+      "Principal": { "Service": "ec2.amazonaws.com" },
+      "Action":    "sts:AssumeRole"
+    }
+  ]
 }`
 }
 
@@ -176,14 +178,16 @@ func ServerPermPolicyGen(region string, accountId string) string {
 //
 func ServerTrustPolicyGen(accountId string, iamUser string) string {
     return fmt.Sprintf(`{
-  "Version":"2012-10-17",
-  "Statement":[{
-    "Effect":"Allow",
-    "Principal":{
-      "AWS":"arn:aws:iam::%s:user/%s"
-    },
-    "Action":"sts:AssumeRole"
-  }]
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::%s:user/%s"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
 }`, accountId, iamUser)
 }
 

@@ -87,7 +87,8 @@ func main() {
 
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, err := awsutils.AwsConfigSetup(1 * time.Minute,
-                                              stateConfig.AwsEnv.Region)
+                                              stateConfig.AwsEnv.Region,
+                                              "kloud-kraken")
     if err != nil {
         log.Fatalf("Error loading AWS configuration:  %v", err)
     }
