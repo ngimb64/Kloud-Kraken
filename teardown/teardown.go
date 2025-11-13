@@ -7,9 +7,11 @@ import (
 	"time"
 
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/cloudwatchutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
@@ -24,9 +26,11 @@ func main() {
     hadError := false
     var stateConfig vpcsetup.AwsEnv
     var stateData []byte
-    stateFilePath := "../.kraken-state.yml"
     var userInput string
-    var yamlUpdates map[string]string
+    var yamlUpdates = map[string]string{}
+
+    globals.ROOT_DIR = disk.GetProjectRootDir()
+    stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
 
     fmt.Print("[!] This program is designed to delete all created AWS " +
               "resources by Kloud Kraken, to proceed enter yes:  ")

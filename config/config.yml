@@ -10,7 +10,7 @@ client_config:
   log_mode: "both"
   max_file_size: "1GB"
   max_transfers: 2
-  region: "us-east-2"
+  region: "us-east-1"
   workload: "4"
 
 local_config:
@@ -24,5 +24,5 @@ local_config:
   max_merging_size: "300MB"
   max_size_range: 15.0
   number_instances: 1
-  region: "us-east-2"
+  region: "us-east-1"
   ruleset_path: ""

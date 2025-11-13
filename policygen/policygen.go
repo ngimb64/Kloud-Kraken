@@ -83,6 +83,7 @@ func bootstrapPolicyGen(accountId string, region string) string {
       "Effect": "Allow",
       "Action": [
         "ec2:CreateVpc",
+        "ec2:ModifyVpcAttribute",
         "ec2:DescribeVpcs",
         "ec2:CreateTags",
         "ec2:DeleteVpc",

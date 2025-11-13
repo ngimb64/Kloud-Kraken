@@ -137,6 +137,7 @@ func ServerPermPolicyGen(region string, accountId string) string {
         "ec2:RunInstances",
         "ec2:TerminateInstances",
         "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
         "ec2:DescribeImages",
         "ec2:CreateTags",
         "ec2:DeleteVpcEndpoints",

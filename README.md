@@ -118,7 +118,7 @@
 
 - When running the program in full mode with AWS environment the AWS API keys must be configured for SDK calls to work
     - Configure API access credentials locally before running with `aws configure --profile kloud-kraken`
-    - It is import to set the credentials under the kloud-kraken profile as the program searches for that specific one
+    - It is import to set the credentials under the kloud-kraken profile as the program searches for that specific one when loading the AWS config
 <br>
 
 - Before running the program it is also very helpful to prepare wordlist data ahead of time

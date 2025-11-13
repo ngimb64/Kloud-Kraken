@@ -472,7 +472,7 @@ DEVICES=("${ALL_DEVICES[@]:1}")
 
 RETRIES=0
 # Update, upgrade, and install needed packages for hash cracking
-until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y hashcat; do
+until DEBIAN_FRONTEND=noninteractive apt install -y hashcat; do
     (( RETRIES++ ))
     # If the updates process fails 3 times due to network issues, log error and exit
     (( RETRIES >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
@@ -701,9 +701,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Get the latest AMI for the ubuntu deep
-    deepLearningAmi, err := awsutils.GetDeepLearningAmi(5 * time.Minute, ssmClient.Client,
-                                                        ec2Client.Client, "x86_64",
-                                                        "base-oss-nvidia-driver-ubuntu-22.04",
+    deepLearningAmi, err := awsutils.GetDeepLearningAmi(5 * time.Minute, ssmClient.Client,  ec2Client.Client,
+                                                        "x86_64", "ubuntu22.04/tensorflow",
                                                         "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err

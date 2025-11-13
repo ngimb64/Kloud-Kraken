@@ -60,9 +60,13 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
 
     callInput := &s3.CreateBucketInput{
         Bucket: aws.String(bucketName),
-        CreateBucketConfiguration: &s3types.CreateBucketConfiguration{
+    }
+
+    // If the region is not the default, set location restraint
+    if region != "us-east-1" {
+        callInput.CreateBucketConfiguration = &s3types.CreateBucketConfiguration{
             LocationConstraint: s3types.BucketLocationConstraint(region),
-        },
+        }
     }
 
     // Create the bucket based on the bucket name in S3 manager

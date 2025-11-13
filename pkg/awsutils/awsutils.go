@@ -117,6 +117,10 @@ func AttemptLoadDefaultCredChain(callTime time.Duration, region string,
 //
 func AwsConfigSetup(callTime time.Duration, region string, profileName string) (
                     aws.Config, error) {
+    if profileName == "" {
+        profileName = "default"
+    }
+
     // Attempt to load credentials from default credential chain
     cfg, exists := AttemptLoadDefaultCredChain(callTime, region, profileName)
     if exists {
@@ -243,7 +247,7 @@ func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
 }
 
 
-//
+// Gets the images by specified filters and gets the most recently created.
 //
 // @Parameters
 //
@@ -272,11 +276,41 @@ func findImageByName(ctx context.Context, ec2Client *ec2.Client,
     }
 
     // Sort list of AMIs by descending order by creation date
-    sort.Slice(out.Images, func(i, j int) bool {
-        return *out.Images[i].CreationDate > *out.Images[j].CreationDate
+    sort.Slice(out.Images, func(i int, j int) bool {
+        ai := out.Images[i].CreationDate
+        aj := out.Images[j].CreationDate
+
+        // If both nil -> consider equal (stable)
+        if ai == nil && aj == nil {
+            return false
+        }
+
+        // Push nils to the end (so non-nil come first)
+        if ai == nil {
+            return false
+        }
+
+        if aj == nil {
+            return true
+        }
+
+        // CreationDate uses ISO-8601 so lexicographic comparison is valid
+        return *ai > *aj
     })
 
-    return *out.Images[0].ImageId, nil
+    // Ensure top element has non-nil ImageId
+    if out.Images[0].ImageId == nil {
+        // search for first non-nil ImageId
+        for _, img := range out.Images {
+            if img.ImageId != nil {
+                return aws.ToString(img.ImageId), nil
+            }
+        }
+
+        return "", errors.New("no image with valid ImageId found")
+    }
+
+    return aws.ToString(out.Images[0].ImageId), nil
 }
 
 
