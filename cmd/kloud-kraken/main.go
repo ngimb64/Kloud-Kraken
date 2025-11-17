@@ -513,29 +513,37 @@ mkdir -p /mnt/instance-store
 # Mount the mount point if it is not already mounted
 mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
 
-# Application bootstrap
+# Quick test to ensure instance role credentials are available
+if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
+    echo "ERROR: instance profile credentials unavailable (check IAM role and IMDS access)"
+    exit 1
+fi
+
 CWD=$(pwd)
+# Copy binary to instance from S3 and set executable permissions
 aws s3 cp s3://%s/%s "$CWD"/client --region %s --no-progress
 chmod +x "$CWD"/client
-$CWD/client -applyOptimization=%t \
-            -awsRegion=%s \
-            -certSsmParam=%s \
-            -charSet1=%s \
-            -charSet2=%s \
-            -charSet3=%s \
-            -charSet4=%s \
-            -crackingMode=%s \
-            -ec2SecurityGroupId=%s \
-            -hashMask=%s \
-            -hasRuleset=%t \
-            -hashType=%s \
-            -ipAddrs=%s \
-            -isTesting=%t \
-            -logMode=%s \
-            -maxFileSizeInt64=%d \
-            -maxTransfers=%d \
-            -port=%d \
-            -workload=%s
+
+nohup $CWD/client \
+    -applyOptimization=%t \
+    -awsRegion=%s \
+    -certSsmParam=%s \
+    -charSet1=%s \
+    -charSet2=%s \
+    -charSet3=%s \
+    -charSet4=%s \
+    -crackingMode=%s \
+    -ec2SecurityGroupId=%s \
+    -hashMask=%s \
+    -hasRuleset=%t \
+    -hashType=%s \
+    -ipAddrs=%s \
+    -isTesting=%t \
+    -logMode=%s \
+    -maxFileSizeInt64=%d \
+    -maxTransfers=%d \
+    -port=%d \
+    -workload=%s > /var/log/client.log 2>&1 &
 `, bucketName, keyName,
    appConf.ClientConfig.Region, true,
    appConf.ClientConfig.Region, ssmParam,
@@ -700,10 +708,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
-    // Get the latest AMI for the ubuntu deep
-    deepLearningAmi, err := awsutils.GetDeepLearningAmi(5 * time.Minute, ssmClient.Client,  ec2Client.Client,
-                                                        "x86_64", "ubuntu22.04/tensorflow",
-                                                        "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*")
+    // Get the latest AMI for the ubuntu deep learning
+    deepLearningAmi, err := awsutils.GetAmiId(5 * time.Minute, ssmClient.Client, ec2Client.Client,
+                                              "x86_64", "ubuntu22.04/tensorflow",
+                                              "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }

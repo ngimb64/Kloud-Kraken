@@ -318,4 +318,3 @@ func VpcSsmEndpointPolicyGen(accountId string) string {
   ]
 }`, accountId)
 }
-

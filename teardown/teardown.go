@@ -98,6 +98,7 @@ func main() {
     }
 
     // Establish clients to various services
+    cwlClient := cwl.NewFromConfig(awsConfig)
     ec2Client := ec2utils.Ec2NewManager(awsConfig)
     iamClient := iamutils.IamNewManager(awsConfig)
     s3Client := s3utils.S3NewManager(awsConfig)
@@ -122,9 +123,6 @@ func main() {
         log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
         hadError = true
     }
-
-    // Setup client to CloudWatch
-    cwlClient := cwl.NewFromConfig(awsConfig)
 
     if stateConfig.AwsEnv.FlowLogId != "" {
         // Delete the VPC Flow Logs

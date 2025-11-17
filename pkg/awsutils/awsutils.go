@@ -247,13 +247,16 @@ func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
 }
 
 
-// Gets the images by specified filters and gets the most recently created.
+// Gets the AMI ID's by specified filters and gets the most recently created.
 //
 // @Parameters
-//
+//  - ctx:  Context handler for AWS API call duration
+//  - ec2Client:  Established client to EC2 service
+//  - namePattern:  The name pattern to filter in DescribeImages
 //
 // @Returns
-//
+//  - The retrieved AMI ID if successful
+//  - Error if it occurs, otherwise nil on success
 //
 func findImageByName(ctx context.Context, ec2Client *ec2.Client,
                      namePattern string) (string, error) {
@@ -338,17 +341,24 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
 }
 
 
-//
+// Handles retrieving the AMI ID by first attempting via SSM Parameter
+// Store then resorts to using DescribeImages call as a backup.
 //
 // @Parameters
-//
+//  - callTime:  The length of time the API call is allowed to execute
+//  - ssmClient:  Established client to SSM service
+//  - ec2Client:  Established client to EC2 service
+//  - arch:  System architecture of AMI
+//  - amiType:  The type of AMI to format in SSM parameter
+//  - fallbackNamePattern:
 //
 // @Returns
+//  - The retrieved AMI ID if successfull
+//  - Error if it occurs, otherwise nil on success
 //
-//
-func GetDeepLearningAmi(callTime time.Duration, ssmClient *ssm.Client,
-                        ec2Client *ec2.Client, arch string, amiType string,
-                        fallbackNamePattern string) (string, error) {
+func GetAmiId(callTime time.Duration, ssmClient *ssm.Client,
+              ec2Client *ec2.Client, arch string, amiType string,
+              fallbackNamePattern string) (string, error) {
     var err error
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -371,13 +381,17 @@ func GetDeepLearningAmi(callTime time.Duration, ssmClient *ssm.Client,
 }
 
 
-//
+// Attempts to retrieve the most recent AMI ID from SSM Parameter Store.
 //
 // @Parameters
-//
+//  - ctx:  Context handler for AWS API call duration
+//  - client:  Established client to SSM service
+//  - arch:  System architecture of AMI
+//  - amiType:  The type of AMI to format in SSM parameter
 //
 // @Returns
-//
+//  - Retrieved AMI ID from SSM if successful
+//  - Error if it occurs, otherwise nil on success
 //
 func getImageFromSSM(ctx context.Context, client *ssm.Client, arch string,
                      amiType string) (string, error) {

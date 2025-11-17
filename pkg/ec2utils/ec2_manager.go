@@ -66,8 +66,12 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
         return errors.New("AMI is missing from ec2CreateInstancesInput struct")
     }
 
-    if callInput.MaxCount > 1 || callInput.MinCount > 1 {
-        return errors.New("max and min counts should be greater than 0")
+    // Ensure the min and max counts are greater than one and
+    // the max is greater than or equal to the min count
+    if callInput.MaxCount < 1 || callInput.MinCount < 1 ||
+    callInput.MinCount > callInput.MaxCount {
+        return errors.New("max & min counts should be greater than 0 and " +
+                          "the max should be greater than or equal to the min")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
