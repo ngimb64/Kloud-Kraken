@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -350,7 +351,7 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
 //  - ec2Client:  Established client to EC2 service
 //  - arch:  System architecture of AMI
 //  - amiType:  The type of AMI to format in SSM parameter
-//  - fallbackNamePattern:
+//  - amiNamePattern:  The text pattern of AMI to search for
 //
 // @Returns
 //  - The retrieved AMI ID if successfull
@@ -358,7 +359,7 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
 //
 func GetAmiId(callTime time.Duration, ssmClient *ssm.Client,
               ec2Client *ec2.Client, arch string, amiType string,
-              fallbackNamePattern string) (string, error) {
+              amiNamePattern string) (string, error) {
     var err error
     // Ensure AWS API calls do not hang for longer specified timeout
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
@@ -371,13 +372,60 @@ func GetAmiId(callTime time.Duration, ssmClient *ssm.Client,
     }
 
     // Backup method using DescribeImages if SSM method fails
-    amiID, ferr := findImageByName(ctx, ec2Client, fallbackNamePattern)
+    amiID, ferr := findImageByName(ctx, ec2Client, amiNamePattern)
     if ferr != nil {
         err = errors.Join(err, fmt.Errorf("fallback DescribeImages failed - %w", ferr))
         return "", err
     }
 
     return amiID, nil
+}
+
+
+// Returns the correct AMI based on instance type and its supported drivers.
+//
+// @Parameters
+//  - instanceType:  The instance type that the AMI will be used with
+//
+// @Returns
+//  - The text pattern of AMI to search for
+//  - The AMI type
+//  - Error if it occurs, otherwise nil on success
+//
+func GetDeepLearningAmiName(instanceType string) (string, string, error) {
+    baseInstanceTypes := []string{
+        "g6f", "gr6f",
+    }
+
+    ossInstanceTypes := []string{
+        "g3", "g4dn", "g5", "g5g",
+        "g6", "g6e", "gr6", "p2",
+        "p3", "p4d", "p4de", "p5",
+        "p5e", "p5en", "p6-b200",
+        "p6e-gb200",
+    }
+
+    // Get the index of period separator in instance type
+    trimIndex := strings.Index(instanceType, ".")
+    if trimIndex == -1 {
+        return "", "", errors.New("unable to get period index in instance type")
+    }
+
+    // Get the famlily prefix of the passed in instance type
+    instanceType = instanceType[:trimIndex]
+
+    // If the passed in instance type only supported GRID/L4 drivers
+    if slices.Contains(baseInstanceTypes, instanceType) {
+        return "Deep Learning Base AMI with Single CUDA*", "ubuntu22.04", nil
+    }
+
+    // If the passed in instance type support Telsa drivers
+    if slices.Contains(ossInstanceTypes, instanceType) {
+        return "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*",
+               "ubuntu22.04/tensorflow", nil
+    }
+
+    return "", "", errors.New("unable to find supported AMI name based on instance type")
 }
 
 

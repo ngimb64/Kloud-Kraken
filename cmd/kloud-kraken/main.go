@@ -706,12 +706,18 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "Name": "kloud-kraken-ec2-client",
     }
 
+    // Get the AMI name with drivers that support corresponding instance type
+    amiName, amiType, err := awsutils.GetDeepLearningAmiName(appConfig.LocalConfig.InstanceType)
+    if err != nil {
+        return awsConfig, bootstrapOut, costMan, costErr, err
+    }
+
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Get the latest AMI for the ubuntu deep learning
-    deepLearningAmi, err := awsutils.GetAmiId(5 * time.Minute, ssmClient.Client, ec2Client.Client,
-                                              "x86_64", "ubuntu22.04/tensorflow",
-                                              "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*")
+    deepLearningAmi, err := awsutils.GetAmiId(5 * time.Minute, ssmClient.Client,
+                                              ec2Client.Client, "x86_64",
+                                              amiType, amiName)
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
@@ -999,31 +1005,31 @@ func main() {
                 }
             }()
 
-            // Terminate the EC2 instances
-            termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
-            if err != nil {
-                log.Printf("Error terminating EC2 instances:  %v", err)
-            }
+            // // Terminate the EC2 instances
+            // termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
+            // if err != nil {
+            //     log.Printf("Error terminating EC2 instances:  %v", err)
+            // }
 
-            // Iterate through list of terminated instance ids and log them
-            for _, instance := range termOutput.TerminatingInstances {
-                if logMan != nil {
-                    logMan.LogMessage("Instance state for %s: %s -> %s\n",
-                                      aws.ToString(instance.InstanceId),
-                                      instance.PreviousState.Name,
-                                      instance.CurrentState.Name)
-                } else {
-                    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                                       color.LightCyan, "+"), "",
-                                                   color.NeonAzure, "Instance state for ",
-                                                   color.RadiantAmethyst,
-                                                   aws.ToString(instance.InstanceId),
-                                                   color.NeonAzure, ": ", color.KrakenGlowGreen,
-                                                   string(instance.PreviousState.Name),
-                                                   color.NeonAzure, " -> ", color.KrakenGlowGreen,
-                                                   string(instance.CurrentState.Name)))
-                }
-            }
+            // // Iterate through list of terminated instance ids and log them
+            // for _, instance := range termOutput.TerminatingInstances {
+            //     if logMan != nil {
+            //         logMan.LogMessage("Instance state for %s: %s -> %s\n",
+            //                           aws.ToString(instance.InstanceId),
+            //                           instance.PreviousState.Name,
+            //                           instance.CurrentState.Name)
+            //     } else {
+            //         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+            //                                                            color.LightCyan, "+"), "",
+            //                                        color.NeonAzure, "Instance state for ",
+            //                                        color.RadiantAmethyst,
+            //                                        aws.ToString(instance.InstanceId),
+            //                                        color.NeonAzure, ": ", color.KrakenGlowGreen,
+            //                                        string(instance.PreviousState.Name),
+            //                                        color.NeonAzure, " -> ", color.KrakenGlowGreen,
+            //                                        string(instance.CurrentState.Name)))
+            //     }
+            // }
 
             // Terminate SSM Parameter Store VPC Interface Endpoint
             err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
