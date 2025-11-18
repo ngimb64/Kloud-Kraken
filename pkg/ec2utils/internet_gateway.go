@@ -45,7 +45,7 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     }
 
     // Create the internet gateway
-    createOut, err := Ec2Man.client.CreateInternetGateway(ctx, createCallInput)
+    createOut, err := Ec2Man.Client.CreateInternetGateway(ctx, createCallInput)
     if err != nil {
         return "", fmt.Errorf("create internet gateway - %w", err)
     }
@@ -63,7 +63,7 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     }
 
     // Allocate waiter and wait until the Internet Gateway is available
-    waiter := ec2.NewInternetGatewayExistsWaiter(Ec2Man.client)
+    waiter := ec2.NewInternetGatewayExistsWaiter(Ec2Man.Client)
     err = waiter.Wait(ctx, waiterCallInput, callTime)
     if err != nil {
         return igwId, err
@@ -75,7 +75,7 @@ func (Ec2Man *Ec2Manger) internetGatewayCreateAndAttach(callTime time.Duration,
     }
 
     // Attach the created internet gateway to the associated VPC
-    _, err = Ec2Man.client.AttachInternetGateway(ctx, attachCallInput)
+    _, err = Ec2Man.Client.AttachInternetGateway(ctx, attachCallInput)
     if err != nil {
         return "", fmt.Errorf("attach internet gateway %s to vpc %s - %w",
                               igwId, vpcId, err)
@@ -112,7 +112,7 @@ func (Ec2Man *Ec2Manger) InternetGatewayExists(callTime time.Duration,
     }
 
     // Get the Internet Gateway based on passed in Gateway ID
-    out, err := Ec2Man.client.DescribeInternetGateways(ctx, input)
+    out, err := Ec2Man.Client.DescribeInternetGateways(ctx, input)
     if err != nil {
         var apiErr smithy.APIError
 
@@ -221,7 +221,7 @@ func (Ec2Man Ec2Manger) InternetGatewayTerminator(callTime time.Duration,
     }
 
     // Detach the Internet Gateway from specified VPC
-    _, err := Ec2Man.client.DetachInternetGateway(ctx, detachCallInput)
+    _, err := Ec2Man.Client.DetachInternetGateway(ctx, detachCallInput)
     if err != nil {
         return fmt.Errorf("failed to detach internet gateway %s from VPC %s - %w",
                           igwId, vpcId, err)
@@ -232,7 +232,7 @@ func (Ec2Man Ec2Manger) InternetGatewayTerminator(callTime time.Duration,
     }
 
     // Delete the Internet Gateway
-    _, err = Ec2Man.client.DeleteInternetGateway(ctx, deleteCallInput)
+    _, err = Ec2Man.Client.DeleteInternetGateway(ctx, deleteCallInput)
     if err != nil {
         return fmt.Errorf("failed to delete internet gateway %s - %w",
                           igwId, err)

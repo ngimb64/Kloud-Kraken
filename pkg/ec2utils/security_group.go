@@ -53,7 +53,7 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     }
 
     // Create the Security Group
-    out, err := Ec2Man.client.CreateSecurityGroup(ctx, createCallInput)
+    out, err := Ec2Man.Client.CreateSecurityGroup(ctx, createCallInput)
     if err != nil {
         return "", fmt.Errorf("create security group - %w", err)
     }
@@ -70,7 +70,7 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     }
 
     // Allocate waiter and wait until the Security Group exists
-    waiter := ec2.NewSecurityGroupExistsWaiter(Ec2Man.client)
+    waiter := ec2.NewSecurityGroupExistsWaiter(Ec2Man.Client)
     err = waiter.Wait(ctx, waiterCallInput, callTime)
     if err != nil {
         return sgId, err
@@ -91,7 +91,7 @@ func (Ec2Man *Ec2Manger) securityGroupCreate(callTime time.Duration,
     }
 
     // Revoke all outbound traffic access
-    _, err = Ec2Man.client.RevokeSecurityGroupEgress(ctx, revokeCallInput)
+    _, err = Ec2Man.Client.RevokeSecurityGroupEgress(ctx, revokeCallInput)
     if err != nil {
         return sgId, fmt.Errorf("revoking inital outbound traffic - %w", err)
     }
@@ -126,7 +126,7 @@ func (Ec2Man *Ec2Manger) SecurityGroupExists(callTime time.Duration,
     }
 
     // Get the security group based on passed in ID
-    out, err := Ec2Man.client.DescribeSecurityGroups(ctx, callInput)
+    out, err := Ec2Man.Client.DescribeSecurityGroups(ctx, callInput)
     if err != nil {
         var apiErr smithy.APIError
 
@@ -216,7 +216,7 @@ func (Ec2Man Ec2Manger) SecurityGroupTerminator(callTime time.Duration,
     }
 
     // Delete the Security Group by ID
-    _, err := Ec2Man.client.DeleteSecurityGroup(ctx, deleteCallInput)
+    _, err := Ec2Man.Client.DeleteSecurityGroup(ctx, deleteCallInput)
     if err != nil {
         return fmt.Errorf("failed to delete security group %s - %w",
                           securityGroupId, err)

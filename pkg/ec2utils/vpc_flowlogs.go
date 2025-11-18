@@ -63,7 +63,7 @@ func (Ec2Man *Ec2Manger) createFlowLogToCloudWatch(callTime time.Duration,
     }
 
     // Create flow logs for passed in VPC ID in log group name
-    out, err := Ec2Man.client.CreateFlowLogs(ctx, callInput)
+    out, err := Ec2Man.Client.CreateFlowLogs(ctx, callInput)
     if err != nil {
         return "", err
     }
@@ -107,7 +107,7 @@ func (Ec2Man *Ec2Manger) VpcFlowLogExists(callTime time.Duration,
     }
 
     // Get the flow logs based off VPC ID
-    out, err := Ec2Man.client.DescribeFlowLogs(ctx, callInput)
+    out, err := Ec2Man.Client.DescribeFlowLogs(ctx, callInput)
     if err != nil {
         return false, err
     }
@@ -230,7 +230,7 @@ func (Ec2Man Ec2Manger) VpcFlowLogTerminator(callTime time.Duration,
     }
 
     // Delete the VPC flow logs
-    _, err := Ec2Man.client.DeleteFlowLogs(ctx, deleteFlowLogsInput)
+    _, err := Ec2Man.Client.DeleteFlowLogs(ctx, deleteFlowLogsInput)
     if err != nil {
         return fmt.Errorf("deleting VPC Flow Logs - %w", err)
     }

@@ -7,9 +7,11 @@ import (
 	"time"
 
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/cloudwatchutils"
+	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
@@ -24,9 +26,11 @@ func main() {
     hadError := false
     var stateConfig vpcsetup.AwsEnv
     var stateData []byte
-    stateFilePath := "../.kraken-state.yml"
     var userInput string
-    var yamlUpdates map[string]string
+    var yamlUpdates = map[string]string{}
+
+    globals.ROOT_DIR = disk.GetProjectRootDir()
+    stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
 
     fmt.Print("[!] This program is designed to delete all created AWS " +
               "resources by Kloud Kraken, to proceed enter yes:  ")
@@ -87,12 +91,14 @@ func main() {
 
     // Set up the AWS credentials based on local chain or environment variables
     awsConfig, err := awsutils.AwsConfigSetup(1 * time.Minute,
-                                              stateConfig.AwsEnv.Region)
+                                              stateConfig.AwsEnv.Region,
+                                              "kloud-kraken")
     if err != nil {
         log.Fatalf("Error loading AWS configuration:  %v", err)
     }
 
     // Establish clients to various services
+    cwlClient := cwl.NewFromConfig(awsConfig)
     ec2Client := ec2utils.Ec2NewManager(awsConfig)
     iamClient := iamutils.IamNewManager(awsConfig)
     s3Client := s3utils.S3NewManager(awsConfig)
@@ -117,9 +123,6 @@ func main() {
         log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
         hadError = true
     }
-
-    // Setup client to CloudWatch
-    cwlClient := cwl.NewFromConfig(awsConfig)
 
     if stateConfig.AwsEnv.FlowLogId != "" {
         // Delete the VPC Flow Logs

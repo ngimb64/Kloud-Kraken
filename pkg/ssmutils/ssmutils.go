@@ -15,7 +15,7 @@ import (
 
 // Struct for managing S3 bucket operations
 type SsmManager struct {
-    client    *ssm.Client
+    Client    *ssm.Client
 }
 
 // Establishes connection to SSM service and generates SSM manager struct
@@ -31,7 +31,7 @@ func SsmNewManager(config aws.Config) *SsmManager {
     ssmClient := ssm.NewFromConfig(config)
 
     return &SsmManager{
-        client:    ssmClient,
+        Client:    ssmClient,
     }
 }
 
@@ -58,7 +58,7 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
     }
 
     // Get parameter from AWS SSM Parameter Store
-    output, err := SsmMan.client.GetParameter(ctx, callInput)
+    output, err := SsmMan.Client.GetParameter(ctx, callInput)
     if err != nil {
         return "", err
     }
@@ -105,7 +105,7 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
         }
 
         // Put parameter into AWS SSM Parameter Store
-        _, err := SsmMan.client.PutParameter(ctx, callInput)
+        _, err := SsmMan.Client.PutParameter(ctx, callInput)
         // Cancel context per API call
         cancel()
         if err != nil {
@@ -148,7 +148,7 @@ func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
     }
 
     // Delete the passed in parameter from SSM Parameter Store
-    _, err := SsmMan.client.DeleteParameter(ctx, deleteCallInput)
+    _, err := SsmMan.Client.DeleteParameter(ctx, deleteCallInput)
     if err != nil {
         return err
     }

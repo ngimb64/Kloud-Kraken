@@ -51,7 +51,7 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
     }
 
     // Create the subnet
-    createOut, err := Ec2Man.client.CreateSubnet(ctx, createCallInput)
+    createOut, err := Ec2Man.Client.CreateSubnet(ctx, createCallInput)
     if err != nil {
         return "", fmt.Errorf("unable to create subnet - %w", err)
     }
@@ -63,7 +63,7 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
     }
 
     // Allocate waiter and wait until the subnet is available
-    waiter := ec2.NewSubnetAvailableWaiter(Ec2Man.client)
+    waiter := ec2.NewSubnetAvailableWaiter(Ec2Man.Client)
     err = waiter.Wait(ctx, waiterCallInput, callTime)
     if err != nil {
         return subnetID, err
@@ -77,7 +77,7 @@ func (Ec2Man *Ec2Manger) subnetCreate(callTime time.Duration, vpcId string,
     }
 
     // Configure to map to public IP address on launch
-    _, err = Ec2Man.client.ModifySubnetAttribute(ctx, modifyCallInput)
+    _, err = Ec2Man.Client.ModifySubnetAttribute(ctx, modifyCallInput)
     if err != nil {
         return "", fmt.Errorf("unable map subnet to public IP on launch - %w", err)
     }
@@ -118,7 +118,7 @@ func (Ec2Man *Ec2Manger) SubnetExists(callTime time.Duration,
     }
 
     // Describe the subnet by passed in ID
-    out, err := Ec2Man.client.DescribeSubnets(ctx, describeInput)
+    out, err := Ec2Man.Client.DescribeSubnets(ctx, describeInput)
     if err != nil {
         var apiErr smithy.APIError
 
@@ -209,7 +209,7 @@ func (Ec2Man Ec2Manger) SubnetTerminator(callTime time.Duration,
     }
 
     // Delete the subnet by passed in ID
-    _, err := Ec2Man.client.DeleteSubnet(ctx, deleteCallInput)
+    _, err := Ec2Man.Client.DeleteSubnet(ctx, deleteCallInput)
     if err != nil {
         return fmt.Errorf("failed to delete subnet (%s) - %w",
                           subnetId, err)

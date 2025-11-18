@@ -51,6 +51,7 @@ func S3NewManager(config aws.Config) *S3Manager {
 //
 func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
                                        bucketName string,
+                                       region string,
                                        tags map[string]string) (
                                        string, error) {
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -59,6 +60,13 @@ func (S3Man *S3Manager) s3BucketCreate(callTime time.Duration,
 
     callInput := &s3.CreateBucketInput{
         Bucket: aws.String(bucketName),
+    }
+
+    // If the region is not the default, set location restraint
+    if region != "us-east-1" {
+        callInput.CreateBucketConfiguration = &s3types.CreateBucketConfiguration{
+            LocationConstraint: s3types.BucketLocationConstraint(region),
+        }
     }
 
     // Create the bucket based on the bucket name in S3 manager
@@ -225,6 +233,7 @@ func (S3Man *S3Manager) S3GetObject(callTime time.Duration,
 func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
                                           bucketName string,
                                           defaultBucketName string,
+                                          region string,
                                           tags map[string]string) (
                                           string, error) {
     // If the bucket name is present in state file
@@ -242,7 +251,7 @@ func (S3Man *S3Manager) S3BucketProvision(callTime time.Duration,
     }
 
     // Create S3 bucket with default name
-    return S3Man.s3BucketCreate(callTime, defaultBucketName, tags)
+    return S3Man.s3BucketCreate(callTime, defaultBucketName, region, tags)
 }
 
 // Put an object into a S3 bucket.
@@ -280,15 +289,15 @@ func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
         // Cancel context per API call
         cancel()
         if err != nil {
+            var apiErr smithy.APIError
+
+            // If the object already exists
+            if errors.As(err, &apiErr) &&
+            apiErr.ErrorCode() == "PreconditionFailed" {
+                continue
+            }
+
             return "", err
-        }
-
-        var apiErr smithy.APIError
-
-        // If API error says object already exists
-        if errors.As(err, &apiErr) &&
-        apiErr.ErrorCode() == "PreconditionFailed" {
-            continue
         }
 
         return candidate, nil

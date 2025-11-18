@@ -1,9 +1,12 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 )
 
@@ -32,6 +35,11 @@ func SetupEc2SecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-ec2-security-group",
     }
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching EC2 security group provisioner"))
+
     // Create EC2 security group if it does not exist
     ec2SgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.AwsEnv.Ec2SecurityGroupId,
@@ -45,9 +53,19 @@ func SetupEc2SecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
     // If the security group was created, add ID to yaml updates map
     if ec2SgId != "" {
         yamlUpdates["aws_env.ec2_security_group_id"] = ec2SgId
-    // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "EC2 security group was created"))
+    // If security group already exists, use the existing ID
     } else {
         ec2SgId = stateConfig.AwsEnv.Ec2SecurityGroupId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "EC2 security group already exists"))
     }
 
     outStruct.Ec2SgId = ec2SgId
@@ -72,6 +90,11 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
                                        appConfig *conf.AppConfig,
                                        yamlUpdates map[string]string,
                                        ec2SgId string) error {
+    fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching EC2 security group rules provisioner"))
+
     // Get the DNS address from the CIDR (Ex: 192.168.0.0/24 => 192.168.0.2/32)
     dnsAddr, err := ec2Client.VpcResolverForCidr(appConfig.LocalConfig.CidrBlock)
     if err != nil {
@@ -106,6 +129,12 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
         return err
     }
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "          \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "EC2 security group rules" +
+                                   " provisioned or already exists"))
+
     return nil
 }
 
@@ -133,6 +162,11 @@ func SetupSsmSecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
         "Name": "kloud-kraken-ssm-security-group",
     }
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching SSM security group provisioner"))
+
     // Create SSM Parameter Store security group if it does not exist
     ssmSgId, err := ec2Client.SecurityGroupProvision(5 * time.Minute,
                                                      stateConfig.AwsEnv.SsmSecurityGroupId,
@@ -147,9 +181,19 @@ func SetupSsmSecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
     // If the security group was created, add ID to yaml updates map
     if ssmSgId != "" {
         yamlUpdates["aws_env.ssm_security_group_id"] = ssmSgId
-    // Otherwise use the one from YAML since it was found
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "SSM security group was created"))
+    // If security group already exists, use the existing ID
     } else {
         ssmSgId = stateConfig.AwsEnv.SsmSecurityGroupId
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "SSM security group already exists"))
     }
 
     return ssmSgId, nil
@@ -167,7 +211,24 @@ func SetupSsmSecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
 //
 func SetupSsmSecurityGroupRuleHandler(ec2Client *ec2utils.Ec2Manger,
                                       ssmSgId string) error {
+    fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching SSM security group rules provisioner"))
+
+
     // Configure TCP rule in security group for HTTPS
-    return ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ssmSgId, "0.0.0.0/0",
+    err := ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ssmSgId, "0.0.0.0/0",
                                                 "tcp", "ingress", 443, 443)
+    if err != nil {
+        return err
+    }
+
+    fmt.Println(display.CtextMulti(color.FoamWhite, "          \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "SSM security group rules " +
+                                   "provisioned or already exists"))
+
+    return nil
 }

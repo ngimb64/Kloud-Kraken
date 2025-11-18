@@ -1,11 +1,14 @@
 package vpcsetup
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
 )
@@ -24,7 +27,6 @@ import (
 //  - awsConfig:  The AWS configuration instance
 //
 // @Returns
-//  - The S3 bucket name
 //  - Error if it occurs, otherwise nil on success
 //
 func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
@@ -34,32 +36,46 @@ func SetupS3BucketHandler(ec2Client *ec2utils.Ec2Manger,
                           outStruct *VpcBootstrapOutput,
                           location string, costErr *error,
                           costMan *awscost.AwsCostManager,
-                          awsConfig aws.Config) (
-                          string, error) {
+                          awsConfig aws.Config) error {
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-s3",
     }
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Launching S3 bucket provisioner"))
 
     // Set up client to S3 service
     s3Client := s3utils.S3NewManager(awsConfig)
     // Create a S3 bucket if it does not exist
     bucketName, err := s3Client.S3BucketProvision(5 * time.Minute,
                                                   stateConfig.AwsEnv.S3BucketName,
-                                                  "kloud-kraken-s3", tags)
+                                                  "kloud-kraken-s3",
+                                                  awsConfig.Region, tags)
     if err != nil {
-        return bucketName, err
+        return err
     }
 
     // If S3 buccket created, add name to yaml updates map
     if bucketName != "" {
         yamlUpdates["aws_env.s3_bucket_name"] = bucketName
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "S3 bucket was created"))
     // Otherwise use the one from YAML since it was found
     } else {
         bucketName = stateConfig.AwsEnv.S3BucketName
+
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "$"), "",
+                                       color.NeonAzure, "S3 bucket already exists"))
     }
 
     outStruct.S3BucketName = bucketName
 
-    return bucketName, nil
+    return nil
 }

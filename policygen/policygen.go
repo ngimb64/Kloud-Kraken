@@ -10,20 +10,12 @@ import (
 //
 // @Parameters
 //  - accountId:  AWS account id (e.g. "123456789012")
-//  - bucketName:  S3 bucket name for kloud-kraken (e.g. "kloud-kraken-s3")
 //  - region:  AWS region (e.g. "us-east-1")
-//  - ssmPrefix:  SSM parameter prefix (e.g. "/kloud-kraken/")
-//  - logGroupPrefix:  CloudWatch Logs prefix (e.g. "/kloud-kraken")
-//  - roleNamePrefix:  IAM role name prefix allowed for bootstrap to
-// 					   create (e.g. "kloud-kraken-")
 //
 // @Returns
 //  - The generated permissions policy with args formatted into it
 //
-func bootstrapPolicyGen(accountId string, bucketName string,
-                        region string, ssmPrefix string,
-                        logGroupPrefix string,
-                        roleNamePrefix string) string {
+func bootstrapPolicyGen(accountId string, region string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -31,7 +23,7 @@ func bootstrapPolicyGen(accountId string, bucketName string,
       "Sid": "AssumeServerRole",
       "Effect": "Allow",
       "Action": ["sts:AssumeRole"],
-      "Resource": "arn:aws:iam::%s:role/KloudKrakenBootstrapRole"
+      "Resource": "arn:aws:iam::%s:role/KloudKrakenServerRole"
     },
 
     {
@@ -50,8 +42,8 @@ func bootstrapPolicyGen(accountId string, bucketName string,
         "s3:DeleteBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::%s",
-        "arn:aws:s3:::%s/*"
+        "arn:aws:s3:::kloud-kraken-s3",
+        "arn:aws:s3:::kloud-kraken-s3/*"
       ]
     },
 
@@ -67,7 +59,7 @@ func bootstrapPolicyGen(accountId string, bucketName string,
         "ssm:AddTagsToResource",
         "ssm:DescribeParameters"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter%s*"
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
     },
 
     {
@@ -83,7 +75,7 @@ func bootstrapPolicyGen(accountId string, bucketName string,
         "logs:DeleteLogStream",
         "logs:DeleteLogGroup"
       ],
-      "Resource": "arn:aws:logs:%s:%s:log-group:%s*"
+      "Resource": "arn:aws:logs:%s:%s:log-group:kloud-kraken*"
     },
 
     {
@@ -91,6 +83,7 @@ func bootstrapPolicyGen(accountId string, bucketName string,
       "Effect": "Allow",
       "Action": [
         "ec2:CreateVpc",
+        "ec2:ModifyVpcAttribute",
         "ec2:DescribeVpcs",
         "ec2:CreateTags",
         "ec2:DeleteVpc",
@@ -121,17 +114,13 @@ func bootstrapPolicyGen(accountId string, bucketName string,
         "ec2:DeleteVpcEndpoints",
         "ec2:CreateFlowLogs",
         "ec2:DeleteFlowLogs",
+        "ec2:DescribeFlowLogs",
         "ec2:DescribeAvailabilityZones",
         "ec2:RunInstances",
         "ec2:TerminateInstances",
         "ec2:DescribeInstances"
       ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "ec2:ResourceTag/kloud-kraken": "true"
-        }
-      }
+      "Resource": "*"
     },
 
     {
@@ -140,7 +129,7 @@ func bootstrapPolicyGen(accountId string, bucketName string,
       "Action": [
         "s3:ListBucket"
       ],
-      "Resource": "arn:aws:s3:::%s"
+      "Resource": "arn:aws:s3:::kloud-kraken-s3"
     },
 
     {
@@ -161,11 +150,15 @@ func bootstrapPolicyGen(accountId string, bucketName string,
         "iam:ListAttachedRolePolicies",
         "iam:AttachRolePolicy",
         "iam:DetachRolePolicy",
+        "iam:TagInstanceProfile",
+        "iam:TagRole",
         "iam:PassRole"
       ],
       "Resource": [
-        "arn:aws:iam::%s:role/%s*",
-        "arn:aws:iam::%s:instance-profile/%s*"
+        "arn:aws:iam::%s:role/KloudKrakenClientRole",
+        "arn:aws:iam::%s:role/KloudKrakenServerRole",
+        "arn:aws:iam::%s:role/KloudKrakenVpcFlowLogsRole",
+        "arn:aws:iam::%s:instance-profile/KloudKrakenClientRole"
       ]
     },
 
@@ -179,11 +172,8 @@ func bootstrapPolicyGen(accountId string, bucketName string,
       "Resource": "*"
     }
   ]
-}`, accountId, bucketName, bucketName,
-    region, accountId, ssmPrefix, region,
-    accountId, logGroupPrefix, bucketName,
-    accountId, roleNamePrefix, accountId,
-    roleNamePrefix)
+}`, accountId, region, accountId, region, accountId,
+    accountId, accountId, accountId, accountId)
 }
 
 
@@ -200,9 +190,7 @@ func main() {
     }
 
     // Generate the bootstrap permissions policy
-    bootPol := bootstrapPolicyGen(accountId, "kloud-kraken-s3", region,
-                                  "/kloud-kraken/tls-cert", "/kloud-kraken",
-                                  "KloudKrakenBootstrapRole")
+    bootPol := bootstrapPolicyGen(accountId, region)
 
     // Write the generated permissions policy to output file
     err := os.WriteFile("policy-out.json", []byte(bootPol), os.ModePerm)

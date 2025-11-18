@@ -472,7 +472,7 @@ DEVICES=("${ALL_DEVICES[@]:1}")
 
 RETRIES=0
 # Update, upgrade, and install needed packages for hash cracking
-until DEBIAN_FRONTEND=noninteractive apt update && apt upgrade -y && apt install -y hashcat; do
+until DEBIAN_FRONTEND=noninteractive apt install -y hashcat; do
     (( RETRIES++ ))
     # If the updates process fails 3 times due to network issues, log error and exit
     (( RETRIES >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
@@ -487,7 +487,7 @@ if (( ${#DEVICES[@]} >= 2 )); then
         # Zero out old RAID superblocks
         mdadm --zero-superblock --force "$dev"
 
-        # Remove any existing partition table (optional but safer)
+        # Remove any existing partition table
         wipefs -a "$dev"
     done
 
@@ -513,29 +513,37 @@ mkdir -p /mnt/instance-store
 # Mount the mount point if it is not already mounted
 mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
 
-# Application bootstrap
+# Quick test to ensure instance role credentials are available
+if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
+    echo "ERROR: instance profile credentials unavailable (check IAM role and IMDS access)"
+    exit 1
+fi
+
 CWD=$(pwd)
+# Copy binary to instance from S3 and set executable permissions
 aws s3 cp s3://%s/%s "$CWD"/client --region %s --no-progress
 chmod +x "$CWD"/client
-$CWD/client -applyOptimization=%t \
-            -awsRegion=%s \
-            -certSsmParam=%s \
-            -charSet1=%s \
-            -charSet2=%s \
-            -charSet3=%s \
-            -charSet4=%s \
-            -crackingMode=%s \
-            -ec2SecurityGroupId=%s \
-            -hashMask=%s \
-            -hasRuleset=%t \
-            -hashType=%s \
-            -ipAddrs=%s \
-            -isTesting=%t \
-            -logMode=%s \
-            -maxFileSizeInt64=%d \
-            -maxTransfers=%d \
-            -port=%d \
-            -workload=%s
+
+nohup $CWD/client \
+    -applyOptimization=%t \
+    -awsRegion=%s \
+    -certSsmParam=%s \
+    -charSet1=%s \
+    -charSet2=%s \
+    -charSet3=%s \
+    -charSet4=%s \
+    -crackingMode=%s \
+    -ec2SecurityGroupId=%s \
+    -hashMask=%s \
+    -hasRuleset=%t \
+    -hashType=%s \
+    -ipAddrs=%s \
+    -isTesting=%t \
+    -logMode=%s \
+    -maxFileSizeInt64=%d \
+    -maxTransfers=%d \
+    -port=%d \
+    -workload=%s > /var/log/client.log 2>&1 &
 `, bucketName, keyName,
    appConf.ClientConfig.Region, true,
    appConf.ClientConfig.Region, ssmParam,
@@ -577,7 +585,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
               costErr error, err error) {
     // Set up AWS credentials based on local chain or environment variables
     awsConfig, err = awsutils.AwsConfigSetup(1 * time.Minute,
-                                             appConfig.LocalConfig.Region)
+                                             appConfig.LocalConfig.Region,
+                                             "kloud-kraken")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, nil, err
     }
@@ -610,10 +619,21 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
+    // Ensure STS token is refreshed per execution
+    _, err = awsConfig.Credentials.Retrieve(context.Background())
+    if err != nil {
+        return awsConfig, bootstrapOut, costMan, costErr, err
+    }
+
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-ssm-tls-cert",
     }
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Uploading TLS certificate to " +
+                                   "SSM Paramter Store for client retrieval"))
 
     // Setup client to SSM
     ssmClient := ssmutils.SsmNewManager(awsConfig)
@@ -628,16 +648,21 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     bootstrapOut.SsmClient = ssmClient
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "TLS certificate uploaded to " +
-                                   "SSM Parameter Store for client retrieval"))
+                                   "SSM Parameter Store"))
 
     // Read the client binary into memory
-    binData, err := os.ReadFile("./kloud-kraken-client")
+    binData, err := os.ReadFile(globals.BIN_DIR + "/kloud-kraken-client")
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Uploading client binary to S3 bucket"))
 
     // Re-establish client to S3 with new API key set
     s3Client := s3utils.S3NewManager(awsConfig)
@@ -651,19 +676,22 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     bootstrapOut.S3Client = s3Client
 
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "Uploaded client binary to S3 bucket ",
+                                   color.RadiantAmethyst, bootstrapOut.S3BucketName))
+
     filterMap := map[string]string{
         "location": awsConfig.Region,
     }
 
-    // Add the Ec2 instances to the cost manager
+    // Add the S3 put request to the cost manager
     s3Cost := costMan.AddCostResourceToManager("s3_put_requests", filterMap,
                                                false, &costErr)
-    s3Cost.PutRequests += 1
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "Uploaded client binary to S3 bucket ",
-                                   color.RadiantAmethyst, bootstrapOut.S3BucketName))
+    if s3Cost != nil {
+        s3Cost.PutRequests += 1
+    }
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
@@ -678,8 +706,24 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "Name": "kloud-kraken-ec2-client",
     }
 
+    // Get the AMI name with drivers that support corresponding instance type
+    amiName, amiType, err := awsutils.GetDeepLearningAmiName(appConfig.LocalConfig.InstanceType)
+    if err != nil {
+        return awsConfig, bootstrapOut, costMan, costErr, err
+    }
+
+    // Re-setup new client to EC2 service with newly assumed role
+    ec2Client = ec2utils.Ec2NewManager(awsConfig)
+    // Get the latest AMI for the ubuntu deep learning
+    deepLearningAmi, err := awsutils.GetAmiId(5 * time.Minute, ssmClient.Client,
+                                              ec2Client.Client, "x86_64",
+                                              amiType, amiName)
+    if err != nil {
+        return awsConfig, bootstrapOut, costMan, costErr, err
+    }
+
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
-        AMI:              "ami-0066f213d20342af9",
+        AMI:              deepLearningAmi,
         InstanceType:     appConfig.LocalConfig.InstanceType,
         MaxCount:         appConfig.LocalConfig.NumberInstances,
         MinCount:         appConfig.LocalConfig.NumberInstances,
@@ -690,8 +734,10 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         UserData:         []byte(userData),
     }
 
-    // Re-setup new client to EC2 service with newly assumed role
-    ec2Client = ec2utils.Ec2NewManager(awsConfig)
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Creating EC2 instance(s)"))
+
     // Create number of EC2 instances based on passed in data
     err = ec2Client.Ec2CreateInstances(15 * time.Minute, ec2CreateInstancesInput)
     if err != nil {
@@ -707,7 +753,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     // Add the Ec2 instances to the cost manager
     _ = costMan.AddCostResourceToManager("ec2_instance", filterMap, true, &costErr)
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 instance creation completed"))
 
@@ -752,6 +799,14 @@ func makeServerDirs() {
     if err != nil {
         log.Fatalf("Error creating server dirs:  %v", err)
     }
+}
+
+
+// Set important paths for project to be globally accessable.
+//
+func setProjectPaths() {
+    globals.ROOT_DIR = disk.GetProjectRootDir()
+    globals.BIN_DIR = globals.ROOT_DIR + "/bin"
 }
 
 
@@ -819,6 +874,8 @@ func main() {
     // Handle selecting the YAML file if no arg provided
     // and load YAML data into struct configuration class
     appConfig := parseArgs()
+    // Set paths to project dirs
+    setProjectPaths()
     // Make the server directories
     makeServerDirs()
     // Display the kloud kraken banner
@@ -855,15 +912,24 @@ func main() {
 
     // If the program is being run in full mode (not testing)
     if !appConfig.LocalConfig.LocalTesting {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Retrieving server public IP addresses"))
+
         // Query IP lookup APIs for public IP addresses
         publicIps, err := tlsutils.GetPublicIps()
         if err != nil {
             log.Fatalf("Error getting public IP addresses:  %v", err)
         }
 
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
                                                            color.LightCyan, "$"), "",
                                        color.NeonAzure, "Server public IP addresses retrieved"))
+
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Generating server TLS PEM certificate"))
 
         // Generate the servers TLS PEM certificate and key and save in TLS manager
         err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
@@ -871,7 +937,8 @@ func main() {
             log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
         }
 
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                       display.CtextPrefix(color.KrakenPurple,
                                                            color.LightCyan, "$"), "",
                                        color.NeonAzure, "Server TLS PEM certificate " +
                                        "and key generated"))
@@ -887,7 +954,7 @@ func main() {
             defer func() {
                 if logMan != nil {
                     logMan.LogMessage("error", "Error occured during AWS cost" +
-                                        " calulcation:  %v", costErr)
+                                      " calulcation:  %v", costErr)
                 } else {
                     log.Printf("Error occured during AWS cost calulcation:  %v", costErr)
                 }
@@ -902,8 +969,8 @@ func main() {
         defer func() {
             var stateConfig vpcsetup.AwsEnv
             var stateData []byte
-            stateFilePath := "../.kraken-state.yml"
-            var yamlUpdates map[string]string
+            stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
+            var yamlUpdates = map[string]string{}
 
             // Read the data from yaml state file
             stateData, err = os.ReadFile(stateFilePath)
@@ -938,31 +1005,31 @@ func main() {
                 }
             }()
 
-            // Terminate the EC2 instances
-            termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
-            if err != nil {
-                log.Printf("Error terminating EC2 instances:  %v", err)
-            }
+            // // Terminate the EC2 instances
+            // termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
+            // if err != nil {
+            //     log.Printf("Error terminating EC2 instances:  %v", err)
+            // }
 
-            // Iterate through list of terminated instance ids and log them
-            for _, instance := range termOutput.TerminatingInstances {
-                if logMan != nil {
-                    logMan.LogMessage("Instance state for %s: %s -> %s\n",
-                                      aws.ToString(instance.InstanceId),
-                                      instance.PreviousState.Name,
-                                      instance.CurrentState.Name)
-                } else {
-                    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                                       color.LightCyan, "+"), "",
-                                                   color.NeonAzure, "Instance state for ",
-                                                   color.RadiantAmethyst,
-                                                   aws.ToString(instance.InstanceId),
-                                                   color.NeonAzure, ": ", color.KrakenGlowGreen,
-                                                   string(instance.PreviousState.Name),
-                                                   color.NeonAzure, " -> ", color.KrakenGlowGreen,
-                                                   string(instance.CurrentState.Name)))
-                }
-            }
+            // // Iterate through list of terminated instance ids and log them
+            // for _, instance := range termOutput.TerminatingInstances {
+            //     if logMan != nil {
+            //         logMan.LogMessage("Instance state for %s: %s -> %s\n",
+            //                           aws.ToString(instance.InstanceId),
+            //                           instance.PreviousState.Name,
+            //                           instance.CurrentState.Name)
+            //     } else {
+            //         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+            //                                                            color.LightCyan, "+"), "",
+            //                                        color.NeonAzure, "Instance state for ",
+            //                                        color.RadiantAmethyst,
+            //                                        aws.ToString(instance.InstanceId),
+            //                                        color.NeonAzure, ": ", color.KrakenGlowGreen,
+            //                                        string(instance.PreviousState.Name),
+            //                                        color.NeonAzure, " -> ", color.KrakenGlowGreen,
+            //                                        string(instance.CurrentState.Name)))
+            //     }
+            // }
 
             // Terminate SSM Parameter Store VPC Interface Endpoint
             err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,

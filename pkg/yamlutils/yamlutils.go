@@ -170,20 +170,100 @@ func splitPath(yamlPath string) []string {
 //  - The resulting modified yaml data
 //  - Error if it occurs, otherwise nil on success
 //
+
+
+// func UpdateYAMLBytes(yamlBytes []byte,
+//                      updates map[string]string) (
+//                      _ []byte, err error) {
+//     var doc yaml.Node
+
+//     // Decode the data in yaml node for modification
+//     err = yaml.Unmarshal(yamlBytes, &doc)
+//     if err != nil {
+//         return nil, fmt.Errorf("unmarshal yaml - %w", err)
+//     }
+
+//     // Ensure a DocumentNode with content is present
+//     if len(doc.Content) == 0 {
+//         return nil, errors.New("empty yaml document")
+//     }
+
+//     // Grab the root node
+//     root := doc.Content[0]
+
+//     // Iterate through the key-value mappings in map
+//     for rawPath, newVal := range updates {
+//         // Split any . in path with exception of \ escaped, return as slice
+//         path := splitPath(rawPath)
+
+//         // Set the node value with one parsed from map
+//         err = setNodeValue(root, path, newVal)
+//         if err != nil {
+//             return nil, fmt.Errorf("set %s - %w", rawPath, err)
+//         }
+//     }
+
+//     var buffer bytes.Buffer
+//     // Make new encoder
+//     enc := yaml.NewEncoder(&buffer)
+
+//     defer func() {
+//         // Close the encoder
+//         cerr := enc.Close()
+//         if cerr != nil {
+//             err = errors.Join(err, fmt.Errorf("closing encoder - %w", cerr))
+//         }
+//     }()
+
+//     // Set the encoding indentation to 2 spaces for yaml
+//     enc.SetIndent(2)
+//     // Encode the resulting data back to yaml
+//     err = enc.Encode(&doc)
+//     if err != nil {
+//         return nil, fmt.Errorf("encode yaml - %w", err)
+//     }
+
+//     return buffer.Bytes(), nil
+// }
+
+
 func UpdateYAMLBytes(yamlBytes []byte,
                      updates map[string]string) (
                      _ []byte, err error) {
     var doc yaml.Node
 
-    // Decode the data in yaml node for modification
-    err = yaml.Unmarshal(yamlBytes, &doc)
-    if err != nil {
-        return nil, fmt.Errorf("unmarshal yaml - %w", err)
-    }
+    // If no input bytes provided, create an empty document with an empty mapping root.
+    if len(yamlBytes) == 0 {
+        doc = yaml.Node{
+            Kind: yaml.DocumentNode,
+            Content: []*yaml.Node{
+                {
+                    Kind:    yaml.MappingNode,
+                    Tag:     "!!map",
+                    Content: []*yaml.Node{},
+                },
+            },
+        }
+    } else {
+        // Decode the data in yaml node for modification
+        err = yaml.Unmarshal(yamlBytes, &doc)
+        if err != nil {
+            return nil, fmt.Errorf("unmarshal yaml - %w", err)
+        }
 
-    // Ensure a DocumentNode with content is present
-    if len(doc.Content) == 0 {
-        return nil, errors.New("empty yaml document")
+        // If unmarshal produced no content, create an empty mapping root.
+        if len(doc.Content) == 0 {
+            doc = yaml.Node{
+                Kind: yaml.DocumentNode,
+                Content: []*yaml.Node{
+                    {
+                        Kind:    yaml.MappingNode,
+                        Tag:     "!!map",
+                        Content: []*yaml.Node{},
+                    },
+                },
+            }
+        }
     }
 
     // Grab the root node

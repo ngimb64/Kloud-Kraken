@@ -28,7 +28,7 @@ type Ec2CreateInstancesInput struct {
 
 // Struct for managing EC2 operations
 type Ec2Manger struct {
-    client      *ec2.Client
+    Client      *ec2.Client
     RunResult   *ec2.RunInstancesOutput
 }
 
@@ -45,7 +45,7 @@ func Ec2NewManager(awsConfig aws.Config) *Ec2Manger {
     ec2Client := ec2.NewFromConfig(awsConfig)
 
     return &Ec2Manger{
-        client:     ec2Client,
+        Client:     ec2Client,
     }
 }
 
@@ -66,8 +66,12 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
         return errors.New("AMI is missing from ec2CreateInstancesInput struct")
     }
 
-    if callInput.MaxCount > 1 || callInput.MinCount > 1 {
-        return errors.New("Max and min counts should be greater than 0")
+    // Ensure the min and max counts are greater than one and
+    // the max is greater than or equal to the min count
+    if callInput.MaxCount < 1 || callInput.MinCount < 1 ||
+    callInput.MinCount > callInput.MaxCount {
+        return errors.New("max & min counts should be greater than 0 and " +
+                          "the max should be greater than or equal to the min")
     }
 
     // Ensure AWS API calls do not hang for longer specified timeout
@@ -121,7 +125,7 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     }
 
     // Execute call to run the EC2 instance
-    runOutput, err := Ec2Man.client.RunInstances(ctx, createInput)
+    runOutput, err := Ec2Man.Client.RunInstances(ctx, createInput)
     if err != nil {
         return err
     }
@@ -138,7 +142,7 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     }
 
     // Allocate waiter and wait until EC2 instances are spawned
-    waiter := ec2.NewInstanceStatusOkWaiter(Ec2Man.client)
+    waiter := ec2.NewInstanceStatusOkWaiter(Ec2Man.Client)
     err = waiter.Wait(ctx, waiterCallInput, callTime)
     if err != nil {
         return err
@@ -174,7 +178,7 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
     }
 
     // Retrieve the list of available availibility zones
-    output, err := Ec2Man.client.DescribeAvailabilityZones(ctx, callInput)
+    output, err := Ec2Man.Client.DescribeAvailabilityZones(ctx, callInput)
     if err != nil {
         return nil, fmt.Errorf("failed to describe AZs - %w", err)
     }
@@ -232,7 +236,7 @@ func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
     }
 
     // Terminate all the collected instance id's
-    termOutput, err := Ec2Man.client.TerminateInstances(ctx, terminateInput)
+    termOutput, err := Ec2Man.Client.TerminateInstances(ctx, terminateInput)
     if err != nil {
         return nil, err
     }

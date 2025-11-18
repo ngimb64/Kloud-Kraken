@@ -56,7 +56,7 @@ func (Ec2Man *Ec2Manger) gatewayEndpointCreate(callTime time.Duration,
     }
 
     // Create the gateway VPC endpoint
-    out, err := Ec2Man.client.CreateVpcEndpoint(ctx, callInput)
+    out, err := Ec2Man.Client.CreateVpcEndpoint(ctx, callInput)
     if err != nil {
         return "", fmt.Errorf("create gateway vpc endpoint (%s) - %w",
                               serviceName, err)
@@ -119,7 +119,7 @@ func (Ec2Man *Ec2Manger) interfaceEndpointCreate(callTime time.Duration,
     }
 
     // Create the interface VPC endpoint
-    out, err := Ec2Man.client.CreateVpcEndpoint(ctx, callInput)
+    out, err := Ec2Man.Client.CreateVpcEndpoint(ctx, callInput)
     if err != nil {
         return "", fmt.Errorf("create interface vpc endpoint (%s) - %w",
                               serviceName, err)
@@ -291,7 +291,7 @@ func (Ec2Man *Ec2Manger) VpcEndpointExists(callTime time.Duration,
     }
 
     // Get VPC endpoint based in specified filters
-    out, err := Ec2Man.client.DescribeVpcEndpoints(ctx, callInput)
+    out, err := Ec2Man.Client.DescribeVpcEndpoints(ctx, callInput)
     if err != nil {
         var apiErr smithy.APIError
 
@@ -338,7 +338,7 @@ func (Ec2Man Ec2Manger) VpcEndpointsTerminator(callTime time.Duration,
     }
 
     // Delete the VPC endpoints
-    _, err := Ec2Man.client.DeleteVpcEndpoints(ctx, callInput)
+    _, err := Ec2Man.Client.DeleteVpcEndpoints(ctx, callInput)
     if err != nil {
         return err
     }

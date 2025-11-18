@@ -611,10 +611,10 @@ func connectRemote(ipAddrs string, port int,
                    logMan *kloudlogs.LoggerManager,
                    maxFileSizeInt64 int64) error {
     // Split the comma separated string into slice of addresses
-    addresses := strings.Split(ipAddrs, ",")
+    addresses := strings.SplitSeq(ipAddrs, ",")
 
     // Iterate through list of addresses to attempt to connect to
-    for _, addr := range addresses {
+    for addr := range addresses {
         // Define the address of the server to connect to
         serverAddress := addr + ":" + strconv.Itoa(port)
 
@@ -683,8 +683,7 @@ func main() {
     flag.BoolVar(&HashcatArgs.ApplyOptimization, "applyOptimization", false,
                  "Apply the -O flag for GPU optimization")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
-    flag.StringVar(&certSsmParam, "certSsmParam", "/kloud-kraken/tls-cert",
-                   "The parameter for TLS cert in SSM param store")
+    flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
     flag.StringVar(&HashcatArgs.CharSet1, "charSet1", "", "Custom character set 1 for masks")
     flag.StringVar(&HashcatArgs.CharSet2, "charSet2", "", "Custom character set 2 for masks")
     flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
@@ -738,7 +737,7 @@ func main() {
             log.Fatal("Missing parameter to retrieve TLS from SSM param store")
         }
 
-        // Load default config, which will include the instance-profile credentials
+        // Load instance-profile credentials vie metadata service
         awsConfig, err := config.LoadDefaultConfig(context.TODO(),
                                                    config.WithRegion(awsRegion))
         if err != nil {
