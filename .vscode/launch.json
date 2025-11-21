@@ -8,6 +8,7 @@
             "mode": "debug",
             "program": "${workspaceFolder}/cmd/kloud-kraken/main.go",
             "args": ["../../config/config.yml"],
+            "debugAdapter": "dlv-dap",
             "stopOnEntry": false,
         },
         {

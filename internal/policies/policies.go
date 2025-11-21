@@ -252,12 +252,11 @@ func VpcFlowLogsTrustPolicyGen() string {
 // Generate permissions policy for the S3 VPC Endpoint.
 //
 // @Parameters
-//  - iamArn:  The IAM ARN of S3 VPC Endpoint
-//
+//  - accountId:  The ID of the account to format in the policy
 // @Returns
-//  - The generated permissions policy with args formatted into it
+//  - The generated permissions policy
 //
-func VpcS3EndpointPolicyGen(iamArn string) string {
+func VpcS3EndpointPolicyGen(accountId string) string {
     return fmt.Sprintf(`{
   "Version": "2012-10-17",
   "Statement": [
@@ -275,13 +274,13 @@ func VpcS3EndpointPolicyGen(iamArn string) string {
         "arn:aws:s3:::kloud-kraken-s3/*"
       ],
       "Condition": {
-        "StringEquals": {
-          "aws:PrincipalArn": "%s"
+        "StringLike": {
+          "aws:PrincipalArn": "arn:aws:sts::%s:assumed-role/KloudKrakenClientRole/*"
         }
       }
     }
   ]
-}`, iamArn)
+}`, accountId)
 }
 
 

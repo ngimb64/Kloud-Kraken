@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
 	"github.com/stretchr/testify/assert"
 )
@@ -167,7 +168,7 @@ func TestCalculateTotalCost(t *testing.T) {
 
     // Create a PriceManager with a 1 hour cache TTL
 	priceMan := awscost.NewPriceManager(1 * time.Hour)
-	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(""))
+	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(*aws.NewConfig()))
     // Create the AwsCostManager but use static pricing
     costMan := awscost.NewAwsCostManager(priceMan, nil)
 

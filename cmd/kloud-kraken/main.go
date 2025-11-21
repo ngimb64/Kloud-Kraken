@@ -519,12 +519,12 @@ if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
     exit 1
 fi
 
-CWD=$(pwd)
+DIR=/opt
 # Copy binary to instance from S3 and set executable permissions
-aws s3 cp s3://%s/%s "$CWD"/client --region %s --no-progress
-chmod +x "$CWD"/client
+aws s3 cp s3://%s/%s "$DIR"/client --region %s --no-progress
+chmod +x "$DIR"/client
 
-nohup $CWD/client \
+nohup "$DIR"/client \
     -applyOptimization=%t \
     -awsRegion=%s \
     -certSsmParam=%s \
@@ -705,6 +705,11 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "kloud-kraken": "true",
         "Name": "kloud-kraken-ec2-client",
     }
+
+
+    // TODO:  figure out what went wront with AMI selection (amazon linux was selected for some reason ..
+    //        check DescribeImages function) OR simply use the stock ubuntu AMI and build out script to do everything
+
 
     // Get the AMI name with drivers that support corresponding instance type
     amiName, amiType, err := awsutils.GetDeepLearningAmiName(appConfig.LocalConfig.InstanceType)

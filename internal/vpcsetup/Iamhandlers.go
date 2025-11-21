@@ -8,7 +8,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/policies"
-	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 )
@@ -168,12 +167,6 @@ func SetupVpcFlowLogsIamRoleHandler(iamClient *iamutils.IamManager,
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-iam-vpc-flow-logs",
-    }
-
-    // Get the account ID associated with API credentials
-    outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
-    if err != nil {
-        return "", err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,

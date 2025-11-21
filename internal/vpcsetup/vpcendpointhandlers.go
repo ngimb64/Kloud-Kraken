@@ -33,15 +33,14 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                       appConfig *conf.AppConfig,
                                       yamlUpdates map[string]string,
                                       vpcId string, routeId string,
-                                      location string, costErr *error,
-                                      costMan *awscost.AwsCostManager) error {
+                                      accountId string) error {
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-s3-vpc-endpoint",
     }
 
     // Generate policy document for S3 VPC Endpoint
-    policyDocument := policies.VpcS3EndpointPolicyGen(vpcId)
+    policyDocument := policies.VpcS3EndpointPolicyGen(accountId)
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",

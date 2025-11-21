@@ -133,6 +133,15 @@ func bootstrapPolicyGen(accountId string, region string) string {
     },
 
     {
+      "Sid": "PricingGetProducts",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts"
+      ],
+      "Resource": "*"
+    },
+
+    {
       "Sid": "ManageIamRolesAndInstanceProfiles",
       "Effect": "Allow",
       "Action": [

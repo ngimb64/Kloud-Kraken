@@ -145,7 +145,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     var costErr error
     // Create a PriceManager with a 1 hour cache TTL
 	priceMan := awscost.NewPriceManager(1 * time.Hour)
-	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(awsConfig.Region))
+	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(awsConfig))
 	// Create the AwsCostManager using live-only PriceManager
 	costMan := awscost.NewAwsCostManager(priceMan, nil)
 
@@ -154,6 +154,13 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     if !exists {
         return outStruct, costMan, costErr,
                errors.New("region does not exist in region map in awsutils")
+    }
+
+    // Get the account ID associated with API credentials
+    outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
+    if err != nil {
+        return outStruct, costMan, costErr,
+               fmt.Errorf("getting accound ID - %w", err)
     }
 
     // Setup the VPC
@@ -243,7 +250,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     // Setup the S3 VPC Gateway Endpoint
     err = SetupS3VpcGatewayEndpointHandler(ec2Client, &stateConfig, appConfig,
                                            yamlUpdates, vpcId, routeId,
-                                           location, &costErr, costMan)
+                                           outStruct.AccountId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up S3 VPC Gateway Endpoint - %w", err)
