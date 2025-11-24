@@ -458,8 +458,8 @@ set -euxo pipefail
 exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
 # Get the NVMe instance store device names
-mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE |
-    awk '$2=="disk" && $1 ~ /^nvme[0-9]+n1$/ {print "/dev/" $1}')
+mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE,MOUNTPOINT |
+    awk '$2=="disk" && $1 ~ /^nvme/ && $3=="" {print "/dev/" $1}')
 
 # If no NVMe instance store drives are found, log error and exit
 if (( ${#DEVICES[@]} == 0 )); then
@@ -467,40 +467,67 @@ if (( ${#DEVICES[@]} == 0 )); then
     exit 1
 fi
 
-# Exclude the root NVMe drive
-DEVICES=("${ALL_DEVICES[@]:1}")
+export DEBIAN_FRONTEND=noninteractive
+# Add the nvidia drivers repo to apt
+add-apt-repository ppa:graphics-drivers/ppa
 
-RETRIES=0
-# Update, upgrade, and install needed packages for hash cracking
-until DEBIAN_FRONTEND=noninteractive apt install -y hashcat; do
-    (( RETRIES++ ))
-    # If the updates process fails 3 times due to network issues, log error and exit
-    (( RETRIES >= 3 )) && { echo "ERROR: apt-get install failed"; exit 1; }
-    sleep 5
-done
+# Update system and install needed packages
+apt update && apt upgrade -y
+apt install -y awscli build-essential "linux-headers-$(uname -r)"
+
+# Ensure modprobe blacklist file is created for driver installation
+{
+    printf "%%s\n" 'blacklist nouveau'
+    printf "%%s\n" 'blacklist lbm-nouveau'
+    printf "%%s\n" 'options nouveau modeset=0'
+    printf "%%s\n" 'alias nouveau off'
+    printf "%%s\n" 'alias lbm-nouveau off'
+} >> /etc/modprobe.d/blacklist-nouveau.conf
+
+printf "%%s\n" 'options nouveau modeset=0' >> /etc/modprobe.d/nouveau-kms.conf
+
+# Select the proper driver to install based on GPU family
+case "$INSTANCE_TYPE" in
+    g4*|p3*|p2*) DRIVER=470 ;;
+    *) DRIVER=535 ;;
+esac
+
+# Install correct Nvidia driver based on GPU & hashcat
+apt install -y nvidia-cuda-toolkit "nvidia-driver-${DRIVER}" ocl-icd-libopencl1
+apt install -y hashcat
+# Update ramdisk files
+update-initramfs -u
 
 STORAGE_DEVICE=""
 
 # Only attempt RAID0 if there are 2 or more drives
 if (( ${#DEVICES[@]} >= 2 )); then
-    for dev in "${DEVICES[@]}"; do
+    for DEV in "${DEVICES[@]}"; do
         # Zero out old RAID superblocks
-        mdadm --zero-superblock --force "$dev"
+        mdadm --zero-superblock --force "$DEV"
 
         # Remove any existing partition table
-        wipefs -a "$dev"
+        wipefs -a "$DEV"
     done
 
-    # Create RAID 0 setup with idenified drives if it does not already exist
+    # If RAID setup does not already exist
     if ! mdadm --detail /dev/md0 &>/dev/null; then
-        yes | mdadm --create /dev/md0 --level=0 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
+        # Wait for NVMe drives to settle before RAID setup
+        udevadm settle --timeout=30
+        # Create RAID 0 setup with idenified drives
+        yes | mdadm --create /dev/md0 --level=0 --chunk=512 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
     fi
 
     # Set STORAGE_DEVICE to RAID0
     STORAGE_DEVICE="/dev/md0"
 else
-    # Fallback to existing LVM ephemeral NVMe drive
-    STORAGE_DEVICE=$(lvs --noheadings -o lv_name,vg_name,lv_path | awk '$3!="/"' | awk '{print $3; exit}')
+    # Fallback to single NVMe drive
+    if (( ${#DEVICES[@]} >= 1 )); then
+        STORAGE_DEVICE="${DEVICES[0]}"
+    else
+        echo "ERROR: No NVMe devices available for fallback"
+        exit 2
+    fi
 fi
 
 # If filesystem for RAID drive does not exist, make it
@@ -513,37 +540,74 @@ mkdir -p /mnt/instance-store
 # Mount the mount point if it is not already mounted
 mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
 
+# Add storage drive setup for wordlists to fstab before reboot
+UUID=$(blkid -s UUID -o value "$STORAGE_DEVICE")
+printf "%%s\n" "UUID=${UUID} /mnt/instance-store ext4 defaults,noatime,nodiratime,discard 0 0" >> /etc/fstab
+mount -a
+
 # Quick test to ensure instance role credentials are available
 if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
     echo "ERROR: instance profile credentials unavailable (check IAM role and IMDS access)"
-    exit 1
+    exit 3
 fi
 
 DIR=/opt
+# Ensure /opt directory exists
+mkdir -p "$DIR"
 # Copy binary to instance from S3 and set executable permissions
 aws s3 cp s3://%s/%s "$DIR"/client --region %s --no-progress
 chmod +x "$DIR"/client
 
-nohup "$DIR"/client \
+# Create run script to launch client
+cat >/opt/run-client.sh <<-__EOF__
+#!/bin/bash
+exec /opt/client \
     -applyOptimization=%t \
-    -awsRegion=%s \
-    -certSsmParam=%s \
-    -charSet1=%s \
-    -charSet2=%s \
-    -charSet3=%s \
-    -charSet4=%s \
-    -crackingMode=%s \
-    -ec2SecurityGroupId=%s \
-    -hashMask=%s \
+    -awsRegion="%s" \
+    -certSsmParam="%s" \
+    -charSet1="%s" \
+    -charSet2="%s" \
+    -charSet3="%s" \
+    -charSet4="%s" \
+    -crackingMode="%s" \
+    -ec2SecurityGroupId="%s" \
+    -hashMask="%s" \
     -hasRuleset=%t \
-    -hashType=%s \
-    -ipAddrs=%s \
+    -hashType="%s" \
+    -ipAddrs="%s" \
     -isTesting=%t \
-    -logMode=%s \
+    -logMode="%s" \
     -maxFileSizeInt64=%d \
     -maxTransfers=%d \
     -port=%d \
-    -workload=%s > /var/log/client.log 2>&1 &
+    -workload="%s"
+__EOF__
+chmod +x "$DIR"/run-client.sh
+
+# Create systemd unit file that runs script to launch client
+cat > /etc/systemd/system/client.service <<-__EOF__
+[Unit]
+Description=Distributed Hashcat Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/run-client.sh
+Restart=always
+RestartSec=5
+StandardOutput=file:/var/log/client.log
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target
+__EOF__
+
+# Set up the client service to execute on reboot
+systemctl daemon-reload
+systemctl enable client.service
+
+reboot
 `, bucketName, keyName,
    appConf.ClientConfig.Region, true,
    appConf.ClientConfig.Region, ssmParam,

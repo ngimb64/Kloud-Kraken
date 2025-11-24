@@ -78,8 +78,17 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
 
-    // Prepare the RunInstances required inputs
     createInput := &ec2.RunInstancesInput{
+        BlockDeviceMappings: []ec2types.BlockDeviceMapping{
+            {
+                DeviceName: aws.String("/dev/xvda"),
+                Ebs: &ec2types.EbsBlockDevice{
+                    VolumeSize:          aws.Int32(30),
+                    VolumeType:          ec2types.VolumeTypeGp3,
+                    DeleteOnTermination: aws.Bool(true),
+                },
+            },
+        },
         ImageId:      aws.String(callInput.AMI),
         MaxCount:     aws.Int32(callInput.MaxCount),
         MinCount:     aws.Int32(callInput.MinCount),
