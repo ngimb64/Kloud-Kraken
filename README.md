@@ -205,13 +205,11 @@ To delete the project from AWS environment:
 
 **Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, etc.)
 
-- g4ad.*
 - g4dn.*
 - g5.*
-- g5g.*
 - g6.*
 - g6e.*
-- g6f.*
+- gr6.*
 - p3.*
 - p3dn.*
 - p4d.*

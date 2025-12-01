@@ -63,7 +63,6 @@ client_config:
   log_mode: "local"
   max_file_size: "100MB"
   max_transfers: 2
-  region: "us-west-1"
   workload: "4"
 
 local_config:
@@ -101,7 +100,6 @@ local_config:
     assert.Equal("100MB", config.ClientConfig.MaxFileSize)
     assert.Equal(int64(100 * globals.MB), config.ClientConfig.MaxFileSizeInt64)
     assert.Equal(int32(2), config.ClientConfig.MaxTransfers)
-    assert.Equal("us-west-1", config.ClientConfig.Region)
     assert.Equal("4", config.ClientConfig.Workload)
 
     // Validate local config fields to original data

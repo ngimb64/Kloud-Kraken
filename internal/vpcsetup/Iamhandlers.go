@@ -42,7 +42,7 @@ func SetupClientIamRoleHander(iamClient *iamutils.IamManager,
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := policies.ClientTrustPolicyGen()
-    permissionsPolicy := policies.ClientPermPolicyGen(appConfig.ClientConfig.Region,
+    permissionsPolicy := policies.ClientPermPolicyGen(appConfig.LocalConfig.Region,
                                                       outStruct.AccountId)
     // Create and apply the EC2 client role
     clientArn, err := iamClient.IamRoleProvision(5 * time.Minute,

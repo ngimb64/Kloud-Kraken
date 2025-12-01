@@ -10,7 +10,6 @@ client_config:
   log_mode: "both"
   max_file_size: "1GB"
   max_transfers: 2
-  region: "us-east-1"
   workload: "4"
 
 local_config:

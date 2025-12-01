@@ -424,6 +424,7 @@ func startServer(appConfig *conf.AppConfig,
 //
 // @Parameters
 //  - appConf:  The configuration instance that stores program YAML data
+//  - bucketName:  Name of S3 bucket where client binary is stored
 //  - keyName:  The name of the key of the S3 bucket
 //  - ipAddrs:  Slice of IP addresses to be formatted into CSV string
 //  - ssmParam:  The path where the certificate is stored in SSM param store
@@ -468,9 +469,6 @@ if (( ${#DEVICES[@]} == 0 )); then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-# Add the nvidia drivers repo to apt
-add-apt-repository ppa:graphics-drivers/ppa
-
 # Update system and install needed packages
 apt update && apt upgrade -y
 apt install -y awscli build-essential "linux-headers-$(uname -r)"
@@ -486,16 +484,19 @@ apt install -y awscli build-essential "linux-headers-$(uname -r)"
 
 printf "%%s\n" 'options nouveau modeset=0' >> /etc/modprobe.d/nouveau-kms.conf
 
-# Select the proper driver to install based on GPU family
-case "$INSTANCE_TYPE" in
-    g4*|p3*|p2*) DRIVER=470 ;;
-    *) DRIVER=535 ;;
-esac
+# Add NVIDIA CUDA repo for Tesla GPUs
+CUDA_DISTRO=ubuntu2204
+wget https://developer.download.nvidia.com/compute/cuda/repos/${CUDA_DISTRO}/x86_64/cuda-keyring_1.1-1_all.deb
+dpkg -i cuda-keyring_1.1-1_all.deb
+apt update
 
-# Install correct Nvidia driver based on GPU & hashcat
-apt install -y nvidia-cuda-toolkit "nvidia-driver-${DRIVER}" ocl-icd-libopencl1
+# Installs correct Tesla driver dynamically
+apt install -y cuda-drivers
+# CUDA Toolkit installation
+apt install -y nvidia-cuda-toolkit ocl-icd-libopencl1
+# Hashcat installation
 apt install -y hashcat
-# Update ramdisk files
+# Rebuild initramfs
 update-initramfs -u
 
 STORAGE_DEVICE=""
@@ -515,14 +516,15 @@ if (( ${#DEVICES[@]} >= 2 )); then
         # Wait for NVMe drives to settle before RAID setup
         udevadm settle --timeout=30
         # Create RAID 0 setup with idenified drives
-        yes | mdadm --create /dev/md0 --level=0 --chunk=512 --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
+        yes | mdadm --create /dev/md0 --level=0 --chunk=512 \
+                    --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
     fi
 
     # Set STORAGE_DEVICE to RAID0
     STORAGE_DEVICE="/dev/md0"
 else
     # Fallback to single NVMe drive
-    if (( ${#DEVICES[@]} >= 1 )); then
+    if (( ${#DEVICES[@]} > 0 )); then
         STORAGE_DEVICE="${DEVICES[0]}"
     else
         echo "ERROR: No NVMe devices available for fallback"
@@ -542,7 +544,8 @@ mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
 
 # Add storage drive setup for wordlists to fstab before reboot
 UUID=$(blkid -s UUID -o value "$STORAGE_DEVICE")
-printf "%%s\n" "UUID=${UUID} /mnt/instance-store ext4 defaults,noatime,nodiratime,discard 0 0" >> /etc/fstab
+printf "%%s\n" "UUID=${UUID} /mnt/instance-store ext4 \
+    defaults,noatime,nodiratime,discard 0 0" >> /etc/fstab
 mount -a
 
 # Quick test to ensure instance role credentials are available
@@ -609,8 +612,8 @@ systemctl enable client.service
 
 reboot
 `, bucketName, keyName,
-   appConf.ClientConfig.Region, true,
-   appConf.ClientConfig.Region, ssmParam,
+   appConf.LocalConfig.Region, true,
+   appConf.LocalConfig.Region, ssmParam,
    appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
    appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
    appConf.ClientConfig.CrackingMode, ec2SgId,
@@ -770,29 +773,18 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         "Name": "kloud-kraken-ec2-client",
     }
 
-
-    // TODO:  figure out what went wront with AMI selection (amazon linux was selected for some reason ..
-    //        check DescribeImages function) OR simply use the stock ubuntu AMI and build out script to do everything
-
-
-    // Get the AMI name with drivers that support corresponding instance type
-    amiName, amiType, err := awsutils.GetDeepLearningAmiName(appConfig.LocalConfig.InstanceType)
-    if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
-    }
-
     // Re-setup new client to EC2 service with newly assumed role
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Get the latest AMI for the ubuntu deep learning
-    deepLearningAmi, err := awsutils.GetAmiId(5 * time.Minute, ssmClient.Client,
-                                              ec2Client.Client, "x86_64",
-                                              amiType, amiName)
+    amiId, err := awsutils.GetAmiId(5 * time.Minute, ec2Client.Client, "x86_64",
+                                    "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+                                    []string{"099720109477"})
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
 
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
-        AMI:              deepLearningAmi,
+        AMI:              amiId,
         InstanceType:     appConfig.LocalConfig.InstanceType,
         MaxCount:         appConfig.LocalConfig.NumberInstances,
         MinCount:         appConfig.LocalConfig.NumberInstances,

@@ -29,7 +29,6 @@ type ClientConfig struct {
     MaxFileSize       string `yaml:"max_file_size"`
     MaxFileSizeInt64  int64  `yaml:"-"`
     MaxTransfers      int32  `yaml:"max_transfers"`
-    Region            string `yaml:"region"`
     Workload          string `yaml:"workload"`
 }
 
@@ -142,11 +141,6 @@ func validateClientConfig(clientConfig *ClientConfig) error {
     // If the max_transfers was less than one
     if !validate.ValidateMaxTransfers(clientConfig.MaxTransfers) {
         return fmt.Errorf("improper max_transfers specified")
-    }
-
-    // If an improper region was specified in client config
-    if !awsutils.ValidateRegion(clientConfig.Region) {
-        return fmt.Errorf("improper region specified")
     }
 
     // If the workload was not in supported profiles
