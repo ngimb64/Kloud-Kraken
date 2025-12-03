@@ -468,51 +468,31 @@ if (( ${#DEVICES[@]} == 0 )); then
     exit 1
 fi
 
+# Environment variables for non-interactive installs
 export DEBIAN_FRONTEND=noninteractive
-# Update system and install needed packages
-apt update && apt upgrade -y
-apt install -y awscli build-essential "linux-headers-$(uname -r)"
+export NEEDRESTART_S=no               # Prevent "services need restart" prompts
+export APT_LISTCHANGES_FRONTEND=none  # Suppress changelog prompts
 
-# Ensure modprobe blacklist file is created for driver installation
-{
-    printf "%%s\n" 'blacklist nouveau'
-    printf "%%s\n" 'blacklist lbm-nouveau'
-    printf "%%s\n" 'options nouveau modeset=0'
-    printf "%%s\n" 'alias nouveau off'
-    printf "%%s\n" 'alias lbm-nouveau off'
-} >> /etc/modprobe.d/blacklist-nouveau.conf
-
-printf "%%s\n" 'options nouveau modeset=0' >> /etc/modprobe.d/nouveau-kms.conf
-
-# Add NVIDIA CUDA repo for Tesla GPUs
-CUDA_DISTRO=ubuntu2204
-wget https://developer.download.nvidia.com/compute/cuda/repos/${CUDA_DISTRO}/x86_64/cuda-keyring_1.1-1_all.deb
-dpkg -i cuda-keyring_1.1-1_all.deb
-apt update
-
-# Installs correct Tesla driver dynamically
-apt install -y cuda-drivers
-# CUDA Toolkit installation
-apt install -y nvidia-cuda-toolkit ocl-icd-libopencl1
 # Hashcat installation
-apt install -y hashcat
-# Rebuild initramfs
-update-initramfs -u
+apt install -qy \
+  -o Dpkg::Options::="--force-confdef" \
+  -o Dpkg::Options::="--force-confold" \
+  hashcat
 
 STORAGE_DEVICE=""
 
 # Only attempt RAID0 if there are 2 or more drives
 if (( ${#DEVICES[@]} >= 2 )); then
-    for DEV in "${DEVICES[@]}"; do
-        # Zero out old RAID superblocks
-        mdadm --zero-superblock --force "$DEV"
-
-        # Remove any existing partition table
-        wipefs -a "$DEV"
-    done
-
     # If RAID setup does not already exist
     if ! mdadm --detail /dev/md0 &>/dev/null; then
+        # Iterate through NVMe devices
+        for DEV in "${DEVICES[@]}"; do
+            # Zero out old RAID superblocks
+            mdadm --zero-superblock --force "$DEV"
+            # Remove any existing partition table
+            wipefs -a "$DEV"
+        done
+
         # Wait for NVMe drives to settle before RAID setup
         udevadm settle --timeout=30
         # Create RAID 0 setup with idenified drives
@@ -542,16 +522,15 @@ mkdir -p /mnt/instance-store
 # Mount the mount point if it is not already mounted
 mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
 
-# Add storage drive setup for wordlists to fstab before reboot
-UUID=$(blkid -s UUID -o value "$STORAGE_DEVICE")
-printf "%%s\n" "UUID=${UUID} /mnt/instance-store ext4 \
-    defaults,noatime,nodiratime,discard 0 0" >> /etc/fstab
-mount -a
-
 # Quick test to ensure instance role credentials are available
 if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
-    echo "ERROR: instance profile credentials unavailable (check IAM role and IMDS access)"
+    echo "ERROR: instance profile credentials unavailable (check IAM role perms)"
     exit 3
+fi
+
+# Ensure nvidia-smi output ensures GPU is working
+if ! DRIVER_ERR=$(nvidia-smi 2>&1); then
+    printf "ERROR: nvidia-smi - %%s\n" "$DRIVER_ERR"
 fi
 
 DIR=/opt
@@ -564,6 +543,7 @@ chmod +x "$DIR"/client
 # Create run script to launch client
 cat >/opt/run-client.sh <<-__EOF__
 #!/bin/bash
+
 exec /opt/client \
     -applyOptimization=%t \
     -awsRegion="%s" \
@@ -600,17 +580,15 @@ ExecStart=/opt/run-client.sh
 Restart=always
 RestartSec=5
 StandardOutput=file:/var/log/client.log
-StandardError=inherit
+StandardError=file:/var/log/client.log
 
 [Install]
 WantedBy=multi-user.target
 __EOF__
 
-# Set up the client service to execute on reboot
+# Set up the client service to execute
 systemctl daemon-reload
-systemctl enable client.service
-
-reboot
+systemctl enable --now client.service
 `, bucketName, keyName,
    appConf.LocalConfig.Region, true,
    appConf.LocalConfig.Region, ssmParam,
@@ -777,8 +755,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Get the latest AMI for the ubuntu deep learning
     amiId, err := awsutils.GetAmiId(5 * time.Minute, ec2Client.Client, "x86_64",
-                                    "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
-                                    []string{"099720109477"})
+                                    "Deep Learning Base AMI with Single CUDA (Ubuntu 22.04) *",
+                                    []string{"amazon"})
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }

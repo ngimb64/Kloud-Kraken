@@ -1,13 +1,10 @@
-- Double check testing driver setup of user data script and ensure script executes without any prompts
+- Archive removed code into local archive for later use
 
 - Run system testing in AWS environment
 
 - Figure out the error with pricing system related to filters not finding any results
 
 - Optimize awscost and add cost prediction functionality
-
-- Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
-    - Ensure to update permissions policies as needed
 
 - Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 
@@ -17,5 +14,11 @@
     - Also look into using testing lib for file related operations instead of os
 
 - Implement unit tests for packages that need them
+
+- Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
+    - Ensure to update permissions policies as needed
+
+- Look into using packer to create custom AMI tailored to the project with saved driver install code
+    - When implemented adjust code to use kloud-kraken AMI if it is available other wise fall back to deep learning base AMI
 
 - Optimize wordlist merging and file shaving logic with custom rust programs

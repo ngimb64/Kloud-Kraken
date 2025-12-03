@@ -16,7 +16,7 @@ local_config:
   cidr_block: "192.168.0.0/25"
   hash_file_path: "/home/thebugfather/Documents/project_testing/test-hashes"
   iam_username: "TheBugFather"
-  instance_type: "g6f.xlarge"
+  instance_type: "g4dn.xlarge"
   listener_port: 7003
   load_dir: "/home/thebugfather/Documents/project_testing/project_data"
   local_testing: false

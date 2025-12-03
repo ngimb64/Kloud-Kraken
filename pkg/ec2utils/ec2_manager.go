@@ -16,6 +16,7 @@ import (
 // Struct for storing Ec2CreateInstances call input
 type Ec2CreateInstancesInput struct {
     AMI              string
+    EbsSize          int32              // Optional
     InstanceType     string             // Optional
     MaxCount         int32
     MinCount         int32
@@ -79,19 +80,23 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     defer cancel()
 
     createInput := &ec2.RunInstancesInput{
-        BlockDeviceMappings: []ec2types.BlockDeviceMapping{
+        ImageId:      aws.String(callInput.AMI),
+        MaxCount:     aws.Int32(callInput.MaxCount),
+        MinCount:     aws.Int32(callInput.MinCount),
+    }
+
+    // If non-default EBS volume size is set, set the block device mapping
+    if callInput.EbsSize > 0 {
+        createInput.BlockDeviceMappings = []ec2types.BlockDeviceMapping{
             {
                 DeviceName: aws.String("/dev/xvda"),
                 Ebs: &ec2types.EbsBlockDevice{
-                    VolumeSize:          aws.Int32(30),
+                    VolumeSize:          aws.Int32(callInput.EbsSize),
                     VolumeType:          ec2types.VolumeTypeGp3,
                     DeleteOnTermination: aws.Bool(true),
                 },
             },
-        },
-        ImageId:      aws.String(callInput.AMI),
-        MaxCount:     aws.Int32(callInput.MaxCount),
-        MinCount:     aws.Int32(callInput.MinCount),
+        }
     }
 
     // If there is an instance type to apply
