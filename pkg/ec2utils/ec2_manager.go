@@ -17,6 +17,7 @@ import (
 type Ec2CreateInstancesInput struct {
     AMI              string
     EbsSize          int32              // Optional
+    HasWaiter        bool               // Optional
     InstanceType     string             // Optional
     MaxCount         int32
     MinCount         int32
@@ -144,22 +145,25 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
         return err
     }
 
-    var instanceIDs []string
+    // If there is a status OK waiter
+    if callInput.HasWaiter {
+        var instanceIDs []string
 
-    // Add the instance IDs from run output to list
-    for _, inst := range runOutput.Instances {
-        instanceIDs = append(instanceIDs, *inst.InstanceId)
-    }
+        // Add the instance IDs from run output to list
+        for _, inst := range runOutput.Instances {
+            instanceIDs = append(instanceIDs, *inst.InstanceId)
+        }
 
-    waiterCallInput := &ec2.DescribeInstanceStatusInput{
-        InstanceIds: instanceIDs,
-    }
+        waiterCallInput := &ec2.DescribeInstanceStatusInput{
+            InstanceIds: instanceIDs,
+        }
 
-    // Allocate waiter and wait until EC2 instances are spawned
-    waiter := ec2.NewInstanceStatusOkWaiter(Ec2Man.Client)
-    err = waiter.Wait(ctx, waiterCallInput, callTime)
-    if err != nil {
-        return err
+        // Allocate waiter and wait until EC2 instances are spawned
+        waiter := ec2.NewInstanceStatusOkWaiter(Ec2Man.Client)
+        err = waiter.Wait(ctx, waiterCallInput, callTime)
+        if err != nil {
+            return err
+        }
     }
 
     // Assign run API call to EC2 manager struct

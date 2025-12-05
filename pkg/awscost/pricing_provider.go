@@ -78,13 +78,6 @@ func (pricingProvider *AWSPricingProvider) GetPrice(ctx context.Context,
 
     var sdkFilters []pricetypes.Filter
 
-    // ensure service code is set for safety
-    sdkFilters = append(sdkFilters, pricetypes.Filter{
-        Field: aws.String("ServiceCode"),
-        Type:  pricetypes.FilterTypeTermMatch,
-        Value: aws.String(serviceCode),
-    })
-
     // Iterate through the map of filters
     for key, value := range filters {
         if key == "" || value == "" {

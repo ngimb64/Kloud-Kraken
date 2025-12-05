@@ -1,12 +1,11 @@
-- Archive removed code into local archive for later use
+- Look into pricing system retrieving wrong prices
+    - Try adding more filters to ensure correct prices are retrieved
 
 - Run system testing in AWS environment
 
-- Figure out the error with pricing system related to filters not finding any results
+- Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 
 - Optimize awscost and add cost prediction functionality
-
-- Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 
 - Re-run system testing in AWS environment
 

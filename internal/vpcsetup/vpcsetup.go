@@ -63,6 +63,7 @@ type VpcBootstrapOutput struct {
 // @Parameters
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - awsConfig:  The configuration to access AWS environment
+//  - location:  The human readable location version of region
 //  - ec2Client:  Pointer to EC2 service client management struct
 //  - iamClient:  Pointer to IAM service client management struct
 //  - stsClient:  The STS service client management struct
@@ -75,6 +76,7 @@ type VpcBootstrapOutput struct {
 //
 func VpcBootstrap(appConfig *conf.AppConfig,
                   awsConfig aws.Config,
+                  location string,
                   ec2Client *ec2utils.Ec2Manger,
                   iamClient *iamutils.IamManager,
                   stsClient sts.Client) (
@@ -148,13 +150,6 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(awsConfig))
 	// Create the AwsCostManager using live-only PriceManager
 	costMan := awscost.NewAwsCostManager(priceMan, nil)
-
-    // Get human readable location string based off region for cost calculation
-    location, exists := awsutils.RegionToLocation(awsConfig.Region)
-    if !exists {
-        return outStruct, costMan, costErr,
-               errors.New("region does not exist in region map in awsutils")
-    }
 
     // Get the account ID associated with API credentials
     outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)

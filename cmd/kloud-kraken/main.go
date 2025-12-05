@@ -458,9 +458,12 @@ set -euxo pipefail
 # Captures both STDOUT & STDERR, sending everything to user data log file
 exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
+ROOT_PART=$(findmnt -no SOURCE /)
+ROOT_DISK=$(lsblk -no PKNAME "$ROOT_PART")
+
 # Get the NVMe instance store device names
-mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE,MOUNTPOINT |
-    awk '$2=="disk" && $1 ~ /^nvme/ && $3=="" {print "/dev/" $1}')
+mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE |
+    awk -v root="$ROOT_DISK" '$2=="disk" && $1 ~ /^nvme/ && $1 != root {print "/dev/" $1}')
 
 # If no NVMe instance store drives are found, log error and exit
 if (( ${#DEVICES[@]} == 0 )); then
@@ -481,10 +484,14 @@ apt install -qy \
 
 STORAGE_DEVICE=""
 
-# Only attempt RAID0 if there are 2 or more drives
-if (( ${#DEVICES[@]} >= 2 )); then
+# Only attempt RAID0 if there is more than one drive
+if (( ${#DEVICES[@]} > 1 )); then
     # If RAID setup does not already exist
     if ! mdadm --detail /dev/md0 &>/dev/null; then
+        # Sort devices to ensure proper numerical order
+        IFS=$'\n' DEVICES=($(sort <<<"${DEVICES[*]}"))
+        unset IFS
+
         # Iterate through NVMe devices
         for DEV in "${DEVICES[@]}"; do
             # Zero out old RAID superblocks
@@ -636,6 +643,12 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
         return awsConfig, bootstrapOut, costMan, nil, err
     }
 
+    // Get human readable location string based off region for cost calculation
+    location, exists := awsutils.RegionToLocation(awsConfig.Region)
+    if !exists {
+        return awsConfig, bootstrapOut, costMan, nil, err
+    }
+
     // Establish clients to various services
     ec2Client := ec2utils.Ec2NewManager(awsConfig)
     iamClient := iamutils.IamNewManager(awsConfig)
@@ -643,8 +656,8 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Set up Kloud Kraken VPC and its associated components
     bootstrapOut, costMan, costErr, err = vpcsetup.VpcBootstrap(appConfig, awsConfig,
-                                                                ec2Client, iamClient,
-                                                                *stsClient)
+                                                                location, ec2Client,
+                                                                iamClient, *stsClient)
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
@@ -728,7 +741,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
                                    color.RadiantAmethyst, bootstrapOut.S3BucketName))
 
     filterMap := map[string]string{
-        "location": awsConfig.Region,
+        "location": location,
     }
 
     // Add the S3 put request to the cost manager
@@ -785,7 +798,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     filterMap = map[string]string{
         "instanceType": appConfig.LocalConfig.InstanceType,
-        "location": awsConfig.Region,
+        "location": location,
         "operatingSystem":"Linux",
     }
 
