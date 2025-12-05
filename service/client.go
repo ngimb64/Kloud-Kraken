@@ -402,9 +402,8 @@ func processTransfer(connection net.Conn, buffer []byte,
         if err != nil {
             logMan.LogMessage("Error", "Error provisioning security group rule for file transfer",
                               zap.Int32("Port", port32))
+            return
         }
-
-        return
     }
 
     // Make a connection to the client for file transfer
@@ -518,7 +517,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         diskPath = "/"
     // If the program is being run in full mode (not testing)
     } else {
-        // Query the /mnt/instance-store dir for total space
+        // Query instance store path for total space
         diskPath = DataPath
     }
 
@@ -684,6 +683,7 @@ func main() {
                  "Apply the -O flag for GPU optimization")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
     flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
+    flag.StringVar(&DataPath, "dataPath", "/tmp", "Path to directory where wordlist data is stored")
     flag.StringVar(&HashcatArgs.CharSet1, "charSet1", "", "Custom character set 1 for masks")
     flag.StringVar(&HashcatArgs.CharSet2, "charSet2", "", "Custom character set 2 for masks")
     flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
@@ -709,14 +709,6 @@ func main() {
 
     // Ensure the max transfers is proper data type
     MaxTransfersInt32 = int32(maxTransfers)
-
-    // If the program is being run in full mode
-    if !IsTesting {
-        DataPath = "/mnt/instance-store"
-    // If the program is being run in testing mode
-    } else {
-        DataPath = "/tmp"
-    }
 
     // Join the base path to the data folders to be created
     HashesPath = path.Join(DataPath, "hashes")

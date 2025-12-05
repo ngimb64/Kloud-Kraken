@@ -18,18 +18,19 @@
             "mode": "debug",
             "program": "${workspaceFolder}/service/client.go",
             "args": [
-                "-ipAddrs=10.0.0.17",
-                "-port=7003",
-                "-awsRegion=us-east-1",
-                "-maxFileSizeInt64=17179869184",
-                "-crackingMode=0",
-                "-hashType=1700",
                 "-applyOptimization=false",
-                "-workload=3",
-                "-maxTransfers=2",
-                "-logMode=local",
+                "-awsRegion=us-east-1",
+                "-crackingMode=0",
+                "-dataPath=/tmp",
+                "-hashType=1700",
+                "-ipAddrs=10.0.0.17",
                 "-isTesting=true",
-                "-testPemCert=/tmp/tls-cert.pem"
+                "-logMode=local",
+                "-maxFileSizeInt64=17179869184",
+                "-maxTransfers=2",
+                "-port=7003",
+                "-testPemCert=/tmp/tls-cert.pem",
+                "-workload=3"
             ],
             "stopOnEntry": false
         }

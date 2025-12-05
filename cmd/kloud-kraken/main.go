@@ -466,74 +466,49 @@ mapfile -t DEVICES < <(lsblk -d -n -o NAME,TYPE |
     awk -v root="$ROOT_DISK" '$2=="disk" && $1 ~ /^nvme/ && $1 != root {print "/dev/" $1}')
 
 # If no NVMe instance store drives are found, log error and exit
-if (( ${#DEVICES[@]} == 0 )); then
+if (( ${#DEVICES[@]} < 1 )); then
     echo "ERROR: no NVMe instance-store devices found"
     exit 1
 fi
 
+# Use the first NVMe instance store device
+STORAGE_DEVICE="${DEVICES[0]}"
+
+# Detect if the device is already mounted
+EXISTING_MOUNT=$(lsblk -no MOUNTPOINT "$STORAGE_DEVICE" | tr -d ' ')
+
+if [[ -n "$EXISTING_MOUNT" ]]; then
+    echo "Instance store already mounted at $EXISTING_MOUNT"
+    INSTANCE_STORE_PATH="$EXISTING_MOUNT"
+else
+    echo "Instance store not mounted yet — mounting to /mnt/instance-store"
+    mkdir -p /mnt/instance-store
+
+    # Only create filesystem if device truly has none
+    if ! blkid "$STORAGE_DEVICE" &>/dev/null; then
+        mkfs.ext4 -F "$STORAGE_DEVICE"
+    fi
+
+    mount "$STORAGE_DEVICE" /mnt/instance-store
+    INSTANCE_STORE_PATH="/mnt/instance-store"
+fi
+
+# Quick test to ensure instance role credentials are available
+if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
+    echo "ERROR: instance profile credentials unavailable (check IAM role perms)"
+    exit 2
+fi
+
 # Environment variables for non-interactive installs
 export DEBIAN_FRONTEND=noninteractive
-export NEEDRESTART_S=no               # Prevent "services need restart" prompts
-export APT_LISTCHANGES_FRONTEND=none  # Suppress changelog prompts
+export NEEDRESTART_S=no                # Prevent "services need restart" prompts
+export APT_LISTCHANGES_FRONTEND=none   # Suppress changelog prompts
 
 # Hashcat installation
 apt install -qy \
   -o Dpkg::Options::="--force-confdef" \
   -o Dpkg::Options::="--force-confold" \
   hashcat
-
-STORAGE_DEVICE=""
-
-# Only attempt RAID0 if there is more than one drive
-if (( ${#DEVICES[@]} > 1 )); then
-    # If RAID setup does not already exist
-    if ! mdadm --detail /dev/md0 &>/dev/null; then
-        # Sort devices to ensure proper numerical order
-        IFS=$'\n' DEVICES=($(sort <<<"${DEVICES[*]}"))
-        unset IFS
-
-        # Iterate through NVMe devices
-        for DEV in "${DEVICES[@]}"; do
-            # Zero out old RAID superblocks
-            mdadm --zero-superblock --force "$DEV"
-            # Remove any existing partition table
-            wipefs -a "$DEV"
-        done
-
-        # Wait for NVMe drives to settle before RAID setup
-        udevadm settle --timeout=30
-        # Create RAID 0 setup with idenified drives
-        yes | mdadm --create /dev/md0 --level=0 --chunk=512 \
-                    --raid-devices=${#DEVICES[@]} "${DEVICES[@]}"
-    fi
-
-    # Set STORAGE_DEVICE to RAID0
-    STORAGE_DEVICE="/dev/md0"
-else
-    # Fallback to single NVMe drive
-    if (( ${#DEVICES[@]} > 0 )); then
-        STORAGE_DEVICE="${DEVICES[0]}"
-    else
-        echo "ERROR: No NVMe devices available for fallback"
-        exit 2
-    fi
-fi
-
-# If filesystem for RAID drive does not exist, make it
-if ! blkid "$STORAGE_DEVICE" &>/dev/null; then
-    mkfs.ext4 -F "$STORAGE_DEVICE"
-fi
-
-# Create mount point for instances store
-mkdir -p /mnt/instance-store
-# Mount the mount point if it is not already mounted
-mountpoint -q /mnt/instance-store || mount "$STORAGE_DEVICE" /mnt/instance-store
-
-# Quick test to ensure instance role credentials are available
-if ! aws sts get-caller-identity --output text >/dev/null 2>&1; then
-    echo "ERROR: instance profile credentials unavailable (check IAM role perms)"
-    exit 3
-fi
 
 # Ensure nvidia-smi output ensures GPU is working
 if ! DRIVER_ERR=$(nvidia-smi 2>&1); then
@@ -546,6 +521,13 @@ mkdir -p "$DIR"
 # Copy binary to instance from S3 and set executable permissions
 aws s3 cp s3://%s/%s "$DIR"/client --region %s --no-progress
 chmod +x "$DIR"/client
+
+# Allow outbound on port so client can connect back to server
+aws ec2 authorize-security-group-egress \
+    --group-id %s \
+    --protocol tcp \
+    --port %d \
+    --cidr 0.0.0.0/0
 
 # Create run script to launch client
 cat >/opt/run-client.sh <<-__EOF__
@@ -560,6 +542,7 @@ exec /opt/client \
     -charSet3="%s" \
     -charSet4="%s" \
     -crackingMode="%s" \
+    -dataPath="$INSTANCE_STORE_PATH" \
     -ec2SecurityGroupId="%s" \
     -hashMask="%s" \
     -hasRuleset=%t \
@@ -596,16 +579,15 @@ __EOF__
 # Set up the client service to execute
 systemctl daemon-reload
 systemctl enable --now client.service
-`, bucketName, keyName,
-   appConf.LocalConfig.Region, true,
-   appConf.LocalConfig.Region, ssmParam,
-   appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
+`, bucketName, keyName, appConf.LocalConfig.Region, ec2SgId,
+   appConf.LocalConfig.ListenerPort, true, appConf.LocalConfig.Region,
+   ssmParam, appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
    appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
-   appConf.ClientConfig.CrackingMode, ec2SgId,
-   appConf.ClientConfig.HashMask, hasRuleset, appConf.ClientConfig.HashType,
-   ipAddrsCsv, false, appConf.ClientConfig.LogMode,
-   appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
-   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
+   appConf.ClientConfig.CrackingMode, ec2SgId, appConf.ClientConfig.HashMask,
+   hasRuleset, appConf.ClientConfig.HashType, ipAddrsCsv, false,
+   appConf.ClientConfig.LogMode, appConf.ClientConfig.MaxFileSizeInt64,
+   appConf.ClientConfig.MaxTransfers, appConf.LocalConfig.ListenerPort,
+   appConf.ClientConfig.Workload)
 
     return data, nil
 }
