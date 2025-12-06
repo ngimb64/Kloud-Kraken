@@ -36,10 +36,18 @@ func ClientPermPolicyGen(region string, accountId string) string {
     },
 
     {
+      "Sid": "CloudWatchCreateGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup"
+      ],
+      "Resource": "*"
+    },
+
+    {
       "Sid": "CloudWatchLogging",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents",
         "logs:DescribeLogStreams",
@@ -47,7 +55,10 @@ func ClientPermPolicyGen(region string, accountId string) string {
         "logs:TagLogGroup",
         "logs:TagResource"
       ],
-      "Resource": "arn:aws:logs:%s:%s:log-group:/kloud-kraken*"
+      "Resource": [
+        "arn:aws:logs:%s:%s:log-group:kloud-kraken-*",
+        "arn:aws:logs:%s:%s:log-group:kloud-kraken-*:*"
+      ]
     },
 
     {
@@ -61,7 +72,8 @@ func ClientPermPolicyGen(region string, accountId string) string {
       "Resource": "arn:aws:ec2:%s:%s:security-group/*"
     }
   ]
-}`, region, accountId, region, accountId, region, accountId)
+}`, region, accountId, region, accountId,
+    region, accountId, region, accountId)
 }
 
 
@@ -253,11 +265,11 @@ func VpcFlowLogsTrustPolicyGen() string {
 //  - The generated permissions policy
 //
 func VpcS3EndpointPolicyGen(accountId string) string {
-    return fmt.Sprintf(`{
+    return `{
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowKKUserToKKBucketOnly",
+      "Sid": "AllowKKBucketOnly",
       "Effect": "Allow",
       "Principal": "*",
       "Action": [
@@ -268,15 +280,10 @@ func VpcS3EndpointPolicyGen(accountId string) string {
       "Resource": [
         "arn:aws:s3:::kloud-kraken-s3",
         "arn:aws:s3:::kloud-kraken-s3/*"
-      ],
-      "Condition": {
-        "StringLike": {
-          "aws:PrincipalArn": "arn:aws:sts::%s:assumed-role/KloudKrakenClientRole/*"
-        }
-      }
+      ]
     }
   ]
-}`, accountId)
+}`
 }
 
 

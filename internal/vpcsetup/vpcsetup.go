@@ -209,9 +209,8 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup EC2 security group Rules
-    err = SetupEc2SecurityGroupRulesHandler(ec2Client, &stateConfig,
-                                            appConfig, yamlUpdates,
-                                            ec2SgId)
+    err = SetupEc2SecurityGroupRulesHandler(ec2Client, appConfig, ec2SgId,
+                                            appConfig.LocalConfig.ListenerPort)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up EC2 security group rules - %w", err)

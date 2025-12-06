@@ -730,8 +730,8 @@ func main() {
         }
 
         // Load instance-profile credentials vie metadata service
-        awsConfig, err := config.LoadDefaultConfig(context.TODO(),
-                                                   config.WithRegion(awsRegion))
+        awsConfig, err = config.LoadDefaultConfig(context.TODO(),
+                                                  config.WithRegion(awsRegion))
         if err != nil {
             log.Fatalf("Error loading AWS config:  %v", err)
         }

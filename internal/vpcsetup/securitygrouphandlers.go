@@ -77,23 +77,27 @@ func SetupEc2SecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
 //
 // @Parameters
 //  - ec2Client:  Pointer to EC2 service client management struct
-//  - stateConfig:  Pointer to config struct for state file
 //  - appConfig:  Pointer to program config instance from YAML data
-//  - yamlUpdates:  The map used for updating output YAML data
 //  - ec2SgId:  The EC2 security group ID
+//  - serverPort:  The port on the server the client initally connects to
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
 func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
-                                       stateConfig *AwsEnv,
-                                       appConfig *conf.AppConfig,
-                                       yamlUpdates map[string]string,
-                                       ec2SgId string) error {
+                                       appConfig *conf.AppConfig, ec2SgId string,
+                                       serverPort int) error {
     fmt.Println(display.CtextMulti(color.FoamWhite, "      \\-->",
                                    display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
                                    color.NeonAzure, "Launching EC2 security group rules provisioner"))
+
+    // Configure TCP rule for initial connection to server
+    err := ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, "0.0.0.0/0", "tcp",
+                                                "egress", int32(serverPort), int32(serverPort))
+    if err != nil {
+        return nil
+    }
 
     // Get the DNS address from the CIDR (Ex: 192.168.0.0/24 => 192.168.0.2/32)
     dnsAddr, err := ec2Client.VpcResolverForCidr(appConfig.LocalConfig.CidrBlock)
@@ -132,8 +136,7 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
     fmt.Println(display.CtextMulti(color.FoamWhite, "          \\-->",
                                    display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
-                                   color.NeonAzure, "EC2 security group rules" +
-                                   " provisioned or already exists"))
+                                   color.NeonAzure, "Provisioned EC2 security group rules"))
 
     return nil
 }
@@ -216,7 +219,6 @@ func SetupSsmSecurityGroupRuleHandler(ec2Client *ec2utils.Ec2Manger,
                                                        color.LightCyan, "!"), "",
                                    color.NeonAzure, "Launching SSM security group rules provisioner"))
 
-
     // Configure TCP rule in security group for HTTPS
     err := ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ssmSgId, "0.0.0.0/0",
                                                 "tcp", "ingress", 443, 443)
@@ -227,8 +229,7 @@ func SetupSsmSecurityGroupRuleHandler(ec2Client *ec2utils.Ec2Manger,
     fmt.Println(display.CtextMulti(color.FoamWhite, "          \\-->",
                                    display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
-                                   color.NeonAzure, "SSM security group rules " +
-                                   "provisioned or already exists"))
+                                   color.NeonAzure, "Provisioned SSM security group rules"))
 
     return nil
 }

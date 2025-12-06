@@ -522,18 +522,11 @@ mkdir -p "$DIR"
 aws s3 cp s3://%s/%s "$DIR"/client --region %s --no-progress
 chmod +x "$DIR"/client
 
-# Allow outbound on port so client can connect back to server
-aws ec2 authorize-security-group-egress \
-    --group-id %s \
-    --protocol tcp \
-    --port %d \
-    --cidr 0.0.0.0/0
-
 # Create run script to launch client
-cat >/opt/run-client.sh <<-__EOF__
+cat > "$DIR"/run-client.sh <<-__EOF__
 #!/bin/bash
 
-exec /opt/client \
+exec "$DIR"/client \
     -applyOptimization=%t \
     -awsRegion="%s" \
     -certSsmParam="%s" \
@@ -579,12 +572,12 @@ __EOF__
 # Set up the client service to execute
 systemctl daemon-reload
 systemctl enable --now client.service
-`, bucketName, keyName, appConf.LocalConfig.Region, ec2SgId,
-   appConf.LocalConfig.ListenerPort, true, appConf.LocalConfig.Region,
-   ssmParam, appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
-   appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
-   appConf.ClientConfig.CrackingMode, ec2SgId, appConf.ClientConfig.HashMask,
-   hasRuleset, appConf.ClientConfig.HashType, ipAddrsCsv, false,
+`, bucketName, keyName, appConf.LocalConfig.Region, true,
+   appConf.LocalConfig.Region, ssmParam, appConf.ClientConfig.CharSet1,
+   appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3,
+   appConf.ClientConfig.CharSet4, appConf.ClientConfig.CrackingMode,
+   ec2SgId, appConf.ClientConfig.HashMask, hasRuleset,
+   appConf.ClientConfig.HashType, ipAddrsCsv, false,
    appConf.ClientConfig.LogMode, appConf.ClientConfig.MaxFileSizeInt64,
    appConf.ClientConfig.MaxTransfers, appConf.LocalConfig.ListenerPort,
    appConf.ClientConfig.Workload)
