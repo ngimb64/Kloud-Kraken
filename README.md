@@ -31,7 +31,6 @@
 - Easy setup with automated script
 - Easy configuration with YAML templates
 - Supports hash cracking distributed workloads among multiple EC2 instances
-- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
 - Built-in wordlist merging with flexibility to skip larger files
     - Merging process using `cat` -> `deduplicut` until within percentage range of max file size (15% by default)
     - If the file goes over max file size, excess data is shaved with `cut` into a new file
@@ -218,7 +217,7 @@ To delete the project from AWS environment:
 - p5en.*
 - p6-b200.*
 
-My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g6f.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar if not better results than one expensive instance.
+My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g4dn.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar results than one very expensive instance.
 <br>
 
 

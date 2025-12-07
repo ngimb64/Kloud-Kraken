@@ -36,21 +36,12 @@ func ClientPermPolicyGen(region string, accountId string) string {
     },
 
     {
-      "Sid": "CloudWatchCreateGroup",
+      "Sid": "CloudWatchLoggingCreateWrite",
       "Effect": "Allow",
       "Action": [
-        "logs:CreateLogGroup"
-      ],
-      "Resource": "*"
-    },
-
-    {
-      "Sid": "CloudWatchLogging",
-      "Effect": "Allow",
-      "Action": [
+        "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents",
-        "logs:DescribeLogStreams",
         "logs:PutRetentionPolicy",
         "logs:TagLogGroup",
         "logs:TagResource"
@@ -59,6 +50,16 @@ func ClientPermPolicyGen(region string, accountId string) string {
         "arn:aws:logs:%s:%s:log-group:kloud-kraken-*",
         "arn:aws:logs:%s:%s:log-group:kloud-kraken-*:*"
       ]
+    },
+
+    {
+      "Sid": "CloudWatchLoggingDescribe",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "*"
     },
 
     {
@@ -115,10 +116,10 @@ func ServerPermPolicyGen(region string, accountId string) string {
       "Action": [
         "ssm:PutParameter",
         "ssm:DeleteParameter",
-        "ssm:AddTagsToResource",
+        "ssm:AddTagsToResource"
       ],
       "Resource": [
-        "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*",
+        "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
       ]
     },
 
@@ -155,6 +156,15 @@ func ServerPermPolicyGen(region string, accountId string) string {
     },
 
     {
+      "Sid": "ManageSecurityGroupEgress",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RevokeSecurityGroupEgress"
+      ],
+      "Resource": "arn:aws:ec2:%s:%s:security-group/*"
+    },
+
+    {
       "Sid": "PricingGetProducts",
       "Effect": "Allow",
       "Action": [
@@ -172,7 +182,7 @@ func ServerPermPolicyGen(region string, accountId string) string {
       "Resource": "arn:aws:iam::%s:role/KloudKrakenClientRole"
     }
   ]
-}`, region, accountId, accountId)
+}`, region, accountId, region, accountId, accountId)
 }
 
 
@@ -220,19 +230,25 @@ func VpcFlowLogsPermPolicyGen(region string, accountId string) string {
       "Action": [
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
-        "logs:PutLogEvents",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams"
+        "logs:PutLogEvents"
       ],
       "Resource": [
         "arn:aws:logs:%s:%s:log-group:kloud-kraken-vpc-flow-logs",
-        "arn:aws:logs:%s:%s:log-group:kloud-kraken-vpc-flow-logs:*",
-        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/kloud-kraken-vpc-flow-logs",
-        "arn:aws:logs:%s:%s:log-group:/aws/vpc-flow-logs/kloud-kraken-vpc-flow-logs:*"
+        "arn:aws:logs:%s:%s:log-group:kloud-kraken-vpc-flow-logs:*"
       ]
+    },
+
+    {
+      "Sid": "AllowDescribeLogGroupsAndStreams",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "*"
     }
   ]
-}`, region, accountId, region, accountId, region, accountId, region, accountId)
+}`, region, accountId, region, accountId)
 }
 
 

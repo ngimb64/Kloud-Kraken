@@ -614,8 +614,16 @@ func connectRemote(ipAddrs string, port int,
 
     // Iterate through list of addresses to attempt to connect to
     for addr := range addresses {
+        // Trim any outer whitespace from address
+        addr = strings.TrimSpace(addr)
+        if addr == "" {
+            continue
+        }
+
         // Define the address of the server to connect to
-        serverAddress := addr + ":" + strconv.Itoa(port)
+        serverAddress := net.JoinHostPort(addr, strconv.Itoa(port))
+
+        logMan.LogMessage("debug", "Attempting connect to " + serverAddress)
 
         // Make a connection to the remote server
         connection, err := tls.Dial("tcp", serverAddress,
@@ -794,6 +802,6 @@ func main() {
     // Connect to remote server to begin receiving data for processing
     err = connectRemote(ipAddrs, port, logMan, maxFileSizeInt64)
     if err != nil {
-        logMan.LogMessage("Error", "Error connecting to remote server:  %v", err)
+        logMan.LogMessage("error", "Error connecting to remote server:  %v", err)
     }
 }

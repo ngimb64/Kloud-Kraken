@@ -107,8 +107,9 @@ func (logMan *LoggerManager) GetLog() string {
 //
 func (manager *LoggerManager) LogMessage(level string, message string, args ...any) {
     argList := []any{}
-    zapFields := []zap.Field {}
     formattedMessage := ""
+    level = strings.ToLower(level)
+    zapFields := []zap.Field {}
 
     // Iterate through passed in arg list
     for _, arg := range args {
@@ -482,14 +483,22 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string,
 
     // Iterate through the the slice of fields
     for _, field := range fields {
-        // Add fields in log entry map
-        entry[field.Key] = field.Interface
+        switch field.Type {
+        case zapcore.StringType:
+            entry[field.Key] = field.String
+        case zapcore.Int64Type, zapcore.Int32Type,
+             zapcore.Int16Type, zapcore.Int8Type:
+            entry[field.Key] = field.Integer
+        default:
+            entry[field.Key] = field.Interface
+        }
     }
 
     // Format the data into JSON for transporting to CloudWatch
     payload, err := json.Marshal(entry)
     if err != nil {
-        log.Fatalf("Marshaling log entry: %v", err)
+        log.Printf("Marshaling log entry: %v", err)
+        return
     }
 
     // Set up input log event message
@@ -502,6 +511,10 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string,
     cloudWatchLog.cwMutex.Lock()
     defer cloudWatchLog.cwMutex.Unlock()
 
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 1 * time.Minute)
+    defer cancel()
+
     inputEvent := &cwl.PutLogEventsInput{
         LogGroupName:  aws.String(cloudWatchLog.logGroup),
         LogStreamName: aws.String(cloudWatchLog.logStream),
@@ -510,13 +523,15 @@ func (cloudWatchLog *CloudWatchLogger) log(level string, msg string,
     }
 
     // Upload log entry via the log stream
-    resp, err := cloudWatchLog.client.PutLogEvents(context.Background(), inputEvent)
+    resp, err := cloudWatchLog.client.PutLogEvents(ctx, inputEvent)
     if err != nil {
-        log.Fatalf("PutLogEvents: %v\n", err)
+        log.Printf("CloudWatch PutLogEvents error: %v", err)
     }
 
-    // Set the next sequence token fron the response
-    cloudWatchLog.nextSequence = resp.NextSequenceToken
+    if resp.NextSequenceToken != nil {
+        // Set the next sequence token fron the response
+        cloudWatchLog.nextSequence = resp.NextSequenceToken
+    }
 }
 
 // Current dummy handler to follow interface contract (zap only)

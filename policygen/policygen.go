@@ -69,13 +69,22 @@ func bootstrapPolicyGen(accountId string, region string) string {
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents",
-        "logs:DescribeLogStreams",
         "logs:PutRetentionPolicy",
         "logs:TagResource",
         "logs:DeleteLogStream",
         "logs:DeleteLogGroup"
       ],
       "Resource": "arn:aws:logs:%s:%s:log-group:kloud-kraken*"
+    },
+
+    {
+      "Sid": "CloudWatchLoggingDescribe",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "*"
     },
 
     {

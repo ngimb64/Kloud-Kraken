@@ -376,7 +376,7 @@ func (TlsMan *TlsManager) pemCertAndKeyGen(name string, hosts string,
     }
 
     // Split the comma-separated host list and iterate through it
-    for _, h := range strings.Split(hosts, ",") {
+    for h := range strings.SplitSeq(hosts, ",") {
         // If the entry is an ip address
         if ip := net.ParseIP(h); ip != nil {
             template.IPAddresses = append(template.IPAddresses, ip)

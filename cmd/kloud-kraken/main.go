@@ -111,7 +111,7 @@ func handleTransfer(connection net.Conn, buffer []byte,
     // Setup up TLS listener from existing raw TCP listener
     tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
                                                        TlsMan.CaCertPool, ctx,
-                                                       "", port, listener)
+                                                       "0.0.0.0", port, listener)
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
     }
@@ -354,7 +354,7 @@ func startServer(appConfig *conf.AppConfig,
     defer cancel()
     // Set up the TLS listener to accept incoming connections
     tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       TlsMan.CaCertPool, ctx, "",
+                                                       TlsMan.CaCertPool, ctx, "0.0.0.0",
                                                        appConfig.LocalConfig.ListenerPort, nil)
     if err != nil {
         logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
@@ -1057,6 +1057,19 @@ func main() {
             //                                        string(instance.CurrentState.Name)))
             //     }
             // }
+
+            // Revoke the security group rule for listener port set by client
+            err = bootstrapOut.Ec2Client.RevokeSecurityGroupRule(1 * time.Minute, bootstrapOut.Ec2SgId,
+                                                                 "tcp", "0.0.0.0/0", "egress",
+                                                                 int32(appConfig.LocalConfig.ListenerPort),
+                                                                 int32(appConfig.LocalConfig.ListenerPort))
+            if err != nil {
+                if logMan != nil {
+                    logMan.LogMessage( "error", "Error revoking security group rule:  %v", err)
+                } else {
+                    log.Printf("Error revoking security group rule:  %v", err)
+                }
+            }
 
             // Terminate SSM Parameter Store VPC Interface Endpoint
             err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
