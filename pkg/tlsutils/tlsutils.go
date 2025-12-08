@@ -516,7 +516,7 @@ func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate,
     }
 
     // Format listener address with port
-    listenerAddr := listenIp + ":" + strconv.Itoa(listenPort)
+    listenerAddr := net.JoinHostPort(listenIp, strconv.Itoa(listenPort))
     // Set needed struct members for setting up TLS listener
     TlsMan.addr = listenerAddr
     TlsMan.ctx = ctx
