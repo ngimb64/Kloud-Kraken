@@ -114,45 +114,51 @@ func TestFileToSocketCopy(t *testing.T) {
 }
 
 
-func TestFormatAndParseTransferReply(t *testing.T) {
+func TestFormatAndParseStartTransfer(t *testing.T) {
     // Make reusable assert instance
     assert := assert.New(t)
 
     filePath := "/test/path.txt"
     fileSize := int64(13 * globals.MB)
-    port := 1234
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
-    // Format the transfer reply in passed in buffer without port
-    sendLength, err := netio.FormatTransferReply(filePath, fileSize, -1, &buffer,
+    // Format start transfer message
+    sendLength, err := netio.FormatStartTransfer(filePath, fileSize, &buffer,
                                                  globals.START_TRANSFER_PREFIX)
     assert.Equal(nil, err)
 
-    // Parse the file name and size only from the transfer reply
-    fileName, fileSize, _, err := netio.ParseTransferReply(buffer,
-                                                           globals.START_TRANSFER_PREFIX,
-                                                           sendLength)
+    // Parse the file name and size from start transfer message
+    fileName, size, err := netio.ParseStartTransfer(buffer,
+                                                        globals.START_TRANSFER_PREFIX,
+                                                        sendLength)
     assert.Equal(nil, err)
 
     // Ensure the file name and size were properly parse
     assert.Equal("path.txt", fileName)
-    assert.Equal(int64(13 * globals.MB), fileSize)
+    assert.Equal(int64(13 * globals.MB), size)
+}
 
-    // Format the transfer reply in passed in buffer with port
-    sendLength, err = netio.FormatTransferReply(filePath, fileSize, port, &buffer,
-                                                globals.START_TRANSFER_PREFIX)
+
+func TestFormatAndParseTransferRequest(t *testing.T) {
+    // Make reusable assert instance
+    assert := assert.New(t)
+
+    port := 1234
+    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+
+    // Format transfer request
+    sendLength, err := netio.FormatTransferRequest(port, &buffer,
+                                                   globals.TRANSFER_REQUEST_PREFIX)
     assert.Equal(nil, err)
 
-    // Parse the file name and size only from the transfer reply
-    fileName, fileSize, port, err = netio.ParseTransferReply(buffer,
-                                                             globals.START_TRANSFER_PREFIX,
-                                                             sendLength)
+    // Parse port from transfer request
+    parsePort, err := netio.ParseTransferRequest(buffer,
+                                                 globals.TRANSFER_REQUEST_PREFIX,
+                                                 sendLength)
     assert.Equal(nil, err)
 
-    // Ensure the file name and size were properly parse
-    assert.Equal("path.txt", fileName)
-    assert.Equal(int64(13 * globals.MB), fileSize)
-    assert.Equal(1234, port)
+    // Ensure the proper port was parsed
+    assert.Equal(1234, parsePort)
 }
 
 

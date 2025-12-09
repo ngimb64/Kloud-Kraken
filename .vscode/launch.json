@@ -24,12 +24,10 @@
                 "-dataPath=/tmp",
                 "-hashType=1700",
                 "-ipAddrs=10.0.0.17",
-                "-isTesting=true",
                 "-logMode=local",
                 "-maxFileSizeInt64=17179869184",
                 "-maxTransfers=2",
                 "-port=7003",
-                "-testPemCert=/tmp/tls-cert.pem",
                 "-workload=3"
             ],
             "stopOnEntry": false

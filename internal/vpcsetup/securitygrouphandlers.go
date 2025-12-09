@@ -94,7 +94,7 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
 
     // Configure TCP rule for initial connection to server
     err := ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, "0.0.0.0/0", "tcp",
-                                                "egress", int32(serverPort), int32(serverPort))
+                                                "ingress", int32(serverPort), int32(serverPort))
     if err != nil {
         return nil
     }

@@ -1,3 +1,7 @@
+- Fix connect initiation to local host -> EC2 instance(s)
+    - Delete security group rule for 7003 in EC2 group before testing
+    - Delete server and client roles before testing
+
 - Look into pricing system retrieving wrong prices
     - Try adding more filters to ensure correct prices are retrieved
 
@@ -5,7 +9,7 @@
 
 - Optimize awscost and add cost prediction functionality
 
-- Look into making sure VPC flow logs are properly working and optimized
+- Look into making sure VPC flow logs package is optimized
 
 - Review permissions to harden to max effect of least privilege
 

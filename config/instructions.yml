@@ -23,7 +23,6 @@ local_config:
   instance_type: "The type of EC2 instance to be utilized for cracking" | "g6f.xlarge"
   listener_port: "The port of TLS listener to connect to access messaging system" | 7003
   load_dir: "The path to the directory containing wordlist data for cracking attempts" | "/home/<username>/load_dir"
-  local_testing: "Toggle to specify whether the program is being tested locally (VMs) or in AWS" | true, false
   max_merging_size: "The maximum file size (or within max range) where wordlist merging process occurs" | "200KB", "50MB", "1GB"
   max_size_range: "Percentage range used to determine if value is in upper percentile of max file size or max merging" | 15.0
   number_instances: "The number of EC2 instances to use for cracking" | 1

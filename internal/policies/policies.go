@@ -61,20 +61,8 @@ func ClientPermPolicyGen(region string, accountId string) string {
       ],
       "Resource": "*"
     },
-
-    {
-      "Sid": "ManageSecurityGroupEgress",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupEgress",
-        "ec2:DescribeSecurityGroups"
-      ],
-      "Resource": "arn:aws:ec2:%s:%s:security-group/*"
-    }
   ]
-}`, region, accountId, region, accountId,
-    region, accountId, region, accountId)
+}`, region, accountId, region, accountId, region, accountId)
 }
 
 
@@ -156,15 +144,6 @@ func ServerPermPolicyGen(region string, accountId string) string {
     },
 
     {
-      "Sid": "ManageSecurityGroupEgress",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:RevokeSecurityGroupEgress"
-      ],
-      "Resource": "arn:aws:ec2:%s:%s:security-group/*"
-    },
-
-    {
       "Sid": "PricingGetProducts",
       "Effect": "Allow",
       "Action": [
@@ -181,8 +160,27 @@ func ServerPermPolicyGen(region string, accountId string) string {
       ],
       "Resource": "arn:aws:iam::%s:role/KloudKrakenClientRole"
     }
+
+    {
+      "Sid": "ManageSecurityGroupIngressAndEgress",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupEgress"
+      ],
+      "Resource": "arn:aws:ec2:%s:%s:security-group/*"
+    },
+
+    {
+      "Sid": "DescribeSecurityGroups",
+      "Effect": "Allow",
+      "Action": ["ec2:DescribeSecurityGroups"],
+      "Resource": "*"
+    }
   ]
-}`, region, accountId, region, accountId, accountId)
+}`, region, accountId, accountId, region, accountId)
 }
 
 

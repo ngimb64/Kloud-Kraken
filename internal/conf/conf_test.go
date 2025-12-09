@@ -72,7 +72,6 @@ local_config:
   instance_type: "p4d.24xlarge"
   listener_port: 6969
   load_dir: "%s"
-  local_testing: true
   max_merging_size: "50MB"
   max_size_range: 25.0
   number_instances: 3
@@ -109,7 +108,6 @@ local_config:
     assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
     assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(testDir, config.LocalConfig.LoadDir)
-    assert.True(config.LocalConfig.LocalTesting)
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)

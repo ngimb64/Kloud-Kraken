@@ -40,7 +40,6 @@ type LocalConfig struct {
     InstanceType        string   `yaml:"instance_type"`
     ListenerPort        int      `yaml:"listener_port"`
     LoadDir	   	        string   `yaml:"load_dir"`
-    LocalTesting        bool     `yaml:"local_testing"`
     MaxMergingSize      string   `yaml:"max_merging_size"`
     MaxMergingSizeInt64 int64    `yaml:"-"`
     MaxSizeRange        float64  `yaml:"max_size_range"`

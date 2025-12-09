@@ -107,6 +107,7 @@
 - Generate and store access keys for the newly created user
 - By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for on-demand EC2 G-series based on the number of desired vCPUs to use (add them up if using multiple instances)
     - Keep in mind if your account does not have extensive history the request will be automatically denied initially
+        - It is better to start with a single instance and gradually ramp up quota over a few billing cycles, they will limit excessive requests anyway
         - After it is denied explain the purpose of using Kloud Kraken so they can confirm you are legit and not intending to abuse the GPU instances for things like crypto mining, feel free to provide them with a link to the projects GitHub page
         - While writing the information in the message area is a good idea, they **must** be called to get the request process going
     - Supported instance families can be found at [Instance Types](#Instance-Types)

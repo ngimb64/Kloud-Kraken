@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -11,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -25,7 +25,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awscost"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
-	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
@@ -43,7 +42,8 @@ import (
 )
 
 // Package level variables
-var CurrentConnections atomic.Int32	 // Tracks current active connections
+var Ec2Client *ec2utils.Ec2Manger
+var Ec2SecurityGroupId string
 var ReceivedDir = "/tmp/received"    // Path where cracked hashes & client logs are stored
 var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
 
@@ -57,6 +57,7 @@ var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc
 // @Parameters
 //  - connection:  Network socket connection for handling messaging
 //  - buffer:  The buffer storing network messaging
+//  - bytesRead:  The number of bytes read into the passed in buffer
 //  - waitGroup:  Used to synchronize the Goroutines running
 //  - appConfig:  The configuration struct with loaded yaml program data
 //  - logMan:  The kloudlogs logger manager for local logging
@@ -64,9 +65,8 @@ var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc
 //  - t:  The tui interface for displaying output
 //
 func handleTransfer(connection net.Conn, buffer []byte,
-                    waitGroup *sync.WaitGroup,
-                    appConfig *conf.AppConfig,
-                    logMan *kloudlogs.LoggerManager,
+                    bytesRead int, waitGroup *sync.WaitGroup,
+                    appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
                     ipAddr string, t *tui.TUI) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
@@ -88,47 +88,47 @@ func handleTransfer(connection net.Conn, buffer []byte,
         return
     }
 
-    // Get random available port as a listener
-    listener, port := netio.GetAvailableListener()
+    // Parse the TCP port to connect to from the transfer request
+    port, err := netio.ParseTransferRequest(buffer, globals.TRANSFER_REQUEST_PREFIX, bytesRead)
+    if err != nil {
+        logMan.LogMessage("error", "Error parsing port from transfer request:  %v", err)
+        return
+    }
 
     // Format transfer reply to inform client of selected file name and size
-    sendLength, err := netio.FormatTransferReply(filePath, fileSize, port, &buffer,
+    sendLength, err := netio.FormatStartTransfer(filePath, fileSize, &buffer,
                                                  globals.START_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer reply:  %v", err)
         return
     }
 
-    // Send the transfer reply with file name and size
+    // Send start transfer message with file name and size
     _, err = netio.WriteHandler(connection, buffer, sendLength)
     if err != nil {
         logMan.LogMessage("error", "Error sending the transfer reply:  %v", err)
         return
     }
 
-    // Set up context handler for TLS listener
-    ctx, cancel := context.WithCancel(context.Background())
-    // Setup up TLS listener from existing raw TCP listener
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       TlsMan.CaCertPool, ctx,
-                                                       "0.0.0.0", port, listener)
+    port32 := int32(port)
+
+    // Add rule to security group to allow outbound port to connect to server
+    err = Ec2Client.SecurityGroupRuleProvision(1 * time.Minute, Ec2SecurityGroupId, "0.0.0.0/0",
+                                                "tcp", "ingress", port32, port32)
     if err != nil {
-        logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
+        logMan.LogMessage("Error", "Error provisioning security group rule for file transfer",
+                            zap.Int32("Port", port32))
+        return
     }
 
-    // Wait for an incoming connection
-    transferConn, err := tlsListener.Accept()
+    // Format client ip:port to connect to
+    clientAddr := net.JoinHostPort(ipAddr, strconv.Itoa(port))
+
+    // Make a connection to the client for file transfer
+    transferConn, err := tls.Dial("tcp", clientAddr, tlsutils.NewClientTLSConfig(TlsMan.CaCertPool,
+                                                                                 ipAddr))
     if err != nil {
-        logMan.LogMessage("error", "Error accepting server connection:  %v", err)
-
-        // Ensure TLS listener is closed
-        err = tlsListener.Close()
-        if err != nil {
-            logMan.LogMessage("Error", "Error closing TLS listener:  %v", err)
-        }
-
-        // Call cancel function to ensure raw TCP socket is closed
-        cancel()
+        logMan.LogMessage("error", "Error connecting to remote client for transfer:  %v", err)
         return
     }
 
@@ -150,8 +150,6 @@ func handleTransfer(connection net.Conn, buffer []byte,
     logMan.LogMessage("info", "Connected remote client %s on port %d, %s to be transfered",
                       ipAddr, port, filePath)
 
-    // Get the IP address of the remote connection
-    remoteIp := strings.Split(transferConn.RemoteAddr().String(), ":")[0]
     // Increment waitgroup counter
     waitGroup.Add(1)
 
@@ -160,18 +158,20 @@ func handleTransfer(connection net.Conn, buffer []byte,
             // Close the transfer connection
             err = transferConn.Close()
             if err != nil {
-                logMan.LogMessage("Error", "Error closing file transfer connection %s:  %v",
-                                  remoteIp, err)
+                logMan.LogMessage("Error", "Error closing transfer connection %d:  %v",
+                                  port, err)
             }
 
-            // Close the TLS listener
-            err = tlsListener.Close()
+            // Remove rule from security group that allows
+            // outbound port to connect to server
+            err = Ec2Client.RevokeSecurityGroupRule(1 * time.Minute,
+                                                    Ec2SecurityGroupId,
+                                                    "tcp", "0.0.0.0/0",
+                                                    "ingress", port32, port32)
             if err != nil {
-                logMan.LogMessage("Error", "Error closing the TLS listener:  %v", err)
+                logMan.LogMessage("Error", "Error revoking EC2 security group",
+                                    zap.Int32("Port", port32))
             }
-
-            // Call cancel function to close raw TCP socket
-            cancel()
 
             // Decrement waitgroup counter
             waitGroup.Done()
@@ -181,7 +181,7 @@ func handleTransfer(connection net.Conn, buffer []byte,
         err = netio.TransferFile(transferConn, filePath, fileSize)
         if err != nil {
             logMan.LogMessage("error", "Error occured transfering file to client %s:  %v",
-                              remoteIp, err)
+                              ipAddr, err)
         }
 
         // Display the file path to be transfered in right panel
@@ -216,25 +216,17 @@ func handleConnection(connection net.Conn,
     var err error
 
     defer func() {
-        // Close the connection
+        // Close connection to remote server
         err = connection.Close()
         if err != nil {
-            logMan.LogMessage("Error", "Error closing client connection %s:  %v",
-                              connection.RemoteAddr(), err)
+            logMan.LogMessage("error", "Error closing client connection:  %v", err)
         }
-
-        // Decrement the active connection count
-        CurrentConnections.Add(-1)
 
         // Display the connection termination information in the left tui panel
         t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                                 color.LightCyan, "-"), "",
                                             color.NeonAzure, "Connection closed for ",
                                             color.RadiantAmethyst, remoteAddr)
-
-        logMan.LogMessage("info", "Connection processing handled",
-                        zap.Int32("remaining connections", CurrentConnections.Load()))
-
         // Decrement waitGroup counter
         waitGroup.Done()
     } ()
@@ -306,9 +298,9 @@ func handleConnection(connection net.Conn,
         }
 
         // If the read data contains transfer request message
-        if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_MARKER) {
+        if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_PREFIX) {
             // Call method to handle file transfer based
-            handleTransfer(connection, buffer, waitGroup,
+            handleTransfer(connection, buffer, bytesRead, waitGroup,
                            appConfig, logMan, remoteAddr, t)
         }
     }
@@ -337,9 +329,11 @@ func handleConnection(connection net.Conn,
 //
 // @Parameters
 //  - appConfig:  The configuration struct with loaded yaml program data
+//  - bootstrapOut:  The VPC bootstrap output struct
 //  - logMan:  The kloudlogs logger manager for local logging
 //
 func startServer(appConfig *conf.AppConfig,
+                 bootstrapOut *vpcsetup.VpcBootstrapOutput,
                  logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
@@ -349,67 +343,42 @@ func startServer(appConfig *conf.AppConfig,
     go t.Start(color.SkyBlue, color.BrightMagenta, color.BrightMint)
     defer t.Stop()
 
-    // Set up context handler for TLS listener
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    // Set up the TLS listener to accept incoming connections
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       TlsMan.CaCertPool, ctx, "0.0.0.0",
-                                                       appConfig.LocalConfig.ListenerPort, nil)
-    if err != nil {
-        logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
-    }
-
-    // Close the TLS listener on local exit
-    defer func() {
-        err = tlsListener.Close()
-        if err != nil {
-            logMan.LogMessage("error", "Error closing TLS listener:  %v", err)
-        }
-    } ()
-
-    // Display port TLS listener is on in the left panel
-    t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                            color.LightCyan, "!"), "",
-                                        color.NeonAzure, "Listening on port ",
-                                        color.KrakenGlowGreen,
-                                        strconv.Itoa(appConfig.LocalConfig.ListenerPort))
-
-    logMan.LogMessage("info", "Listening for connections on port %d ..",
-                      appConfig.LocalConfig.ListenerPort)
-
-    for {
-        // If number of connection is greater than or equal to number of instances
-        if CurrentConnections.Load() >= appConfig.LocalConfig.NumberInstances {
-            logMan.LogMessage("info", "All remote clients are connected")
-            break
+    // Iterate through instances in result from SDK call
+    for _, instance := range bootstrapOut.Ec2Client.RunResult.Instances {
+        // If there is no public IP address, skip it
+        if instance.PublicIpAddress == nil {
+            continue
         }
 
-        // Wait for an incoming connection
-        connection, err := tlsListener.Accept()
-        if err != nil {
-            logMan.LogMessage("error", "Error accepting client connection:  %v", err)
-            return
-        }
+        // Define the address of the server to connect to
+        serverAddress := net.JoinHostPort(instance.PublicIpAddress,
+                                          strconv.Itoa(appConfig.LocalConfig.ListenerPort))
 
-        // Increment the active connection count
-        CurrentConnections.Add(1)
+        logMan.LogMessage("debug", "Attempting connect to " + serverAddress)
 
-        // Get the remote IP address for output/logging
-        remoteAddr := connection.RemoteAddr().String()
-
-        // Display the connection spawning information in the left tui panel
+        // Display connection attempt in the left panel
         t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                                color.LightCyan, "+"), "",
-                                            color.NeonAzure, "Accepted ",
-                                            color.RadiantAmethyst, remoteAddr)
+                                                                color.LightCyan, "!"), "",
+                                            color.NeonAzure, "Connecting to ",
+                                            color.RadiantAmethyst, serverAddress)
 
-        logMan.LogMessage("info", "Connection accepted from %s", remoteAddr,
-                          zap.Int32("active connections", CurrentConnections.Load()))
+        // Make a connection to the remote server
+        connection, err := tls.Dial("tcp", serverAddress,
+                                    tlsutils.NewClientTLSConfig(TlsMan.CaCertPool,
+                                                                instance.PublicIpAddress))
+        if err != nil {
+            logMan.LogMessage("error", "Error connecting to remote client:  %v", err)
+            continue
+        }
+
+        logMan.LogMessage("info", "Connected to remote server",
+                          zap.String("ip address", serverAddress),
+                          zap.Int("port", appConfig.LocalConfig.ListenerPort))
 
         // Increment wait group and handle connection in separate Goroutine
         waitGroup.Add(1)
-        go handleConnection(connection, &waitGroup, appConfig, logMan, remoteAddr, t)
+        go handleConnection(connection, &waitGroup, appConfig,
+                            logMan, instance.PublicIpAddress, t)
     }
 
     // Wait for all active Goroutines to finish before shutting down the server
@@ -426,7 +395,6 @@ func startServer(appConfig *conf.AppConfig,
 //  - appConf:  The configuration instance that stores program YAML data
 //  - bucketName:  Name of S3 bucket where client binary is stored
 //  - keyName:  The name of the key of the S3 bucket
-//  - ipAddrs:  Slice of IP addresses to be formatted into CSV string
 //  - ssmParam:  The path where the certificate is stored in SSM param store
 //  - ec2SgId:  The ID for the security group for client EC2 instances
 //
@@ -434,15 +402,10 @@ func startServer(appConfig *conf.AppConfig,
 //  - The generated EC2 user data with args formatted into it
 //  - Error if it occurs, otherwise nil on success
 //
-func ec2UserDataGen(appConf *conf.AppConfig, bucketName string, keyName string,
-                    ipAddrs []string, ssmParam string, ec2SgId string) (
+func ec2UserDataGen(appConf *conf.AppConfig, bucketName string,
+                    keyName string, ssmParam string, ec2SgId string) (
                     string, error) {
     var hasRuleset bool
-    // Convert the slice of IP addresses to CSV string
-    ipAddrsCsv, err := data.SliceToCsv(ipAddrs)
-    if err != nil {
-        return "", err
-    }
 
     // If a ruleset path was specified
     if appConf.LocalConfig.RulesetPath != "" {
@@ -540,8 +503,6 @@ exec "$DIR"/client \
     -hashMask="%s" \
     -hasRuleset=%t \
     -hashType="%s" \
-    -ipAddrs="%s" \
-    -isTesting=%t \
     -logMode="%s" \
     -maxFileSizeInt64=%d \
     -maxTransfers=%d \
@@ -560,7 +521,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/opt/run-client.sh
-Restart=always
+Restart=on-failure
 RestartSec=5
 StandardOutput=file:/var/log/client.log
 StandardError=file:/var/log/client.log
@@ -577,10 +538,9 @@ systemctl enable --now client.service
    appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3,
    appConf.ClientConfig.CharSet4, appConf.ClientConfig.CrackingMode,
    ec2SgId, appConf.ClientConfig.HashMask, hasRuleset,
-   appConf.ClientConfig.HashType, ipAddrsCsv, false,
-   appConf.ClientConfig.LogMode, appConf.ClientConfig.MaxFileSizeInt64,
-   appConf.ClientConfig.MaxTransfers, appConf.LocalConfig.ListenerPort,
-   appConf.ClientConfig.Workload)
+   appConf.ClientConfig.HashType, appConf.ClientConfig.LogMode,
+   appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
+   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
     return data, nil
 }
@@ -596,7 +556,6 @@ systemctl enable --now client.service
 //
 // @Parameters
 //  - appConfig:  The configuration instance with program YAML data
-//  - publicIps:  List of public IPs to format into user data template
 //
 // @Returns
 //  - The initialized AWS configuration instance
@@ -605,7 +564,7 @@ systemctl enable --now client.service
 //  - Errors associated with cost manager
 //  - Error if it occurs, otherwise nil on success
 //
-func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
+func awsSetup(appConfig *conf.AppConfig) (
               awsConfig aws.Config,
               bootstrapOut *vpcsetup.VpcBootstrapOutput,
               costMan *awscost.AwsCostManager,
@@ -638,6 +597,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     bootstrapOut.Ec2Client = ec2Client
+    Ec2SecurityGroupId = bootstrapOut.Ec2SgId
 
     // Create a provider that will call STS AssumeRole under the covers
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
@@ -728,8 +688,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
-                                    keyName, publicIps, ssmParam,
-                                    bootstrapOut.Ec2SgId)
+                                    keyName, ssmParam, bootstrapOut.Ec2SgId)
     if err != nil {
         return awsConfig, bootstrapOut, costMan, costErr, err
     }
@@ -740,7 +699,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
     }
 
     // Re-setup new client to EC2 service with newly assumed role
-    ec2Client = ec2utils.Ec2NewManager(awsConfig)
+    Ec2Client = ec2utils.Ec2NewManager(awsConfig)
     // Get the latest AMI for the ubuntu deep learning
     amiId, err := awsutils.GetAmiId(5 * time.Minute, ec2Client.Client, "x86_64",
                                     "Deep Learning Base AMI with Single CUDA (Ubuntu 22.04) *",
@@ -751,6 +710,7 @@ func awsSetup(appConfig *conf.AppConfig, publicIps []string) (
 
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
         AMI:              amiId,
+        HasWaiter:        true,
         InstanceType:     appConfig.LocalConfig.InstanceType,
         MaxCount:         appConfig.LocalConfig.NumberInstances,
         MinCount:         appConfig.LocalConfig.NumberInstances,
@@ -933,237 +893,220 @@ func main() {
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Wordlist merging process completed"))
 
-    var awsConfig aws.Config
-    var bootstrapOut *vpcsetup.VpcBootstrapOutput
+
+
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "!"), "",
+                                    color.NeonAzure, "Retrieving server public IP addresses"))
+
+    // Query IP lookup APIs for public IP addresses
+    publicIps, err := tlsutils.GetPublicIps()
+    if err != nil {
+        log.Fatalf("Error getting public IP addresses:  %v", err)
+    }
+
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                    display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "$"), "",
+                                    color.NeonAzure, "Server public IP addresses retrieved"))
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "!"), "",
+                                    color.NeonAzure, "Generating server TLS PEM certificate"))
+
+    // Generate the servers TLS PEM certificate and key and save in TLS manager
+    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
+    if err != nil {
+        log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
+    }
+
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                    display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "$"), "",
+                                    color.NeonAzure, "Server TLS PEM certificate " +
+                                    "and key generated"))
+
     var logMan *kloudlogs.LoggerManager
 
-    // If the program is being run in full mode (not testing)
-    if !appConfig.LocalConfig.LocalTesting {
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                           color.LightCyan, "!"), "",
-                                       color.NeonAzure, "Retrieving server public IP addresses"))
-
-        // Query IP lookup APIs for public IP addresses
-        publicIps, err := tlsutils.GetPublicIps()
-        if err != nil {
-            log.Fatalf("Error getting public IP addresses:  %v", err)
-        }
-
-        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                       display.CtextPrefix(color.KrakenPurple,
-                                                           color.LightCyan, "$"), "",
-                                       color.NeonAzure, "Server public IP addresses retrieved"))
-
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                           color.LightCyan, "!"), "",
-                                       color.NeonAzure, "Generating server TLS PEM certificate"))
-
-        // Generate the servers TLS PEM certificate and key and save in TLS manager
-        err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
-        if err != nil {
-            log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
-        }
-
-        fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                       display.CtextPrefix(color.KrakenPurple,
-                                                           color.LightCyan, "$"), "",
-                                       color.NeonAzure, "Server TLS PEM certificate " +
-                                       "and key generated"))
-        var costErr error
-        var costMan *awscost.AwsCostManager
-
-        // Call handler function that sets up AWS IAM user permissions,
-        // transfers client binary via S3, set TLS certificate via SSM
-        // parameter store, and launches EC2 instances
-        awsConfig, bootstrapOut, costMan, costErr, err = awsSetup(appConfig, publicIps)
-        // If error occured during AWS resource cost calculation
-        if costErr != nil {
-            defer func() {
-                if logMan != nil {
-                    logMan.LogMessage("error", "Error occured during AWS cost" +
-                                      " calulcation:  %v", costErr)
-                } else {
-                    log.Printf("Error occured during AWS cost calulcation:  %v", costErr)
-                }
-            }()
-        }
-
-        if err != nil {
-            log.Fatalf("Error with AWS setup:  %v", err)
-        }
-
-        // AWS cost optimization resource deletion cleanup routine
+    // Call handler function that sets up AWS IAM user permissions,
+    // transfers client binary via S3, set TLS certificate via SSM
+    // parameter store, and launches EC2 instances
+    awsConfig, bootstrapOut, costMan, costErr, err := awsSetup(appConfig)
+    // If error occured during AWS resource cost calculation
+    if costErr != nil {
         defer func() {
-            var stateConfig vpcsetup.AwsEnv
-            var stateData []byte
-            stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
-            var yamlUpdates = map[string]string{}
-
-            // Read the data from yaml state file
-            stateData, err = os.ReadFile(stateFilePath)
-            if err != nil {
-                log.Printf("Error reading state file for cleanup:  %v", err)
-            }
-
-            // Decode raw bytes into StateConfig struct
-            err = yaml.Unmarshal(stateData, &stateConfig)
-            if err != nil {
-                log.Printf("Error unmarshaling state file YAML data into " +
-                           "state struct:  %v", err)
-            }
-
-            defer func() {
-                // If there are no values in YAML file to be updated
-                if len(yamlUpdates) == 0 {
-                    return
-                }
-
-                // Update the yaml values with values from passed in map
-                newYaml, err := yamlutils.UpdateYAMLBytes(stateData, yamlUpdates)
-                if err != nil {
-                    log.Printf("Error updating state data with entries in map:  %v", err)
-                    return
-                }
-
-                // Overwrite the original yaml with the updated data
-                err = os.WriteFile(stateFilePath, newYaml, 0644)
-                if err != nil {
-                    log.Printf("Error writing state data to state file:  %v", err)
-                }
-            }()
-
-            // // Terminate the EC2 instances
-            // termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
-            // if err != nil {
-            //     log.Printf("Error terminating EC2 instances:  %v", err)
-            // }
-
-            // // Iterate through list of terminated instance ids and log them
-            // for _, instance := range termOutput.TerminatingInstances {
-            //     if logMan != nil {
-            //         logMan.LogMessage("Instance state for %s: %s -> %s\n",
-            //                           aws.ToString(instance.InstanceId),
-            //                           instance.PreviousState.Name,
-            //                           instance.CurrentState.Name)
-            //     } else {
-            //         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-            //                                                            color.LightCyan, "+"), "",
-            //                                        color.NeonAzure, "Instance state for ",
-            //                                        color.RadiantAmethyst,
-            //                                        aws.ToString(instance.InstanceId),
-            //                                        color.NeonAzure, ": ", color.KrakenGlowGreen,
-            //                                        string(instance.PreviousState.Name),
-            //                                        color.NeonAzure, " -> ", color.KrakenGlowGreen,
-            //                                        string(instance.CurrentState.Name)))
-            //     }
-            // }
-
-            // Revoke the security group rule for listener port set by client
-            err = bootstrapOut.Ec2Client.RevokeSecurityGroupRule(1 * time.Minute, bootstrapOut.Ec2SgId,
-                                                                 "tcp", "0.0.0.0/0", "egress",
-                                                                 int32(appConfig.LocalConfig.ListenerPort),
-                                                                 int32(appConfig.LocalConfig.ListenerPort))
-            if err != nil {
-                if logMan != nil {
-                    logMan.LogMessage( "error", "Error revoking security group rule:  %v", err)
-                } else {
-                    log.Printf("Error revoking security group rule:  %v", err)
-                }
-            }
-
-            // Terminate SSM Parameter Store VPC Interface Endpoint
-            err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
-                                                                []string{bootstrapOut.SsmVpcEndpointId})
-            if err != nil {
-                if logMan != nil {
-                    logMan.LogMessage( "error", "Error deleting SSM Parameter Store" +
-                                       " VPC Interface Endpoint:  %v", err)
-                } else {
-                    log.Printf("Error deleting SSM Parameter Store VPC" +
-                               " Interface Endpoint:  %v", err)
-                }
+            if logMan != nil {
+                logMan.LogMessage("error", "Error occured during AWS cost" +
+                                    " calulcation:  %v", costErr)
             } else {
-                yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ""
+                log.Printf("Error occured during AWS cost calulcation:  %v", costErr)
             }
+        }()
+    }
 
-            // Delete the S3 bucket and its contents
-            err = bootstrapOut.S3Client.S3BucketTerminator(5 * time.Minute,
-                                                           bootstrapOut.S3BucketName)
-            if err != nil {
-                if logMan != nil {
-                    logMan.LogMessage("error", "Error deleting S3 bucket and " +
-                                      "its contents:  %v", err)
-                } else {
-                    log.Printf("Error deleting S3 bucket and its contents:  %v", err)
-                }
-            } else {
-                yamlUpdates["aws_env.s3_bucket_name"] = ""
-            }
+    if err != nil {
+        log.Fatalf("Error with AWS setup:  %v", err)
+    }
 
-            // Delete all the client TLS certificate from SSM Parameter store
-            err = bootstrapOut.SsmClient.SsmDeleteAllParams(1 * time.Minute,
-                                                            "/kloud-kraken/tls-cert")
-            if err != nil {
-                if logMan != nil {
-                    logMan.LogMessage("error", "Error deleting parameters from" +
-                                      " SSM Param Store:  %v", err)
-                } else {
-                    log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
-                }
-            }
+    // AWS cost optimization resource deletion cleanup routine
+    defer func() {
+        var stateConfig vpcsetup.AwsEnv
+        var stateData []byte
+        stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
+        var yamlUpdates = map[string]string{}
 
-            // Calculate the total cost of AWS resources
-            err = costMan.CalculateTotalCost()
-            if err != nil {
-                if logMan != nil {
-                    logMan.LogMessage("error", "Error calculating total AWS " +
-                                      "resource cost:  %v", err)
-                } else {
-                    log.Printf("Error calculating total AWS resource cost:  %v", err)
-                }
-            }
-
-            // Display total and individual AWS resource cost when program exits
-            fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                               color.LightCyan, "$"), "",
-                                           color.NeonAzure, "Total AWS resource cost:  ",
-                                           color.KrakenGlowGreen,
-                                           strconv.FormatFloat(costMan.TotalCost, 'E', -1, 64)))
-
-            fmt.Println(display.CtextMulti(color.LightCyan, "\n        AWS Cost Table\n",
-                                           color.KrakenPurple,
-                                           "-----------------------------------\n|      ",
-                                           color.NeonAzure, "Service Name      ",
-                                           color.KrakenPurple, "|", color.NeonAzure,
-                                           "  Cost  ", color.KrakenPurple, "|"))
-
-            // Iterate through contents of the service table
-            for service, price := range costMan.CostTable {
-                fmt.Printf("%s%-24s%s%-8s%s\n",
-                           display.Ctext(color.KrakenPurple, "|"),
-                           display.Ctext(color.KrakenGlowGreen, service),
-                           display.Ctext(color.KrakenPurple, "|"),
-                           display.Ctext(color.BrightLime,
-                                         strconv.FormatFloat(price, 'E', -1, 64)),
-                           display.Ctext(color.KrakenPurple, "|"))
-            }
-
-            fmt.Println(display.Ctext(color.KrakenPurple, "-----------------------------------"))
-        } ()
-
-    // If the program is being run in testing mode
-    } else {
-        // Generate the servers TLS PEM certificate & key and save in TLS manager
-        err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", true)
+        // Read the data from yaml state file
+        stateData, err = os.ReadFile(stateFilePath)
         if err != nil {
-            log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
+            log.Printf("Error reading state file for cleanup:  %v", err)
         }
 
+        // Decode raw bytes into StateConfig struct
+        err = yaml.Unmarshal(stateData, &stateConfig)
+        if err != nil {
+            log.Printf("Error unmarshaling state file YAML data into " +
+                        "state struct:  %v", err)
+        }
+
+        defer func() {
+            // If there are no values in YAML file to be updated
+            if len(yamlUpdates) == 0 {
+                return
+            }
+
+            // Update the yaml values with values from passed in map
+            newYaml, err := yamlutils.UpdateYAMLBytes(stateData, yamlUpdates)
+            if err != nil {
+                log.Printf("Error updating state data with entries in map:  %v", err)
+                return
+            }
+
+            // Overwrite the original yaml with the updated data
+            err = os.WriteFile(stateFilePath, newYaml, 0644)
+            if err != nil {
+                log.Printf("Error writing state data to state file:  %v", err)
+            }
+        }()
+
+        // // Terminate the EC2 instances
+        // termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
+        // if err != nil {
+        //     log.Printf("Error terminating EC2 instances:  %v", err)
+        // }
+
+        // // Iterate through list of terminated instance ids and log them
+        // for _, instance := range termOutput.TerminatingInstances {
+        //     if logMan != nil {
+        //         logMan.LogMessage("Instance state for %s: %s -> %s\n",
+        //                           aws.ToString(instance.InstanceId),
+        //                           instance.PreviousState.Name,
+        //                           instance.CurrentState.Name)
+        //     } else {
+        //         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+        //                                                            color.LightCyan, "+"), "",
+        //                                        color.NeonAzure, "Instance state for ",
+        //                                        color.RadiantAmethyst,
+        //                                        aws.ToString(instance.InstanceId),
+        //                                        color.NeonAzure, ": ", color.KrakenGlowGreen,
+        //                                        string(instance.PreviousState.Name),
+        //                                        color.NeonAzure, " -> ", color.KrakenGlowGreen,
+        //                                        string(instance.CurrentState.Name)))
+        //     }
+        // }
+
+        // Revoke the security group rule for listener port set by client
+        err = bootstrapOut.Ec2Client.RevokeSecurityGroupRule(1 * time.Minute, bootstrapOut.Ec2SgId,
+                                                                "tcp", "0.0.0.0/0", "ingress",
+                                                                int32(appConfig.LocalConfig.ListenerPort),
+                                                                int32(appConfig.LocalConfig.ListenerPort))
+        if err != nil {
+            if logMan != nil {
+                logMan.LogMessage( "error", "Error revoking security group rule:  %v", err)
+            } else {
+                log.Printf("Error revoking security group rule:  %v", err)
+            }
+        }
+
+        // Terminate SSM Parameter Store VPC Interface Endpoint
+        err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
+                                                            []string{bootstrapOut.SsmVpcEndpointId})
+        if err != nil {
+            if logMan != nil {
+                logMan.LogMessage( "error", "Error deleting SSM Parameter Store" +
+                                    " VPC Interface Endpoint:  %v", err)
+            } else {
+                log.Printf("Error deleting SSM Parameter Store VPC" +
+                            " Interface Endpoint:  %v", err)
+            }
+        } else {
+            yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ""
+        }
+
+        // Delete the S3 bucket and its contents
+        err = bootstrapOut.S3Client.S3BucketTerminator(5 * time.Minute,
+                                                        bootstrapOut.S3BucketName)
+        if err != nil {
+            if logMan != nil {
+                logMan.LogMessage("error", "Error deleting S3 bucket and " +
+                                    "its contents:  %v", err)
+            } else {
+                log.Printf("Error deleting S3 bucket and its contents:  %v", err)
+            }
+        } else {
+            yamlUpdates["aws_env.s3_bucket_name"] = ""
+        }
+
+        // Delete all the client TLS certificate from SSM Parameter store
+        err = bootstrapOut.SsmClient.SsmDeleteAllParams(1 * time.Minute,
+                                                        "/kloud-kraken/tls-cert")
+        if err != nil {
+            if logMan != nil {
+                logMan.LogMessage("error", "Error deleting parameters from" +
+                                    " SSM Param Store:  %v", err)
+            } else {
+                log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
+            }
+        }
+
+        // Calculate the total cost of AWS resources
+        err = costMan.CalculateTotalCost()
+        if err != nil {
+            if logMan != nil {
+                logMan.LogMessage("error", "Error calculating total AWS " +
+                                    "resource cost:  %v", err)
+            } else {
+                log.Printf("Error calculating total AWS resource cost:  %v", err)
+            }
+        }
+
+        // Display total and individual AWS resource cost when program exits
         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                           color.LightCyan, "TESTING"), "",
-                                       color.NeonAzure, "PEM cert generated, transfer " +
-                                       " to client before execution"))
-    }
+                                                            color.LightCyan, "$"), "",
+                                        color.NeonAzure, "Total AWS resource cost:  ",
+                                        color.KrakenGlowGreen,
+                                        strconv.FormatFloat(costMan.TotalCost, 'E', -1, 64)))
+
+        fmt.Println(display.CtextMulti(color.LightCyan, "\n        AWS Cost Table\n",
+                                        color.KrakenPurple,
+                                        "-----------------------------------\n|      ",
+                                        color.NeonAzure, "Service Name      ",
+                                        color.KrakenPurple, "|", color.NeonAzure,
+                                        "  Cost  ", color.KrakenPurple, "|"))
+
+        // Iterate through contents of the service table
+        for service, price := range costMan.CostTable {
+            fmt.Printf("%s%-24s%s%-8s%s\n",
+                        display.Ctext(color.KrakenPurple, "|"),
+                        display.Ctext(color.KrakenGlowGreen, service),
+                        display.Ctext(color.KrakenPurple, "|"),
+                        display.Ctext(color.BrightLime,
+                                        strconv.FormatFloat(price, 'E', -1, 64)),
+                        display.Ctext(color.KrakenPurple, "|"))
+        }
+
+        fmt.Println(display.Ctext(color.KrakenPurple, "-----------------------------------"))
+    } ()
 
     // Generate a TLS x509 certificate and cert pool
     err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
@@ -1188,7 +1131,7 @@ func main() {
     time.Sleep(5 * time.Second)
 
     // Listen for incoming client connections and handle them
-    startServer(appConfig, logMan)
+    startServer(appConfig, bootstrapOut, logMan)
 
     // Redisplay banner once processing is complete
     printBanner()
