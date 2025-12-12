@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
@@ -28,7 +27,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
-	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
@@ -43,6 +41,7 @@ import (
 
 // Package level variables
 var Ec2Client *ec2utils.Ec2Manger
+var Ec2Ips []string
 var Ec2SecurityGroupId string
 var ReceivedDir = "/tmp/received"    // Path where cracked hashes & client logs are stored
 var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
@@ -124,11 +123,25 @@ func handleTransfer(connection net.Conn, buffer []byte,
     // Format client ip:port to connect to
     clientAddr := net.JoinHostPort(ipAddr, strconv.Itoa(port))
 
-    // Make a connection to the client for file transfer
-    transferConn, err := tls.Dial("tcp", clientAddr, tlsutils.NewClientTLSConfig(TlsMan.CaCertPool,
-                                                                                 ipAddr))
-    if err != nil {
+    maxRetries := 3
+    tlsConfig := tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr)
+    var transferConn *tls.Conn
+
+    for range 3 {
+        // Make a connection to the client for file transfer
+        transferConn, err = tls.Dial("tcp", clientAddr, tlsConfig)
+        if err == nil {
+            break
+        }
+
         logMan.LogMessage("error", "Error connecting to remote client for transfer:  %v", err)
+        // Sleep for a bit and try again on failure
+        time.Sleep(5 * time.Second)
+        maxRetries -= 1
+    }
+
+    if maxRetries == 0 {
+        logMan.LogMessage("error", "Max connection attempt failures exhausted")
         return
     }
 
@@ -329,11 +342,9 @@ func handleConnection(connection net.Conn,
 //
 // @Parameters
 //  - appConfig:  The configuration struct with loaded yaml program data
-//  - bootstrapOut:  The VPC bootstrap output struct
 //  - logMan:  The kloudlogs logger manager for local logging
 //
 func startServer(appConfig *conf.AppConfig,
-                 bootstrapOut *vpcsetup.VpcBootstrapOutput,
                  logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
@@ -344,15 +355,14 @@ func startServer(appConfig *conf.AppConfig,
     defer t.Stop()
 
     // Iterate through instances in result from SDK call
-    for _, instance := range bootstrapOut.Ec2Client.RunResult.Instances {
+    for _, ipAddr := range Ec2Ips {
         // If there is no public IP address, skip it
-        if instance.PublicIpAddress == nil {
+        if ipAddr == "" {
             continue
         }
 
         // Define the address of the server to connect to
-        serverAddress := net.JoinHostPort(instance.PublicIpAddress,
-                                          strconv.Itoa(appConfig.LocalConfig.ListenerPort))
+        serverAddress := net.JoinHostPort(ipAddr, strconv.Itoa(appConfig.LocalConfig.ListenerPort))
 
         logMan.LogMessage("debug", "Attempting connect to " + serverAddress)
 
@@ -364,8 +374,7 @@ func startServer(appConfig *conf.AppConfig,
 
         // Make a connection to the remote server
         connection, err := tls.Dial("tcp", serverAddress,
-                                    tlsutils.NewClientTLSConfig(TlsMan.CaCertPool,
-                                                                instance.PublicIpAddress))
+                                    tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
         if err != nil {
             logMan.LogMessage("error", "Error connecting to remote client:  %v", err)
             continue
@@ -378,7 +387,7 @@ func startServer(appConfig *conf.AppConfig,
         // Increment wait group and handle connection in separate Goroutine
         waitGroup.Add(1)
         go handleConnection(connection, &waitGroup, appConfig,
-                            logMan, instance.PublicIpAddress, t)
+                            logMan, ipAddr, t)
     }
 
     // Wait for all active Goroutines to finish before shutting down the server
@@ -564,93 +573,51 @@ systemctl enable --now client.service
 //  - Errors associated with cost manager
 //  - Error if it occurs, otherwise nil on success
 //
-func awsSetup(appConfig *conf.AppConfig) (
-              awsConfig aws.Config,
-              bootstrapOut *vpcsetup.VpcBootstrapOutput,
-              costMan *awscost.AwsCostManager,
-              costErr error, err error) {
+func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutput,
+                                          *awscost.AwsCostManager, error, error) {
     // Set up AWS credentials based on local chain or environment variables
-    awsConfig, err = awsutils.AwsConfigSetup(1 * time.Minute,
-                                             appConfig.LocalConfig.Region,
-                                             "kloud-kraken")
+    baseAwsConfig, err := awsutils.AwsConfigSetup(1 * time.Minute,
+                                                  appConfig.LocalConfig.Region,
+                                                  "kloud-kraken")
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, nil, err
+        return baseAwsConfig, nil, nil, nil, err
     }
 
     // Get human readable location string based off region for cost calculation
-    location, exists := awsutils.RegionToLocation(awsConfig.Region)
+    location, exists := awsutils.RegionToLocation(baseAwsConfig.Region)
     if !exists {
-        return awsConfig, bootstrapOut, costMan, nil, err
+        return baseAwsConfig, nil, nil, nil, err
     }
 
-    // Establish clients to various services
-    ec2Client := ec2utils.Ec2NewManager(awsConfig)
-    iamClient := iamutils.IamNewManager(awsConfig)
-    stsClient := sts.NewFromConfig(awsConfig)
+    // Establish client to Security Token Service
+    stsClient := sts.NewFromConfig(baseAwsConfig)
 
     // Set up Kloud Kraken VPC and its associated components
-    bootstrapOut, costMan, costErr, err = vpcsetup.VpcBootstrap(appConfig, awsConfig,
-                                                                location, ec2Client,
-                                                                iamClient, *stsClient)
+    bootstrapOut, costMan, costErr, err := vpcsetup.VpcBootstrap(appConfig, baseAwsConfig,
+                                                                 location, *stsClient)
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return baseAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
-    bootstrapOut.Ec2Client = ec2Client
     Ec2SecurityGroupId = bootstrapOut.Ec2SgId
 
     // Create a provider that will call STS AssumeRole under the covers
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
-
-    // Create fresh AWS config from new STS provider
-    awsConfig, err = config.LoadDefaultConfig(
-        context.TODO(),
-        config.WithRegion(appConfig.LocalConfig.Region),
-        config.WithCredentialsProvider(aws.NewCredentialsCache(assumeProvider)),
-    )
-    if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
-    }
+    // Make a shallow copy of base AWS config instance
+    assumedAwsConfig := baseAwsConfig.Copy()
+    // Swap in credentials of assumed role
+    assumedAwsConfig.Credentials = aws.NewCredentialsCache(assumeProvider)
 
     // Ensure STS token is refreshed per execution
-    _, err = awsConfig.Credentials.Retrieve(context.Background())
+    _, err = assumedAwsConfig.Credentials.Retrieve(context.Background())
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
-
-    tags := map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-ssm-tls-cert",
-    }
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Uploading TLS certificate to " +
-                                   "SSM Paramter Store for client retrieval"))
-
-    // Setup client to SSM
-    ssmClient := ssmutils.SsmNewManager(awsConfig)
-    // Push the servers certificate PEM into SSM parameter store
-    ssmParam, err := ssmClient.SsmPutParameter(1 * time.Minute,
-                                               "/kloud-kraken/tls-cert",
-                                               string(TlsMan.CertPemBlock),
-                                               tags)
-    if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
-    }
-
-    bootstrapOut.SsmClient = ssmClient
-
-    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                   display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "TLS certificate uploaded to " +
-                                   "SSM Parameter Store"))
 
     // Read the client binary into memory
     binData, err := os.ReadFile(globals.BIN_DIR + "/kloud-kraken-client")
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -658,13 +625,13 @@ func awsSetup(appConfig *conf.AppConfig) (
                                    color.NeonAzure, "Uploading client binary to S3 bucket"))
 
     // Re-establish client to S3 with new API key set
-    s3Client := s3utils.S3NewManager(awsConfig)
+    s3Client := s3utils.S3NewManager(assumedAwsConfig)
     // Upload the client binary to S3 Bucket
     keyName, err := s3Client.S3PutObject(5 * time.Minute,
                                          bootstrapOut.S3BucketName,
                                          "client", binData)
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     bootstrapOut.S3Client = s3Client
@@ -688,29 +655,30 @@ func awsSetup(appConfig *conf.AppConfig) (
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
-                                    keyName, ssmParam, bootstrapOut.Ec2SgId)
+                                    keyName, "/kloud-kraken/tls-cert-1",
+                                    bootstrapOut.Ec2SgId)
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
-    tags = map[string]string{
+    tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-ec2-client",
     }
 
     // Re-setup new client to EC2 service with newly assumed role
-    Ec2Client = ec2utils.Ec2NewManager(awsConfig)
+    Ec2Client = ec2utils.Ec2NewManager(assumedAwsConfig)
+    bootstrapOut.Ec2Client = Ec2Client
     // Get the latest AMI for the ubuntu deep learning
-    amiId, err := awsutils.GetAmiId(5 * time.Minute, ec2Client.Client, "x86_64",
-                                    "Deep Learning Base AMI with Single CUDA (Ubuntu 22.04) *",
-                                    []string{"amazon"})
+    amiId, err := Ec2Client.Ec2GetAmiId(1 * time.Minute, "x86_64", "Deep Learning " +
+                                        "Base AMI with Single CUDA (Ubuntu 22.04) *",
+                                        []string{"amazon"})
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
         AMI:              amiId,
-        HasWaiter:        true,
         InstanceType:     appConfig.LocalConfig.InstanceType,
         MaxCount:         appConfig.LocalConfig.NumberInstances,
         MinCount:         appConfig.LocalConfig.NumberInstances,
@@ -726,9 +694,9 @@ func awsSetup(appConfig *conf.AppConfig) (
                                    color.NeonAzure, "Creating EC2 instance(s)"))
 
     // Create number of EC2 instances based on passed in data
-    err = ec2Client.Ec2CreateInstances(15 * time.Minute, ec2CreateInstancesInput)
+    err = Ec2Client.Ec2CreateInstances(5 * time.Minute, ec2CreateInstancesInput)
     if err != nil {
-        return awsConfig, bootstrapOut, costMan, costErr, err
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     filterMap = map[string]string{
@@ -745,7 +713,84 @@ func awsSetup(appConfig *conf.AppConfig) (
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 instance creation completed"))
 
-    return awsConfig, bootstrapOut, costMan, costErr, nil
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "!"), "",
+                                    color.NeonAzure, "Retrieving EC2 public IP addresses"))
+
+    // Get the public IP addreses of EC2 instances for TLS certificate
+    Ec2Ips, err = Ec2Client.Ec2GetPublicIps(5 * time.Minute, nil)
+    if err != nil {
+        log.Fatalf("Error getting EC2 public IPs:  %v", err)
+    }
+
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "EC2 public IP addresses retrieved"))
+
+    // Generate the servers TLS PEM certificate and key and save in TLS manager
+    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, Ec2Ips...)
+    if err != nil {
+        log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
+    }
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "$"), "",
+                                    color.NeonAzure, "Server TLS certificate & key generated"))
+
+    // Generate a TLS x509 certificate and cert pool
+    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
+                                TlsMan.CaCertPemBlocks)
+    if err != nil {
+        log.Fatalf("Error generating TLS certificate:  %v", err)
+    }
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "X509 cerificate pool generated " +
+                                   "and server certifcate added to pool"))
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Uploading TLS certificate to " +
+                                   "SSM Paramter Store for client retrieval"))
+
+    tags = map[string]string{
+        "kloud-kraken": "true",
+        "Name": "kloud-kraken-ssm-tls-cert",
+    }
+
+    // Setup client to SSM
+    ssmClient := ssmutils.SsmNewManager(assumedAwsConfig)
+    // Push the servers certificate PEM into SSM parameter store
+    _, err = ssmClient.SsmPutParameter(1 * time.Minute,
+                                       "/kloud-kraken/tls-cert",
+                                       string(TlsMan.CertPemBlock),
+                                       tags)
+    if err != nil {
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+    }
+
+    bootstrapOut.SsmClient = ssmClient
+
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
+                                   color.NeonAzure, "TLS certificate uploaded to " +
+                                   "SSM Parameter Store"))
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Waiting for status OK to " +
+                                   "connect to the EC2 instances"))
+
+    // Wait until the EC2 instance status is OK
+    err = Ec2Client.Ec2WaiterStatusOk(15 * time.Minute)
+    if err != nil {
+        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+    }
+
+    return assumedAwsConfig, bootstrapOut, costMan, costErr, nil
 }
 
 
@@ -892,40 +937,6 @@ func main() {
                                    display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "Wordlist merging process completed"))
-
-
-
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                        color.LightCyan, "!"), "",
-                                    color.NeonAzure, "Retrieving server public IP addresses"))
-
-    // Query IP lookup APIs for public IP addresses
-    publicIps, err := tlsutils.GetPublicIps()
-    if err != nil {
-        log.Fatalf("Error getting public IP addresses:  %v", err)
-    }
-
-    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                    display.CtextPrefix(color.KrakenPurple,
-                                                        color.LightCyan, "$"), "",
-                                    color.NeonAzure, "Server public IP addresses retrieved"))
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                        color.LightCyan, "!"), "",
-                                    color.NeonAzure, "Generating server TLS PEM certificate"))
-
-    // Generate the servers TLS PEM certificate and key and save in TLS manager
-    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, publicIps...)
-    if err != nil {
-        log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
-    }
-
-    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                    display.CtextPrefix(color.KrakenPurple,
-                                                        color.LightCyan, "$"), "",
-                                    color.NeonAzure, "Server TLS PEM certificate " +
-                                    "and key generated"))
 
     var logMan *kloudlogs.LoggerManager
 
@@ -1108,18 +1119,6 @@ func main() {
         fmt.Println(display.Ctext(color.KrakenPurple, "-----------------------------------"))
     } ()
 
-    // Generate a TLS x509 certificate and cert pool
-    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
-                                TlsMan.CaCertPemBlocks)
-    if err != nil {
-        log.Fatalf("Error generating TLS certificate:  %v", err)
-    }
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "X509 cerificate pool generated " +
-                                   "and server certifcate added to pool"))
-
     // Initialize the LoggerManager based on the flags
     logMan, err = kloudlogs.NewLoggerManager("local", "KloudKraken.log",
                                              awsConfig, "", -1, nil, false)
@@ -1131,7 +1130,7 @@ func main() {
     time.Sleep(5 * time.Second)
 
     // Listen for incoming client connections and handle them
-    startServer(appConfig, bootstrapOut, logMan)
+    startServer(appConfig, logMan)
 
     // Redisplay banner once processing is complete
     printBanner()

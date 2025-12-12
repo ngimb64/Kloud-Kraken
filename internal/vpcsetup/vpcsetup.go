@@ -64,8 +64,6 @@ type VpcBootstrapOutput struct {
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - awsConfig:  The configuration to access AWS environment
 //  - location:  The human readable location version of region
-//  - ec2Client:  Pointer to EC2 service client management struct
-//  - iamClient:  Pointer to IAM service client management struct
 //  - stsClient:  The STS service client management struct
 //
 // @Returns
@@ -77,8 +75,6 @@ type VpcBootstrapOutput struct {
 func VpcBootstrap(appConfig *conf.AppConfig,
                   awsConfig aws.Config,
                   location string,
-                  ec2Client *ec2utils.Ec2Manger,
-                  iamClient *iamutils.IamManager,
                   stsClient sts.Client) (
                   *VpcBootstrapOutput,
                   *awscost.AwsCostManager,
@@ -88,6 +84,10 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     var stateData []byte
     stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
     var yamlUpdates = map[string]string{}
+
+    // Establish clients to various services
+    ec2Client := ec2utils.Ec2NewManager(awsConfig)
+    iamClient := iamutils.IamNewManager(awsConfig)
 
     // Check to see if the yaml state file exists
     exists, isDir, hasData, err := disk.PathExists(stateFilePath)

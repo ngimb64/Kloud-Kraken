@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,7 +18,6 @@ import (
 type Ec2CreateInstancesInput struct {
     AMI              string
     EbsSize          int32              // Optional
-    HasWaiter        bool               // Optional
     InstanceType     string             // Optional
     MaxCount         int32
     MinCount         int32
@@ -136,34 +136,13 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
     if callInput.UserData != nil {
         // Base64 encode the user data script
         encodedUserData := base64.StdEncoding.EncodeToString(callInput.UserData)
-        createInput.UserData = &encodedUserData
+        createInput.UserData = aws.String(encodedUserData)
     }
 
     // Execute call to run the EC2 instance
     runOutput, err := Ec2Man.Client.RunInstances(ctx, createInput)
     if err != nil {
         return err
-    }
-
-    // If there is a status OK waiter
-    if callInput.HasWaiter {
-        var instanceIDs []string
-
-        // Add the instance IDs from run output to list
-        for _, inst := range runOutput.Instances {
-            instanceIDs = append(instanceIDs, *inst.InstanceId)
-        }
-
-        waiterCallInput := &ec2.DescribeInstanceStatusInput{
-            InstanceIds: instanceIDs,
-        }
-
-        // Allocate waiter and wait until EC2 instances are spawned
-        waiter := ec2.NewInstanceStatusOkWaiter(Ec2Man.Client)
-        err = waiter.Wait(ctx, waiterCallInput, callTime)
-        if err != nil {
-            return err
-        }
     }
 
     // Assign run API call to EC2 manager struct
@@ -180,8 +159,8 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
 //  - List of retrieved availability zones for region
 //  - Error if it occurs, otherwise nil on success
 //
-func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
-                                           []string, error) {
+func (Ec2Man *Ec2Manger) Ec2FetchAvailableAZs(callTime time.Duration) (
+                                              []string, error) {
     // Set context timeout for API call
     ctx, cancel := context.WithTimeout(context.Background(), callTime)
     defer cancel()
@@ -215,6 +194,197 @@ func (Ec2Man *Ec2Manger) FetchAvailableAZs(callTime time.Duration) (
 
     return azs, nil
 }
+
+// Handles retrieving the AMI ID by first attempting via SSM Parameter
+// Store then resorts to using DescribeImages call as a backup.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - arch:  The system architecture supported by the AMI
+//  - amiNamePattern:  The text pattern of AMI to search for
+//  - owners:  The owner IDs of the AMI
+//
+// @Returns
+//  - The retrieved AMI ID if successfull
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2GetAmiId(callTime time.Duration, arch string,
+                                     amiNamePattern string, owners []string) (
+                                     string, error) {
+    // Ensure required args are present
+    if arch  == "" || amiNamePattern == "" {
+        return "", errors.New("arch or namePattern is missing")
+    }
+
+    var err error
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    describeImagesInput := &ec2.DescribeImagesInput{
+        Filters: []ec2types.Filter{
+            {Name: aws.String("architecture"), Values: []string{arch}},
+            {Name: aws.String("name"), Values: []string{amiNamePattern}},
+            {Name: aws.String("state"), Values: []string{"available"}},
+        },
+    }
+
+    // If owners are specified add them to call input
+    if len(owners) > 0 {
+        describeImagesInput.Owners = owners
+    }
+
+    // Get the AMI images by specified filters
+    out, err := Ec2Man.Client.DescribeImages(ctx, describeImagesInput)
+    if err != nil {
+        return "", err
+    }
+
+    if len(out.Images) == 0 {
+        return "", fmt.Errorf("no images matched pattern %q", amiNamePattern)
+    }
+
+    // Sort list of AMIs by descending order by creation date
+    sort.Slice(out.Images, func(i int, j int) bool {
+        ai := out.Images[i].CreationDate
+        aj := out.Images[j].CreationDate
+
+        // If both nil -> consider equal (stable)
+        if ai == nil && aj == nil {
+            return false
+        }
+
+        // Push nils to the end (so non-nil come first)
+        if ai == nil {
+            return false
+        }
+
+        if aj == nil {
+            return true
+        }
+
+        // CreationDate uses ISO-8601 so lexicographic comparison is valid
+        return *ai > *aj
+    })
+
+    // search for first non-nil ImageId
+    for _, img := range out.Images {
+        if img.ImageId != nil {
+            return aws.ToString(img.ImageId), nil
+        }
+    }
+
+    return "", errors.New("no image with valid ImageId found")
+}
+
+// Gets the public IP address(es) of passed in instance IDs. If no instance IDs
+// are passed in it will attempt to parse them out of last RunInstances result.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - ec2Ids:  Optional slice of EC2 instance IDs, if nil RunInstances result instead
+//
+// @Returns
+//  - Slice of public IPs retrieved based off instance IDs
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2GetPublicIps(callTime time.Duration, ec2Ids []string) (
+                                         []string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    var instanceIds []string
+
+    // If no instance IDs were passed in, use run instances result
+    if len(ec2Ids) < 1 {
+        // Iterate through launched instances & save IDs to slice
+        for _, instance := range Ec2Man.RunResult.Instances {
+            if instance.InstanceId != nil {
+                instanceIds = append(instanceIds, *instance.InstanceId)
+            }
+        }
+    // Otherwise use passed in instance IDs
+    } else {
+        instanceIds = ec2Ids
+    }
+
+    // If no instance IDs exist, exit early
+    if len(instanceIds) < 1 {
+        return nil, errors.New("no instance IDs to retrieve public IPs")
+    }
+
+    var describeErr error
+    publicIps := make(map[string]struct{})
+
+    // Retry until public IPs are ready
+    for {
+        // respect context cancellation/timeouts
+        select {
+        case <-ctx.Done():
+            if describeErr != nil {
+                return nil, fmt.Errorf("timed out waiting for public IPs" +
+                                       " (last describe error: %w): %v",
+                                       describeErr, ctx.Err())
+            }
+
+            return nil, fmt.Errorf("timed out waiting for public IPs: %w", ctx.Err())
+        default:
+        }
+
+        describeInput := &ec2.DescribeInstancesInput{
+            InstanceIds: instanceIds,
+        }
+
+        // Get the instance information where the public IP is stored
+        descOut, err := Ec2Man.Client.DescribeInstances(ctx, describeInput)
+        if err != nil {
+            describeErr = errors.Join(describeErr,
+                                      fmt.Errorf("DescribeInstances - %w", err))
+            continue
+        }
+
+        allHaveIPs := true
+
+        // Iterate through instance reservations
+        for _, reservation := range descOut.Reservations {
+            // Iterate through specific instance informatiion
+            for _, instance := range reservation.Instances {
+                // If public IP is missing, set toggle to continue loop
+                if instance.PublicIpAddress == nil {
+                    allHaveIPs = false
+                    continue
+                }
+
+                // Check to see if public IP exists in map
+                _, exists := publicIps[*instance.PublicIpAddress]
+                // If the public IP does not exist in map
+                if !exists {
+                    // Add it to the public IPs map
+                    publicIps[*instance.PublicIpAddress] = struct{}{}
+                }
+            }
+        }
+
+        if allHaveIPs {
+            break
+        }
+
+        time.Sleep(5 * time.Second)
+    }
+
+    index := 0
+    resultIps := make([]string, len(publicIps))
+
+    // Iterate through keys of public IP map and assign in slice
+    for key := range publicIps {
+        resultIps[index] = key
+        index++
+    }
+
+    return resultIps, nil
+}
+
 
 // Terminates the EC2 instances by ID's collected from creation method result.
 //
@@ -260,4 +430,38 @@ func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
     }
 
     return termOutput, nil
+}
+
+// Waits and polls the instance status unit it is OK.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2WaiterStatusOk(callTime time.Duration) error {
+    var instanceIDs []string
+
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    // Add the instance IDs from run output to list
+    for _, instance := range Ec2Man.RunResult.Instances {
+        instanceIDs = append(instanceIDs, *instance.InstanceId)
+    }
+
+    waiterCallInput := &ec2.DescribeInstanceStatusInput{
+        InstanceIds: instanceIDs,
+    }
+
+    // Allocate waiter and wait until EC2 instances are spawned
+    waiter := ec2.NewInstanceStatusOkWaiter(Ec2Man.Client)
+    err := waiter.Wait(ctx, waiterCallInput, callTime)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }

@@ -1,29 +1,29 @@
-- Fix connect initiation to local host -> EC2 instance(s)
-    - Delete security group rule for 7003 in EC2 group before testing
-    - Delete server and client roles before testing
+- Update getting EC2 instance public IPs with describe function instead of unreliable run instances output
+
+- Adjust SSM parameter store utility package logic so it can locally reserver parameters
+
+- Add code to teardown to terminate VPC flow logs resources
 
 - Look into pricing system retrieving wrong prices
     - Try adding more filters to ensure correct prices are retrieved
 
-- Add code to teardown to terminate VPC flow logs resources
-
-- Optimize awscost and add cost prediction functionality
-
 - Look into making sure VPC flow logs package is optimized
 
-- Review permissions to harden to max effect of least privilege
+- Build binary to build out state file with existing resources
 
 - Try improving existing tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os
 
 - Implement unit tests for packages that need them
 
+- Review permissions to harden to max effect of least privilege
+
+- Optimize awscost and add cost prediction functionality
+
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
 
 - Optimize wordlist merging and file shaving logic with custom rust programs
-
-- Build binary to build out state file with existing resources
 
 - Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 

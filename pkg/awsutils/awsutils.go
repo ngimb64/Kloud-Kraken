@@ -2,11 +2,9 @@ package awsutils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -14,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -246,83 +243,6 @@ func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
 }
 
 
-// Gets the AMI ID's by specified filters and gets the most recently created.
-//
-// @Parameters
-//  - ctx:  Context handler for AWS API call duration
-//  - ec2Client:  Established client to EC2 service
-//  - arch:  The system architecture supported by the AMI
-//  - namePattern:  The name pattern to filter in DescribeImages
-//  - owners:  The owner IDs of the AMI
-//
-// @Returns
-//  - The retrieved AMI ID if successful
-//  - Error if it occurs, otherwise nil on success
-//
-func findImageByName(ctx context.Context, ec2Client *ec2.Client,
-                     arch string, namePattern string, owners []string) (
-                     string, error) {
-    if arch  == "" || namePattern == "" {
-        return "", errors.New("arch or namePattern is missing")
-    }
-
-    describeImagesInput := &ec2.DescribeImagesInput{
-        Filters: []ec2types.Filter{
-            {Name: aws.String("architecture"), Values: []string{arch}},
-            {Name: aws.String("name"), Values: []string{namePattern}},
-            {Name: aws.String("state"), Values: []string{"available"}},
-        },
-    }
-
-    // If owners are specified add them to call input
-    if len(owners) > 0 {
-        describeImagesInput.Owners = owners
-    }
-
-    // Get the AMI images by specified filters
-    out, err := ec2Client.DescribeImages(ctx, describeImagesInput)
-    if err != nil {
-        return "", err
-    }
-
-    if len(out.Images) == 0 {
-        return "", fmt.Errorf("no images matched pattern %q", namePattern)
-    }
-
-    // Sort list of AMIs by descending order by creation date
-    sort.Slice(out.Images, func(i int, j int) bool {
-        ai := out.Images[i].CreationDate
-        aj := out.Images[j].CreationDate
-
-        // If both nil -> consider equal (stable)
-        if ai == nil && aj == nil {
-            return false
-        }
-
-        // Push nils to the end (so non-nil come first)
-        if ai == nil {
-            return false
-        }
-
-        if aj == nil {
-            return true
-        }
-
-        // CreationDate uses ISO-8601 so lexicographic comparison is valid
-        return *ai > *aj
-    })
-
-    // search for first non-nil ImageId
-    for _, img := range out.Images {
-        if img.ImageId != nil {
-            return aws.ToString(img.ImageId), nil
-        }
-    }
-
-    return "", errors.New("no image with valid ImageId found")
-}
-
-
 // Gets the account ID from STS client.
 //
 // @Parameters
@@ -344,39 +264,6 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
     }
 
     return *out.Account, nil
-}
-
-
-// Handles retrieving the AMI ID by first attempting via SSM Parameter
-// Store then resorts to using DescribeImages call as a backup.
-//
-// @Parameters
-//  - callTime:  The length of time the API call is allowed to execute
-//  - ec2Client:  Established client to EC2 service
-//  - arch:  The system architecture supported by the AMI
-//  - amiNamePattern:  The text pattern of AMI to search for
-//  - owners:  The owner IDs of the AMI
-//
-// @Returns
-//  - The retrieved AMI ID if successfull
-//  - Error if it occurs, otherwise nil on success
-//
-func GetAmiId(callTime time.Duration, ec2Client *ec2.Client,
-              arch string, amiNamePattern string,
-              owners []string) (string, error) {
-    var err error
-    // Ensure AWS API calls do not hang for longer specified timeout
-    ctx, cancel := context.WithTimeout(context.Background(), callTime)
-    defer cancel()
-
-    // Backup method using DescribeImages if SSM method fails
-    amiID, ferr := findImageByName(ctx, ec2Client, arch, amiNamePattern, owners)
-    if ferr != nil {
-        err = errors.Join(err, fmt.Errorf("fallback DescribeImages failed - %w", ferr))
-        return "", err
-    }
-
-    return amiID, nil
 }
 
 

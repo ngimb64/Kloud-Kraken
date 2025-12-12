@@ -85,7 +85,6 @@ func GetPublicIps() ([]string, error) {
 
     // Iterate through list of IP API enpoints
     for _, url := range endpoints {
-
         // Execute GET request to retrieve IP data
         data, err := getIpData(5 * time.Second, url)
         if err != nil {

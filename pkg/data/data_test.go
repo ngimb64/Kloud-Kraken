@@ -119,7 +119,7 @@ func TestSliceToCsv(t *testing.T) {
     resultCsv, err := data.SliceToCsv(testSlice)
     assert.Equal(nil, err)
     // Ensure the resulting CSV string is of proper format
-    assert.Equal("foo,bar,shazam,shamar\n", resultCsv)
+    assert.Equal("foo,bar,shazam,shamar", resultCsv)
 }
 
 

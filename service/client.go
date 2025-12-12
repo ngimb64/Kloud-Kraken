@@ -362,7 +362,7 @@ func processTransfer(connection net.Conn, buffer []byte,
     // Send the transfer request message to initiate file transfer
     _, err = netio.WriteHandler(connection, buffer, sendLength)
     if err != nil {
-        logMan.LogMessage("error", "Error sending the transfer request to brain server:  %v", err)
+        logMan.LogMessage("error", "Error sending the transfer request to server:  %v", err)
         closeListener()
         return
     }

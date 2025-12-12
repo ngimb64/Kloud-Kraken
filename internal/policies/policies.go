@@ -60,7 +60,7 @@ func ClientPermPolicyGen(region string, accountId string) string {
         "logs:DescribeLogStreams"
       ],
       "Resource": "*"
-    },
+    }
   ]
 }`, region, accountId, region, accountId, region, accountId)
 }
@@ -159,7 +159,7 @@ func ServerPermPolicyGen(region string, accountId string) string {
         "iam:PassRole"
       ],
       "Resource": "arn:aws:iam::%s:role/KloudKrakenClientRole"
-    }
+    },
 
     {
       "Sid": "ManageSecurityGroupIngressAndEgress",
