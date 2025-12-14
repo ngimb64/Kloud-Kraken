@@ -492,11 +492,40 @@ DIR=/opt
 mkdir -p "$DIR"
 # Copy binary to instance from S3 and set executable permissions
 aws s3 cp s3://%s/%s "$DIR"/client --region %s --no-progress
-chmod +x "$DIR"/client
+test -x "$DIR"/client || chmod +x "$DIR"/client
+
+# Create pre-run script to poll until TLS certificate is
+# retrieved from SSM Parameter Store or a timeout occurs
+cat > "$DIR"/wait-for-param.sh <<-__EOF__
+#!/bin/sh
+set -euo pipefail
+
+# Usage: wait-for-parameter.sh <param-name> <timeout-seconds>
+PARAM="$1"
+TIMEOUT="${2:-300}"
+SLEEP=3
+ELAPSED=0
+
+# Try to fetch parameter (with decryption)
+while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    if aws ssm get-parameter --name "$PARAM" --with-decryption >/dev/null 2>&1; then
+        printf 'SSM parameter %%s found after %%ss\n' "$PARAM" "$ELAPSED"
+        exit 0
+    fi
+
+    printf 'Waiting for SSM parameter %%s... (%%s/%%ss)\n' "$PARAM" "$ELAPSED" "$TIMEOUT"
+    sleep "$SLEEP"
+    ELAPSED=$((ELAPSED + SLEEP))
+done
+
+printf "Parameter %%s not found after %%s seconds\n" "$PARAM" "$TIMEOUT" >&2
+exit 1
+__EOF__
 
 # Create run script to launch client
 cat > "$DIR"/run-client.sh <<-__EOF__
 #!/bin/bash
+set -euo pipefail
 
 exec "$DIR"/client \
     -applyOptimization=%t \
@@ -523,15 +552,16 @@ chmod +x "$DIR"/run-client.sh
 # Create systemd unit file that runs script to launch client
 cat > /etc/systemd/system/client.service <<-__EOF__
 [Unit]
-Description=Distributed Hashcat Client
+Description=Kloud Kraken Client
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/opt/run-client.sh
+ExecStartPre="$DIR"/wait-for-parameter.sh %s 300
+ExecStart="$DIR"/run-client.sh
 Restart=on-failure
-RestartSec=5
+RestartSec=10
 StandardOutput=file:/var/log/client.log
 StandardError=file:/var/log/client.log
 
@@ -549,7 +579,7 @@ systemctl enable --now client.service
    ec2SgId, appConf.ClientConfig.HashMask, hasRuleset,
    appConf.ClientConfig.HashType, appConf.ClientConfig.LogMode,
    appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
-   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
+   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload, ssmParam)
 
     return data, nil
 }

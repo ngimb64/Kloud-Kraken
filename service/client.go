@@ -352,6 +352,7 @@ func processTransfer(connection net.Conn, buffer []byte,
         }
     }
 
+    // Format the transfer request with listener port to connect to
     sendLength, err := netio.FormatTransferRequest(port, &buffer, globals.TRANSFER_REQUEST_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer request:  %v", err)
