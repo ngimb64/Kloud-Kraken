@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"time"
 
@@ -344,15 +345,18 @@ func (Ec2Man *Ec2Manger) Ec2GetPublicIps(callTime time.Duration, ec2Ids []string
             continue
         }
 
-        allHaveIPs := true
-
         // Iterate through instance reservations
         for _, reservation := range descOut.Reservations {
             // Iterate through specific instance informatiion
             for _, instance := range reservation.Instances {
                 // If public IP is missing, set toggle to continue loop
                 if instance.PublicIpAddress == nil {
-                    allHaveIPs = false
+                    continue
+                }
+
+                // Ensure IP address is a public address
+                ipAddr := net.ParseIP(*instance.PublicIpAddress)
+                if ipAddr == nil || isPrivateIpv4(ipAddr) {
                     continue
                 }
 
@@ -366,7 +370,7 @@ func (Ec2Man *Ec2Manger) Ec2GetPublicIps(callTime time.Duration, ec2Ids []string
             }
         }
 
-        if allHaveIPs {
+        if len(publicIps) >= len(instanceIds) {
             break
         }
 
@@ -464,4 +468,40 @@ func (Ec2Man *Ec2Manger) Ec2WaiterStatusOk(callTime time.Duration) error {
     }
 
     return nil
+}
+
+
+// Checks whether passed in ip address is private or not.
+//
+// @Parameters
+//  - ip:  The ip address to check if private
+//
+// @Returns
+//  - Toggle for whether the ip address is private or not
+//
+func isPrivateIpv4(ip net.IP) bool {
+    if ip == nil {
+        return true
+    }
+
+    // Convert ip to 4 byte representation
+    ip4 := ip.To4()
+    if ip4 == nil {
+        return true
+    }
+
+    switch {
+    case ip4[0] == 10:
+        return true
+    case ip4[0] == 127:
+        return true
+    case ip4[0] == 169 && ip4[1] == 254:
+        return true
+    case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+        return true
+    case ip4[0] == 192 && ip4[1] == 168:
+        return true
+    default:
+        return false
+    }
 }

@@ -445,7 +445,6 @@ fi
 
 # Use the first NVMe instance store device
 STORAGE_DEVICE="${DEVICES[0]}"
-
 # Detect if the device is already mounted
 EXISTING_MOUNT=$(lsblk -no MOUNTPOINT "$STORAGE_DEVICE" | tr -d ' ')
 
@@ -489,31 +488,43 @@ fi
 
 DIR=/opt
 # Ensure /opt directory exists
-mkdir -p "$DIR"
+mkdir -p $DIR
 # Copy binary to instance from S3 and set executable permissions
-aws s3 cp s3://%s/%s "$DIR"/client --region %s --no-progress
-test -x "$DIR"/client || chmod +x "$DIR"/client
+aws s3 cp s3://%s/%s $DIR/client --region %s --no-progress
+test -x $DIR/client || chmod +x $DIR/client
 
 # Create pre-run script to poll until TLS certificate is
 # retrieved from SSM Parameter Store or a timeout occurs
-cat > "$DIR"/wait-for-param.sh <<-__EOF__
-#!/bin/sh
+cat > $DIR/wait-for-param.sh <<'__EOF__'
+#!/bin/bash
 set -euo pipefail
 
-# Usage: wait-for-parameter.sh <param-name> <timeout-seconds>
+# Usage: wait-for-param.sh <param-name> <timeout-seconds>
 PARAM="$1"
 TIMEOUT="${2:-300}"
 SLEEP=3
 ELAPSED=0
+REGION="%s"
+
+printf "Waiting for SSM parameter '%%s' (timeout=%%ss, region=%%s)\n" "$PARAM" "$TIMEOUT" "$REGION"
 
 # Try to fetch parameter (with decryption)
 while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-    if aws ssm get-parameter --name "$PARAM" --with-decryption >/dev/null 2>&1; then
-        printf 'SSM parameter %%s found after %%ss\n' "$PARAM" "$ELAPSED"
-        exit 0
-    fi
+    OUTPUT="$(aws ssm get-parameter \
+        --name "$PARAM" \
+        --with-decryption \
+        --region "$REGION" \
+        2>&1)" && {
+            printf "SUCCESS: SSM parameter '%%s' found after %%ss\n" "$PARAM" "$ELAPSED"
+            echo "AWS output:"
+            echo "$OUTPUT"
+            exit 0
+        }
 
-    printf 'Waiting for SSM parameter %%s... (%%s/%%ss)\n' "$PARAM" "$ELAPSED" "$TIMEOUT"
+    RC=$?
+    printf "Retrying... rc=%%s elapsed=%%ss/%%ss\n" "$RC" "$ELAPSED" "$TIMEOUT"
+    echo "$OUTPUT"
+
     sleep "$SLEEP"
     ELAPSED=$((ELAPSED + SLEEP))
 done
@@ -521,13 +532,14 @@ done
 printf "Parameter %%s not found after %%s seconds\n" "$PARAM" "$TIMEOUT" >&2
 exit 1
 __EOF__
+chmod +x $DIR/wait-for-param.sh
 
 # Create run script to launch client
-cat > "$DIR"/run-client.sh <<-__EOF__
+cat > $DIR/run-client.sh <<-__EOF__
 #!/bin/bash
 set -euo pipefail
 
-exec "$DIR"/client \
+exec $DIR/client \
     -applyOptimization=%t \
     -awsRegion="%s" \
     -certSsmParam="%s" \
@@ -547,7 +559,7 @@ exec "$DIR"/client \
     -port=%d \
     -workload="%s"
 __EOF__
-chmod +x "$DIR"/run-client.sh
+chmod +x $DIR/run-client.sh
 
 # Create systemd unit file that runs script to launch client
 cat > /etc/systemd/system/client.service <<-__EOF__
@@ -558,8 +570,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre="$DIR"/wait-for-parameter.sh %s 300
-ExecStart="$DIR"/run-client.sh
+ExecStartPre=$DIR/wait-for-param.sh %s 300
+ExecStart=$DIR/run-client.sh
+TimeoutStartSec=360
 Restart=on-failure
 RestartSec=10
 StandardOutput=file:/var/log/client.log
@@ -572,8 +585,8 @@ __EOF__
 # Set up the client service to execute
 systemctl daemon-reload
 systemctl enable --now client.service
-`, bucketName, keyName, appConf.LocalConfig.Region, true,
-   appConf.LocalConfig.Region, ssmParam, appConf.ClientConfig.CharSet1,
+`, bucketName, keyName, appConf.LocalConfig.Region, appConf.LocalConfig.Region,
+   true, appConf.LocalConfig.Region, ssmParam, appConf.ClientConfig.CharSet1,
    appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3,
    appConf.ClientConfig.CharSet4, appConf.ClientConfig.CrackingMode,
    ec2SgId, appConf.ClientConfig.HashMask, hasRuleset,
@@ -744,7 +757,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
                                    color.NeonAzure, "EC2 instance creation completed"))
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                        color.LightCyan, "!"), "",
+                                                       color.LightCyan, "!"), "",
                                     color.NeonAzure, "Retrieving EC2 public IP addresses"))
 
     // Get the public IP addreses of EC2 instances for TLS certificate
@@ -758,15 +771,25 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "EC2 public IP addresses retrieved"))
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Generating server TLS certificate & key"))
+
     // Generate the servers TLS PEM certificate and key and save in TLS manager
     err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, Ec2Ips...)
     if err != nil {
         log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
     }
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                        color.LightCyan, "$"), "",
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "$"), "",
                                     color.NeonAzure, "Server TLS certificate & key generated"))
+
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                       color.LightCyan, "!"), "",
+                                   color.NeonAzure, "Generating x509 certificate pool and " +
+                                   "adding server certificate to it"))
 
     // Generate a TLS x509 certificate and cert pool
     err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
@@ -775,7 +798,8 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }
 
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
+                                   display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
                                    color.NeonAzure, "X509 cerificate pool generated " +
                                    "and server certifcate added to pool"))
