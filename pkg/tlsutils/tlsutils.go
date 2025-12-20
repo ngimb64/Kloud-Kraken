@@ -118,55 +118,6 @@ func GetPublicIps() ([]string, error) {
 }
 
 
-// Get the assigned valid public and private IP address assigned
-// to network interfaces.
-//
-// @Returns
-//  - String slice of usable IP addresses
-//  - Error if it occurs, otherwise nil on success
-//
-func getUsableIps() ([]string, error) {
-    usableIps := []string{}
-
-    // Get a list of all interfaces on system
-    ifaces, err := net.Interfaces()
-    if err != nil {
-        return nil, err
-    }
-
-    // Iterate through list of retrieved interfaces
-    for _, iface := range ifaces {
-        // Skip if interface is down or a loopback
-        if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-            continue
-        }
-
-        // Get all addresses assigned to current interface
-        addrs, err := iface.Addrs()
-        if err != nil {
-            continue
-        }
-
-        // Iterate through the retrieved addresses
-        for _, addr := range addrs {
-            // Parse network CIDR based on IP address
-            ip, _, err := net.ParseCIDR(addr.String())
-            if err != nil {
-                continue
-            }
-
-            // If the IP address is public or private
-            if ip.IsGlobalUnicast() || ip.IsPrivate() {
-                // Add it to the usable IPs slice
-                usableIps = append(usableIps, ip.String())
-            }
-        }
-    }
-
-    return usableIps, nil
-}
-
-
 // Function for generating a new client TLS configuration.
 //
 // @Parameters
@@ -208,6 +159,11 @@ type TlsManager struct {
 //  - Error if it occurs, otherwise nil on success
 //
 func (TlsMan *TlsManager) AddCACert(pemBlock []byte) error {
+    // If the TLS cert pool is not set, set it
+    if TlsMan.CaCertPool == nil {
+        TlsMan.CaCertPool = x509.NewCertPool()
+    }
+
     // Add it to slice for record-keeping
     TlsMan.CaCertPemBlocks = append(TlsMan.CaCertPemBlocks, pemBlock)
 
@@ -284,6 +240,10 @@ func (TlsMan *TlsManager) caCertPoolGen(caCertPemBlocks [][]byte,
 
     // Iterate through the slice of PEM blocks
     for _, pemBlock := range caCertPemBlocks {
+        if len(strings.TrimSpace(string(pemBlock))) == 0 {
+            continue
+        }
+
         // Attempt to add the loaded certificate to the cert pool
         ok := certPool.AppendCertsFromPEM(pemBlock)
         if !ok {
@@ -298,36 +258,26 @@ func (TlsMan *TlsManager) caCertPoolGen(caCertPemBlocks [][]byte,
 //
 // @Parameters
 //  - orgName:  The organization name to assign to the generated certificate
-//  - testMode:  Toggle for whether PEM file should be generated or not
+//  - generateFile:  Toggle for whether PEM file should be generated or not
 //  - hostnames:  Variadic length of ip address & hostnames to add to hosts CSV string
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) PemCertAndKeyGenHandler(orgName string, testMode bool,
+func (TlsMan *TlsManager) PemCertAndKeyGenHandler(orgName string, generateFile bool,
                                                   hostnames ...string) error {
-    // Add the localhost to CA hosts list
-    hosts := "localhost"
+    var err error
 
-    // Iterate through any passed in host names and add them to hosts CSV string
-    for _, host := range hostnames {
-        hosts += ("," + host)
+    if len(hostnames) < 1 {
+        return fmt.Errorf("no hostnames or IP addresses present")
     }
 
-    // Get available usable public/private IP's assigned to network interfaces
-    ipAddrs, err := getUsableIps()
-    if err != nil {
-        return err
-    }
-
-    // Iterate through the list IP's and add them to CSV string
-    for _, ipAddr := range ipAddrs {
-        hosts += ("," + ipAddr)
-    }
+    hostsCsv := strings.Join(hostnames, ",")
 
     // Generate the TLS certificate/key and save them in app config
     TlsMan.CertPemBlock,
-    TlsMan.KeyPemBlock, err = TlsMan.pemCertAndKeyGen(orgName, hosts, testMode)
+    TlsMan.KeyPemBlock, err = TlsMan.pemCertAndKeyGen(orgName, hostsCsv,
+                                                      generateFile)
     if err != nil {
         return err
     }
@@ -369,9 +319,10 @@ func (TlsMan *TlsManager) pemCertAndKeyGen(name string, hosts string,
         },
         NotBefore:   notBefore,
         NotAfter:    notBefore.Add(1 * 365 * 24 * time.Hour),
-        KeyUsage:    x509.KeyUsageDigitalSignature,
+        KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
         ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
         BasicConstraintsValid: true,
+        IsCA: false,
     }
 
     // Split the comma-separated host list and iterate through it
@@ -428,7 +379,7 @@ func (TlsMan *TlsManager) createPemCertAndKey(template *x509.Certificate) (
     }
 
     // Convert private key to PKCS
-    pkcsKey, err := x509.MarshalPKCS8PrivateKey(ecdsaKey)
+    ecKeyBytes, err := x509.MarshalECPrivateKey(ecdsaKey)
     if err != nil {
         return nil, nil, err
     }
@@ -440,7 +391,7 @@ func (TlsMan *TlsManager) createPemCertAndKey(template *x509.Certificate) (
     }
 
     // Encode the PKCS key into the PEM file
-    keyBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: pkcsKey})
+    keyBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecKeyBytes})
     if keyBytes == nil {
         return nil, nil, errors.New("unable to encode the PKCS into PEM format")
     }
@@ -466,7 +417,7 @@ func (TlsMan *TlsManager) createPemCertFile(certBytes []byte) error {
     defer func() {
         // Close the generated PEM for certificate
         cerr := certFile.Close()
-        if err != nil {
+        if cerr != nil {
             err = errors.Join(err, fmt.Errorf("closing created PEM file - %w", cerr))
         }
     }()
@@ -565,7 +516,6 @@ func (TlsMan *TlsManager) newServerTlsConfig(cert tls.Certificate) *tls.Config {
         ClientAuth:   			  tls.NoClientCert,
         CurvePreferences: 		  []tls.CurveID{tls.CurveP256},
         MinVersion:         	  tls.VersionTLS13,
-        PreferServerCipherSuites: true,
     }
 }
 

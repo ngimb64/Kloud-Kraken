@@ -752,7 +752,7 @@ func main() {
     serverCertPemBlock := []byte(certPemString)
 
     // Generate the servers TLS PEM certificate and key and save in TLS manager
-    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false)
+    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, "localhost")
     if err != nil {
         log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
     }

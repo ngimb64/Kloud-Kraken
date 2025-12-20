@@ -350,13 +350,20 @@ func (Ec2Man *Ec2Manger) Ec2GetPublicIps(callTime time.Duration, ec2Ids []string
             // Iterate through specific instance informatiion
             for _, instance := range reservation.Instances {
                 // If public IP is missing, set toggle to continue loop
-                if instance.PublicIpAddress == nil {
+                if instance.PublicIpAddress == nil ||
+                *instance.PublicIpAddress == "" {
                     continue
                 }
 
-                // Ensure IP address is a public address
+                // Parse string as IP address
                 ipAddr := net.ParseIP(*instance.PublicIpAddress)
-                if ipAddr == nil || isPrivateIpv4(ipAddr) {
+                if ipAddr == nil {
+                    continue
+                }
+
+                // Ensure the IP address is a public address
+                isPrivate, err := isPrivateIpv4(ipAddr)
+                if err != nil || isPrivate {
                     continue
                 }
 
@@ -478,30 +485,31 @@ func (Ec2Man *Ec2Manger) Ec2WaiterStatusOk(callTime time.Duration) error {
 //
 // @Returns
 //  - Toggle for whether the ip address is private or not
+//  - Error if it occurs, otherwise nil on success
 //
-func isPrivateIpv4(ip net.IP) bool {
+func isPrivateIpv4(ip net.IP) (bool, error) {
     if ip == nil {
-        return true
+        return false, fmt.Errorf("passed in IP is nil")
     }
 
     // Convert ip to 4 byte representation
     ip4 := ip.To4()
     if ip4 == nil {
-        return true
+        return false, fmt.Errorf("IP %q is not an IPv4 address", ip.String())
     }
 
     switch {
     case ip4[0] == 10:
-        return true
+        return true, nil
     case ip4[0] == 127:
-        return true
+        return true, nil
     case ip4[0] == 169 && ip4[1] == 254:
-        return true
+        return true, nil
     case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
-        return true
+        return true, nil
     case ip4[0] == 192 && ip4[1] == 168:
-        return true
+        return true, nil
     default:
-        return false
+        return false, nil
     }
 }

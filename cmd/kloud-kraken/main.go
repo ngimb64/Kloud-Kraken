@@ -761,7 +761,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
                                     color.NeonAzure, "Retrieving EC2 public IP addresses"))
 
     // Get the public IP addreses of EC2 instances for TLS certificate
-    Ec2Ips, err = Ec2Client.Ec2GetPublicIps(5 * time.Minute, nil)
+    Ec2Ips, err = Ec2Client.Ec2GetPublicIps(10 * time.Minute, nil)
     if err != nil {
         log.Fatalf("Error getting EC2 public IPs:  %v", err)
     }
@@ -1082,9 +1082,9 @@ func main() {
 
         // Revoke the security group rule for listener port set by client
         err = bootstrapOut.Ec2Client.RevokeSecurityGroupRule(1 * time.Minute, bootstrapOut.Ec2SgId,
-                                                                "tcp", "0.0.0.0/0", "ingress",
-                                                                int32(appConfig.LocalConfig.ListenerPort),
-                                                                int32(appConfig.LocalConfig.ListenerPort))
+                                                             "tcp", "0.0.0.0/0", "ingress",
+                                                             int32(appConfig.LocalConfig.ListenerPort),
+                                                             int32(appConfig.LocalConfig.ListenerPort))
         if err != nil {
             if logMan != nil {
                 logMan.LogMessage( "error", "Error revoking security group rule:  %v", err)
@@ -1098,11 +1098,11 @@ func main() {
                                                             []string{bootstrapOut.SsmVpcEndpointId})
         if err != nil {
             if logMan != nil {
-                logMan.LogMessage( "error", "Error deleting SSM Parameter Store" +
-                                    " VPC Interface Endpoint:  %v", err)
+                logMan.LogMessage("error", "Error deleting SSM Parameter Store" +
+                                  " VPC Interface Endpoint:  %v", err)
             } else {
                 log.Printf("Error deleting SSM Parameter Store VPC" +
-                            " Interface Endpoint:  %v", err)
+                           " Interface Endpoint:  %v", err)
             }
         } else {
             yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ""
@@ -1110,11 +1110,11 @@ func main() {
 
         // Delete the S3 bucket and its contents
         err = bootstrapOut.S3Client.S3BucketTerminator(5 * time.Minute,
-                                                        bootstrapOut.S3BucketName)
+                                                       bootstrapOut.S3BucketName)
         if err != nil {
             if logMan != nil {
                 logMan.LogMessage("error", "Error deleting S3 bucket and " +
-                                    "its contents:  %v", err)
+                                  "its contents:  %v", err)
             } else {
                 log.Printf("Error deleting S3 bucket and its contents:  %v", err)
             }
@@ -1128,7 +1128,7 @@ func main() {
         if err != nil {
             if logMan != nil {
                 logMan.LogMessage("error", "Error deleting parameters from" +
-                                    " SSM Param Store:  %v", err)
+                                  " SSM Param Store:  %v", err)
             } else {
                 log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
             }
@@ -1139,7 +1139,7 @@ func main() {
         if err != nil {
             if logMan != nil {
                 logMan.LogMessage("error", "Error calculating total AWS " +
-                                    "resource cost:  %v", err)
+                                  "resource cost:  %v", err)
             } else {
                 log.Printf("Error calculating total AWS resource cost:  %v", err)
             }
@@ -1150,7 +1150,7 @@ func main() {
                                                             color.LightCyan, "$"), "",
                                         color.NeonAzure, "Total AWS resource cost:  ",
                                         color.KrakenGlowGreen,
-                                        strconv.FormatFloat(costMan.TotalCost, 'E', -1, 64)))
+                                        strconv.FormatFloat(costMan.TotalCost, 'f', -1, 64)))
 
         fmt.Println(display.CtextMulti(color.LightCyan, "\n        AWS Cost Table\n",
                                         color.KrakenPurple,
@@ -1166,7 +1166,7 @@ func main() {
                         display.Ctext(color.KrakenGlowGreen, service),
                         display.Ctext(color.KrakenPurple, "|"),
                         display.Ctext(color.BrightLime,
-                                        strconv.FormatFloat(price, 'E', -1, 64)),
+                                      strconv.FormatFloat(price, 'f', -1, 64)),
                         display.Ctext(color.KrakenPurple, "|"))
         }
 
