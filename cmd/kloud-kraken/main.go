@@ -124,7 +124,7 @@ func handleTransfer(connection net.Conn, buffer []byte,
     clientAddr := net.JoinHostPort(ipAddr, strconv.Itoa(port))
 
     maxRetries := 3
-    tlsConfig := tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr)
+    tlsConfig := tlsutils.NewClientTLSConfig(TlsMan.CertPool, ipAddr)
     var transferConn *tls.Conn
 
     for range 3 {
@@ -361,6 +361,27 @@ func startServer(appConfig *conf.AppConfig,
             continue
         }
 
+        // TODO:  find way to retrieve correct parameter based on instance ID
+
+
+        // Establish client to SSM
+        ssmMan := ssmutils.SsmNewManager(assumedAwsConfig)
+        // Retrieve the server TLS cert from SSM param store
+        certPemString, err := ssmMan.SsmGetParameter(1 * time.Minute,
+                                                    "/kloud-kraken/tls-cert")
+        if err != nil {
+            logMan.LogMessage("error", "Error getting server TLS cert via SSM Param Store:  %v", err)
+        }
+
+        // Convert retrieved TLS cert PEM block to bytes
+        serverCertPemBlock := []byte(certPemString)
+
+        // Add client certificate to cert pool
+        err = TlsMan.AddCertToPool(serverCertPemBlock)
+        if err != nil {
+            log.Fatalf("Error adding TLS certificate to pool:  %v", err)
+        }
+
         // Define the address of the server to connect to
         serverAddress := net.JoinHostPort(ipAddr, strconv.Itoa(appConfig.LocalConfig.ListenerPort))
 
@@ -374,7 +395,7 @@ func startServer(appConfig *conf.AppConfig,
 
         // Make a connection to the remote server
         connection, err := tls.Dial("tcp", serverAddress,
-                                    tlsutils.NewClientTLSConfig(TlsMan.CaCertPool, ipAddr))
+                                    tlsutils.NewClientTLSConfig(TlsMan.CertPool, ipAddr))
         if err != nil {
             logMan.LogMessage("error", "Error connecting to remote client:  %v", err)
             continue
@@ -404,7 +425,6 @@ func startServer(appConfig *conf.AppConfig,
 //  - appConf:  The configuration instance that stores program YAML data
 //  - bucketName:  Name of S3 bucket where client binary is stored
 //  - keyName:  The name of the key of the S3 bucket
-//  - ssmParam:  The path where the certificate is stored in SSM param store
 //  - ec2SgId:  The ID for the security group for client EC2 instances
 //
 // @Returns
@@ -412,7 +432,7 @@ func startServer(appConfig *conf.AppConfig,
 //  - Error if it occurs, otherwise nil on success
 //
 func ec2UserDataGen(appConf *conf.AppConfig, bucketName string,
-                    keyName string, ssmParam string, ec2SgId string) (
+                    keyName string, ec2SgId string) (
                     string, error) {
     var hasRuleset bool
 
@@ -493,47 +513,6 @@ mkdir -p $DIR
 aws s3 cp s3://%s/%s $DIR/client --region %s --no-progress
 test -x $DIR/client || chmod +x $DIR/client
 
-# Create pre-run script to poll until TLS certificate is
-# retrieved from SSM Parameter Store or a timeout occurs
-cat > $DIR/wait-for-param.sh <<'__EOF__'
-#!/bin/bash
-set -euo pipefail
-
-# Usage: wait-for-param.sh <param-name> <timeout-seconds>
-PARAM="$1"
-TIMEOUT="${2:-300}"
-SLEEP=3
-ELAPSED=0
-REGION="%s"
-
-printf "Waiting for SSM parameter '%%s' (timeout=%%ss, region=%%s)\n" "$PARAM" "$TIMEOUT" "$REGION"
-
-# Try to fetch parameter (with decryption)
-while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-    OUTPUT="$(aws ssm get-parameter \
-        --name "$PARAM" \
-        --with-decryption \
-        --region "$REGION" \
-        2>&1)" && {
-            printf "SUCCESS: SSM parameter '%%s' found after %%ss\n" "$PARAM" "$ELAPSED"
-            echo "AWS output:"
-            echo "$OUTPUT"
-            exit 0
-        }
-
-    RC=$?
-    printf "Retrying... rc=%%s elapsed=%%ss/%%ss\n" "$RC" "$ELAPSED" "$TIMEOUT"
-    echo "$OUTPUT"
-
-    sleep "$SLEEP"
-    ELAPSED=$((ELAPSED + SLEEP))
-done
-
-printf "Parameter %%s not found after %%s seconds\n" "$PARAM" "$TIMEOUT" >&2
-exit 1
-__EOF__
-chmod +x $DIR/wait-for-param.sh
-
 # Create run script to launch client
 cat > $DIR/run-client.sh <<-__EOF__
 #!/bin/bash
@@ -542,7 +521,6 @@ set -euo pipefail
 exec $DIR/client \
     -applyOptimization=%t \
     -awsRegion="%s" \
-    -certSsmParam="%s" \
     -charSet1="%s" \
     -charSet2="%s" \
     -charSet3="%s" \
@@ -570,7 +548,6 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=$DIR/wait-for-param.sh %s 300
 ExecStart=$DIR/run-client.sh
 TimeoutStartSec=360
 Restart=on-failure
@@ -585,14 +562,14 @@ __EOF__
 # Set up the client service to execute
 systemctl daemon-reload
 systemctl enable --now client.service
-`, bucketName, keyName, appConf.LocalConfig.Region, appConf.LocalConfig.Region,
-   true, appConf.LocalConfig.Region, ssmParam, appConf.ClientConfig.CharSet1,
+`, bucketName, keyName, appConf.LocalConfig.Region,
+   true, appConf.LocalConfig.Region, appConf.ClientConfig.CharSet1,
    appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3,
    appConf.ClientConfig.CharSet4, appConf.ClientConfig.CrackingMode,
    ec2SgId, appConf.ClientConfig.HashMask, hasRuleset,
    appConf.ClientConfig.HashType, appConf.ClientConfig.LogMode,
    appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
-   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload, ssmParam)
+   appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
     return data, nil
 }
@@ -698,8 +675,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
 
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
-                                    keyName, "/kloud-kraken/tls-cert-1",
-                                    bootstrapOut.Ec2SgId)
+                                    keyName, bootstrapOut.Ec2SgId)
     if err != nil {
         return assumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
@@ -758,42 +734,10 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
-                                    color.NeonAzure, "Retrieving EC2 public IP addresses"))
-
-    // Get the public IP addreses of EC2 instances for TLS certificate
-    Ec2Ips, err = Ec2Client.Ec2GetPublicIps(10 * time.Minute, nil)
-    if err != nil {
-        log.Fatalf("Error getting EC2 public IPs:  %v", err)
-    }
-
-    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                   display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "EC2 public IP addresses retrieved"))
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Generating server TLS certificate & key"))
-
-    // Generate the servers TLS PEM certificate and key and save in TLS manager
-    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, Ec2Ips...)
-    if err != nil {
-        log.Fatalf("Error creating TLS PEM certificate & key:  %v", err)
-    }
-
-    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                   display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                    color.NeonAzure, "Server TLS certificate & key generated"))
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Generating x509 certificate pool and " +
-                                   "adding server certificate to it"))
+                                   color.NeonAzure, "Generating x509 certificate pool"))
 
     // Generate a TLS x509 certificate and cert pool
-    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
-                                TlsMan.CaCertPemBlocks)
+    err = TlsMan.CertPoolGen()
     if err != nil {
         log.Fatalf("Error generating TLS certificate:  %v", err)
     }
@@ -801,37 +745,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
                                    display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "$"), "",
-                                   color.NeonAzure, "X509 cerificate pool generated " +
-                                   "and server certifcate added to pool"))
-
-    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "!"), "",
-                                   color.NeonAzure, "Uploading TLS certificate to " +
-                                   "SSM Paramter Store for client retrieval"))
-
-    tags = map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-ssm-tls-cert",
-    }
-
-    // Setup client to SSM
-    ssmClient := ssmutils.SsmNewManager(assumedAwsConfig)
-    // Push the servers certificate PEM into SSM parameter store
-    _, err = ssmClient.SsmPutParameter(1 * time.Minute,
-                                       "/kloud-kraken/tls-cert",
-                                       string(TlsMan.CertPemBlock),
-                                       tags)
-    if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
-    }
-
-    bootstrapOut.SsmClient = ssmClient
-
-    fmt.Println(display.CtextMulti(color.FoamWhite, "  \\-->",
-                                   display.CtextPrefix(color.KrakenPurple,
-                                                       color.LightCyan, "$"), "",
-                                   color.NeonAzure, "TLS certificate uploaded to " +
-                                   "SSM Parameter Store"))
+                                   color.NeonAzure, "X509 cerificate pool generated"))
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",

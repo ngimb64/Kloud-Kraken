@@ -1,6 +1,4 @@
-- Update getting EC2 instance public IPs with describe function instead of unreliable run instances output
-
-- Adjust SSM parameter store utility package logic so it can locally reserver parameters
+- Finish fixing TLS package and implementation in client & server
 
 - Add code to teardown to terminate VPC flow logs resources
 

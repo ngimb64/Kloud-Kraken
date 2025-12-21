@@ -72,6 +72,8 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //  - callTime:  The length of time the API call is allowed to execute
 //  - parameter:  name of the parameter to retrieve
 //  - data:  The data to store with associated parameter
+//  - willOverwrite:  Toggle to set whether parameter will overwrite or
+//                    add numbers incrementally until unique is found
 //  - tags:  String map of tag key-values to configure
 //
 // @Returns
@@ -80,7 +82,7 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //
 func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
                                           parameter string,
-                                          data string,
+                                          data string, willOverwrite bool,
                                           tags map[string]string) (
                                           string, error) {
     var existsErr *ssmtypes.ParameterAlreadyExists
@@ -92,11 +94,15 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
+        if willOverwrite {
+            candidate = parameter
+        }
+
         callInput := &ssm.PutParameterInput{
             Name:      aws.String(candidate),
             Value:     aws.String(data),
             Type:      ssmtypes.ParameterTypeSecureString,
-            Overwrite: aws.Bool(false),
+            Overwrite: aws.Bool(willOverwrite),
         }
 
         // If tag was specified, add it to input

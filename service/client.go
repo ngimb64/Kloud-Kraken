@@ -20,6 +20,7 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/pkg/data"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/hashcat"
 	"github.com/ngimb64/Kloud-Kraken/pkg/kloudlogs"
 	"github.com/ngimb64/Kloud-Kraken/pkg/netio"
@@ -409,8 +410,7 @@ func processTransfer(connection net.Conn, buffer []byte,
     // Set up context handler for TLS listener
     ctx, cancel := context.WithCancel(context.Background())
     // Setup up TLS listener from existing raw TCP listener
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       TlsMan.CaCertPool, ctx,
+    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate, ctx,
                                                        "0.0.0.0", port, listener)
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
@@ -624,8 +624,7 @@ func connectRemote(port int, logMan *kloudlogs.LoggerManager,
     defer cancel()
     // Set up the TLS listener to accept incoming connections
     tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       TlsMan.CaCertPool, ctx,
-                                                       "0.0.0.0", port, nil)
+                                                       ctx, "0.0.0.0", port, nil)
     if err != nil {
         logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
     }
@@ -685,7 +684,6 @@ func makeClientDirs() {
 //
 func main() {
     var awsRegion string
-    var certSsmParam string
     var logMode string
     var maxFileSizeInt64 int64
     var maxTransfers int
@@ -695,7 +693,6 @@ func main() {
     flag.BoolVar(&HashcatArgs.ApplyOptimization, "applyOptimization", false,
                  "Apply the -O flag for GPU optimization")
     flag.StringVar(&awsRegion, "awsRegion", "us-east-1", "The AWS region to deploy EC2 instances")
-    flag.StringVar(&certSsmParam, "certSsmParam", "", "The parameter for TLS cert in SSM param store")
     flag.StringVar(&HashcatArgs.CharSet1, "charSet1", "", "Custom character set 1 for masks")
     flag.StringVar(&HashcatArgs.CharSet2, "charSet2", "", "Custom character set 2 for masks")
     flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
@@ -728,11 +725,6 @@ func main() {
     // Create directories for client
     makeClientDirs()
 
-    // If parameter for SSM param store is not present
-    if certSsmParam == "" {
-        log.Fatal("Missing parameter to retrieve TLS from SSM param store")
-    }
-
     // Load instance-profile credentials vie metadata service
     awsConfig, err := config.LoadDefaultConfig(context.TODO(),
                                                config.WithRegion(awsRegion))
@@ -740,37 +732,43 @@ func main() {
         log.Fatalf("Error loading AWS config:  %v", err)
     }
 
-    // Establish client to SSM
-    ssmMan := ssmutils.SsmNewManager(awsConfig)
-    // Retrieve the server TLS cert from SSM param store
-    certPemString, err := ssmMan.SsmGetParameter(1 * time.Minute, certSsmParam)
+    // Establish client to EC2 service
+    ec2Client := ec2utils.Ec2NewManager(awsConfig)
+    // Get public IP from metadata service
+    publicIp, err := ec2Client.Ec2GetPublicIpMetadata(false, "120")
     if err != nil {
-        log.Fatalf("Error getting server TLS cert via SSM Param Store:  %v", err)
+        log.Fatalf("Error getting EC2 public IP from metadata service:  %v", err)
     }
 
-    // Convert retrieved TLS cert PEM block to bytes
-    serverCertPemBlock := []byte(certPemString)
-
-    // Generate the servers TLS PEM certificate and key and save in TLS manager
-    err = TlsMan.PemCertAndKeyGenHandler("Kloud Kraken", false, "localhost")
+    // Generate clients TLS PEM certificate and key and save in TLS manager
+    err = TlsMan.PemCertAndKeyGen("Kloud Kraken", false, publicIp)
     if err != nil {
         log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
     }
 
-    // Generate a TLS x509 certificate and cert pool
-    err = TlsMan.CertGenAndPool(TlsMan.CertPemBlock, TlsMan.KeyPemBlock,
-                                TlsMan.CaCertPemBlocks)
+    // Get instance ID from metadata service
+    instanceId, err := ec2Client.Ec2GetInstanceIdMetadata(true, "120")
     if err != nil {
-        log.Fatalf("Error generating TLS certificate:  %v", err)
-    }
-
-    // Append the client TLS cert PEM block to management list
-    err = TlsMan.AddCACert(serverCertPemBlock)
-    if err != nil {
-        log.Fatalf("Error adding PEM cert to pool:  %v", err)
+        log.Fatalf("Error getting instance ID from metadata:  %v", err)
     }
 
     tags := map[string]string{
+        "kloud-kraken": "true",
+        "Name": "kloud-kraken-ssm-tls-cert",
+    }
+
+    // Setup client to SSM
+    ssmClient := ssmutils.SsmNewManager(awsConfig)
+    // Push the servers certificate PEM into SSM parameter store
+    _, err = ssmClient.SsmPutParameter(1 * time.Minute,
+                                       "/kloud-kraken/" + instanceId + "/tls-cert",
+                                       string(TlsMan.CertPemBlock),
+                                       true, tags)
+    if err != nil {
+        log.Fatalf("Error putting TLS certificate in SSM Param Store:  %v", err)
+    }
+
+    tags = map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-logs",
     }

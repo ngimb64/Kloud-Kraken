@@ -5,12 +5,15 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 )
@@ -31,8 +34,10 @@ type Ec2CreateInstancesInput struct {
 
 // Struct for managing EC2 operations
 type Ec2Manger struct {
-    Client      *ec2.Client
-    RunResult   *ec2.RunInstancesOutput
+    Client     *ec2.Client
+    httpClient *http.Client
+    idmsToken  string
+    RunResult  *ec2.RunInstancesOutput
 }
 
 // Establishes connection to EC2 service and generates EC2 manager struct
@@ -49,6 +54,7 @@ func Ec2NewManager(awsConfig aws.Config) *Ec2Manger {
 
     return &Ec2Manger{
         Client:     ec2Client,
+        httpClient: &http.Client{Timeout: 5 * time.Second},
     }
 }
 
@@ -65,8 +71,9 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
                                             callInput *Ec2CreateInstancesInput) (
                                             error) {
     // Ensure required call inputs are present in struct
-    if callInput.AMI == "" {
-        return errors.New("AMI is missing from ec2CreateInstancesInput struct")
+    if callInput.AMI == "" || callInput.InstanceType == "" {
+        return errors.New("AMI or InstanceType is missing from " +
+                          "ec2CreateInstancesInput struct")
     }
 
     // Ensure the min and max counts are greater than one and
@@ -83,6 +90,7 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
 
     createInput := &ec2.RunInstancesInput{
         ImageId:      aws.String(callInput.AMI),
+        InstanceType: ec2types.InstanceType(callInput.InstanceType),
         MaxCount:     aws.Int32(callInput.MaxCount),
         MinCount:     aws.Int32(callInput.MinCount),
     }
@@ -99,11 +107,6 @@ func (Ec2Man *Ec2Manger) Ec2CreateInstances(callTime time.Duration,
                 },
             },
         }
-    }
-
-    // If there is an instance type to apply
-    if callInput.InstanceType != "" {
-        createInput.InstanceType = ec2types.InstanceType(callInput.InstanceType)
     }
 
     // If there is a role name to apply to IAM instance profile
@@ -278,6 +281,204 @@ func (Ec2Man *Ec2Manger) Ec2GetAmiId(callTime time.Duration, arch string,
     return "", errors.New("no image with valid ImageId found")
 }
 
+// Retrieves the instance ID by passed in public IP
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - publicIp:  The public IP address used to retrieve instance info
+//
+// @Returns
+//  - EC2 instance ID
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2GetInstanceIdByPublicIp(callTime time.Duration,
+                                                    publicIp string) (
+                                                    string, error) {
+    // Ensure AWS API calls do not hang for longer specified timeout
+    ctx, cancel := context.WithTimeout(context.Background(), callTime)
+    defer cancel()
+
+    describeInput := &ec2.DescribeInstancesInput{
+        Filters: []types.Filter{
+            {Name: aws.String("ip-address"), Values: []string{publicIp}},
+        },
+    }
+
+    // Get the instance information based on public IP address
+    out, err := Ec2Man.Client.DescribeInstances(ctx, describeInput)
+    if err != nil {
+        return "", err
+    }
+
+    // Iterate through instance reservations
+    for _, reservation := range out.Reservations {
+        // Iterate through instances in reservation
+        for _, instance := range reservation.Instances {
+            if instance.InstanceId != nil {
+                return *instance.InstanceId, nil
+            }
+        }
+    }
+
+    return "", nil
+}
+
+// Get the token for the metadata service and queries the it
+// for the EC2 instance ID.
+//
+// @Parameters
+//  - tokenCached:  Toggle for specifiying whether IMDS token is cached or not
+//  - tokenExpire:  String that specifies number of seconds until IDMS
+//                  token expires (max of 21600 or 6 hours)
+//
+// @Returns
+//  - EC2 instance ID
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2GetInstanceIdMetadata(tokenCached bool,
+                                                  tokenExpire string) (
+                                                  string, error) {
+    var err error
+
+    if !tokenCached {
+        // Retrieve IMDS token
+        err = Ec2Man.Ec2GetMetadataToken(tokenExpire)
+        if err != nil {
+            return "", err
+        }
+    }
+
+    url := "http://169.254.169.254/latest/meta-data/instance-id"
+    // Build request for instance-id
+    request, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return "", err
+    }
+
+    request.Header.Set("X-aws-ec2-metadata-token", Ec2Man.idmsToken)
+
+    // Execute request
+    response, err := Ec2Man.httpClient.Do(request)
+    if err != nil {
+        return "", err
+    }
+
+    defer func() {
+        cerr := response.Body.Close()
+        if cerr != nil {
+            err = errors.Join(err, cerr)
+        }
+    }()
+
+    // Read the instance-id
+    id, err := io.ReadAll(response.Body)
+    if err != nil {
+        return "", err
+    }
+
+    return string(id), nil
+}
+
+// Retrieves token for accessing the instance metadata service.
+//
+// @Parameters
+//  - tokenExpire:  String that specifies number of seconds until IDMS
+//                  token expires (max of 21600 or 6 hours)
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2GetMetadataToken(tokenExpire string) error {
+    url := "http://169.254.169.254/latest/api/token"
+    // Format request to get IMDSv2 token
+    request, err := http.NewRequest("PUT", url, nil)
+    if err != nil {
+        return err
+    }
+
+    request.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", tokenExpire)
+
+    // Execute web request
+    response, err := Ec2Man.httpClient.Do(request)
+    if err != nil {
+        return err
+    }
+
+    defer func() {
+        // Close token request body
+        cerr := response.Body.Close()
+        if cerr != nil {
+            err = errors.Join(err, cerr)
+        }
+    }()
+
+    // Read token request body
+    imdsToken, err := io.ReadAll(response.Body)
+    if err != nil {
+        return err
+    }
+
+    Ec2Man.idmsToken = string(imdsToken)
+    return nil
+}
+
+// Get the token for the metadata service and queries the it
+// for the EC2 public IP address.
+//
+// @Parameters
+//  - tokenCached:  Toggle for specifiying whether IMDS token is cached or not
+//  - tokenExpire:  String that specifies number of seconds until IDMS
+//                  token expires (max of 21600 or 6 hours)
+//
+// @Returns
+//  - EC2 instance public IP address
+//  - Error if it occurs, otherwise nil on success
+//
+func (Ec2Man *Ec2Manger) Ec2GetPublicIpMetadata(tokenCached bool,
+                                                tokenExpire string) (
+                                                string, error) {
+    var err error
+
+    if !tokenCached {
+        // Retrieve IMDS token
+        err = Ec2Man.Ec2GetMetadataToken(tokenExpire)
+        if err != nil {
+            return "", err
+        }
+    }
+
+    url := "http://169.254.169.254/latest/meta-data/public-ipv4"
+    // Format request to query metadata service for public IP
+    request, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return "", err
+    }
+
+    request.Header.Set("X-aws-ec2-metadata-token", Ec2Man.idmsToken)
+
+    // Execute web request
+    response, err := Ec2Man.httpClient.Do(request)
+    if err != nil {
+        return "", err
+    }
+
+    defer func() {
+        // Close token request body
+        cerr := response.Body.Close()
+        if cerr != nil {
+            err = errors.Join(err, cerr)
+        }
+    }()
+
+    // Read the public IP address from metadata request
+    ipAddr, err := io.ReadAll(response.Body)
+    if err != nil {
+        return "", err
+    }
+
+    return string(ipAddr), nil
+}
+
 // Gets the public IP address(es) of passed in instance IDs. If no instance IDs
 // are passed in it will attempt to parse them out of last RunInstances result.
 //
@@ -320,7 +521,7 @@ func (Ec2Man *Ec2Manger) Ec2GetPublicIps(callTime time.Duration, ec2Ids []string
 
     // Retry until public IPs are ready
     for {
-        // respect context cancellation/timeouts
+        // Respect context cancellation/timeouts
         select {
         case <-ctx.Done():
             if describeErr != nil {
