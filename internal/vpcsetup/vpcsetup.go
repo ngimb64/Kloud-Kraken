@@ -16,7 +16,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
-	"github.com/ngimb64/Kloud-Kraken/pkg/ssmutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"gopkg.in/yaml.v2"
 )
@@ -47,12 +46,11 @@ type VpcBootstrapOutput struct {
     AccountId        string
     Ec2Client        *ec2utils.Ec2Manger
     Ec2SgId	         string
-    SubnetId         string
     S3BucketName     string
     S3Client         *s3utils.S3Manager
-    SsmClient        *ssmutils.SsmManager
     ServerArn        string
     SsmVpcEndpointId string
+    SubnetId         string
 }
 
 

@@ -1,4 +1,6 @@
-- Finish fixing TLS package and implementation in client & server
+- Fix AWS permissions policies to reflect changes with TLS certificate handling update
+    - Once complete ensure client and server policies are deleted from aws & state file
+    - Also make sure to remake binaries, regenerate with policygen binary, update in IAM
 
 - Add code to teardown to terminate VPC flow logs resources
 

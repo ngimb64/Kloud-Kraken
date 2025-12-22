@@ -25,14 +25,21 @@ func ClientPermPolicyGen(region string, accountId string) string {
     },
 
     {
-      "Sid": "SSMFetchParameters",
+      "Sid": "EC2InstanceInformation",
       "Effect": "Allow",
       "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath"
+        "ec2:DescribeInstances"
+      ]
+      "Resource": "*"
+    },
+
+    {
+      "Sid": "SSMPutParameters",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken*"
     },
 
     {
@@ -102,12 +109,14 @@ func ServerPermPolicyGen(region string, accountId string) string {
       "Sid": "SSMUploadClientCert",
       "Effect": "Allow",
       "Action": [
-        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath",
         "ssm:DeleteParameter",
         "ssm:AddTagsToResource"
       ],
       "Resource": [
-        "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
+        "arn:aws:ssm:%s:%s:parameter/kloud-kraken*"
       ]
     },
 

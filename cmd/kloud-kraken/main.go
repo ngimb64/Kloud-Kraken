@@ -40,10 +40,12 @@ import (
 )
 
 // Package level variables
-var Ec2Client *ec2utils.Ec2Manger
-var Ec2Ips []string
-var Ec2SecurityGroupId string
+var AssumedAwsConfig aws.Config      // Assumed server AWS config
+var Ec2Client *ec2utils.Ec2Manger    // Client manager for EC2
+var Ec2SecurityGroupId string        // Security group ID for EC2
+var ParamsToDelete []string          // SSM parameters to delete at end of program
 var ReceivedDir = "/tmp/received"    // Path where cracked hashes & client logs are stored
+var SsmMan *ssmutils.SsmManager      // Client manager for SSM
 var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
 
 
@@ -116,7 +118,7 @@ func handleTransfer(connection net.Conn, buffer []byte,
                                                 "tcp", "ingress", port32, port32)
     if err != nil {
         logMan.LogMessage("Error", "Error provisioning security group rule for file transfer",
-                            zap.Int32("Port", port32))
+                          zap.Int32("Port", port32))
         return
     }
 
@@ -349,43 +351,55 @@ func startServer(appConfig *conf.AppConfig,
     // Establish wait group for Goroutine synchronization
     var waitGroup sync.WaitGroup
 
+    // Get the EC2 public IPs based on instance IDs from run output
+    ec2Ips, err := Ec2Client.Ec2GetPublicIps(1 * time.Minute, nil)
+    if err != nil {
+        logMan.LogMessage("fatal", "Error retreiving run output public IPs:  %v", err)
+    }
+
+    // Establish client to SSM
+    ssmMan := ssmutils.SsmNewManager(AssumedAwsConfig)
+
     // Setup TUI interface for and ensure it closes on local exit
     t := tui.NewTUI(100, "Connections", 500 * time.Millisecond, 3, "File Transfers")
     go t.Start(color.SkyBlue, color.BrightMagenta, color.BrightMint)
     defer t.Stop()
 
     // Iterate through instances in result from SDK call
-    for _, ipAddr := range Ec2Ips {
+    for _, ipAddr := range ec2Ips {
         // If there is no public IP address, skip it
         if ipAddr == "" {
             continue
         }
 
-        // TODO:  find way to retrieve correct parameter based on instance ID
-
-
-        // Establish client to SSM
-        ssmMan := ssmutils.SsmNewManager(assumedAwsConfig)
-        // Retrieve the server TLS cert from SSM param store
-        certPemString, err := ssmMan.SsmGetParameter(1 * time.Minute,
-                                                    "/kloud-kraken/tls-cert")
+        // Get instance ID based on its public IP
+        instanceId, err :=  Ec2Client.Ec2GetInstanceIdByPublicIp(1 * time.Minute,
+                                                                 ipAddr)
         if err != nil {
-            logMan.LogMessage("error", "Error getting server TLS cert via SSM Param Store:  %v", err)
+            logMan.LogMessage("error", "Error getting EC2 instance ID by public IP:  %v", err)
+            continue
         }
 
-        // Convert retrieved TLS cert PEM block to bytes
-        serverCertPemBlock := []byte(certPemString)
+        // Format SSM parameter and add to list to delete at end of program
+        param := "/kloud-kraken/" + instanceId + "/tls-cert"
+        ParamsToDelete = append(ParamsToDelete, param)
+
+        // Retrieve the server TLS cert from SSM param store
+        certPemString, err := ssmMan.SsmGetParameter(1 * time.Minute, param)
+        if err != nil {
+            logMan.LogMessage("error", "Error getting server TLS cert via SSM Param Store:  %v", err)
+            continue
+        }
 
         // Add client certificate to cert pool
-        err = TlsMan.AddCertToPool(serverCertPemBlock)
+        err = TlsMan.AddCertToPool([]byte(certPemString))
         if err != nil {
-            log.Fatalf("Error adding TLS certificate to pool:  %v", err)
+            logMan.LogMessage("error", "Error adding TLS certificate to pool:  %v", err)
+            continue
         }
 
         // Define the address of the server to connect to
         serverAddress := net.JoinHostPort(ipAddr, strconv.Itoa(appConfig.LocalConfig.ListenerPort))
-
-        logMan.LogMessage("debug", "Attempting connect to " + serverAddress)
 
         // Display connection attempt in the left panel
         t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -624,20 +638,20 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     // Create a provider that will call STS AssumeRole under the covers
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
     // Make a shallow copy of base AWS config instance
-    assumedAwsConfig := baseAwsConfig.Copy()
+    AssumedAwsConfig := baseAwsConfig.Copy()
     // Swap in credentials of assumed role
-    assumedAwsConfig.Credentials = aws.NewCredentialsCache(assumeProvider)
+    AssumedAwsConfig.Credentials = aws.NewCredentialsCache(assumeProvider)
 
     // Ensure STS token is refreshed per execution
-    _, err = assumedAwsConfig.Credentials.Retrieve(context.Background())
+    _, err = AssumedAwsConfig.Credentials.Retrieve(context.Background())
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     // Read the client binary into memory
     binData, err := os.ReadFile(globals.BIN_DIR + "/kloud-kraken-client")
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
@@ -645,13 +659,13 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
                                    color.NeonAzure, "Uploading client binary to S3 bucket"))
 
     // Re-establish client to S3 with new API key set
-    s3Client := s3utils.S3NewManager(assumedAwsConfig)
+    s3Client := s3utils.S3NewManager(AssumedAwsConfig)
     // Upload the client binary to S3 Bucket
     keyName, err := s3Client.S3PutObject(5 * time.Minute,
                                          bootstrapOut.S3BucketName,
                                          "client", binData)
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     bootstrapOut.S3Client = s3Client
@@ -677,7 +691,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
                                     keyName, bootstrapOut.Ec2SgId)
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     tags := map[string]string{
@@ -686,14 +700,14 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     }
 
     // Re-setup new client to EC2 service with newly assumed role
-    Ec2Client = ec2utils.Ec2NewManager(assumedAwsConfig)
+    Ec2Client = ec2utils.Ec2NewManager(AssumedAwsConfig)
     bootstrapOut.Ec2Client = Ec2Client
     // Get the latest AMI for the ubuntu deep learning
     amiId, err := Ec2Client.Ec2GetAmiId(1 * time.Minute, "x86_64", "Deep Learning " +
                                         "Base AMI with Single CUDA (Ubuntu 22.04) *",
                                         []string{"amazon"})
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
@@ -715,7 +729,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     // Create number of EC2 instances based on passed in data
     err = Ec2Client.Ec2CreateInstances(5 * time.Minute, ec2CreateInstancesInput)
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
     filterMap = map[string]string{
@@ -755,10 +769,10 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     // Wait until the EC2 instance status is OK
     err = Ec2Client.Ec2WaiterStatusOk(15 * time.Minute)
     if err != nil {
-        return assumedAwsConfig, bootstrapOut, costMan, costErr, err
+        return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
-    return assumedAwsConfig, bootstrapOut, costMan, costErr, nil
+    return AssumedAwsConfig, bootstrapOut, costMan, costErr, nil
 }
 
 
@@ -1036,15 +1050,17 @@ func main() {
             yamlUpdates["aws_env.s3_bucket_name"] = ""
         }
 
-        // Delete all the client TLS certificate from SSM Parameter store
-        err = bootstrapOut.SsmClient.SsmDeleteAllParams(1 * time.Minute,
-                                                        "/kloud-kraken/tls-cert")
-        if err != nil {
-            if logMan != nil {
-                logMan.LogMessage("error", "Error deleting parameters from" +
-                                  " SSM Param Store:  %v", err)
-            } else {
-                log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
+        // Iterate through SSM parameters and delete them
+        for _, param := range ParamsToDelete {
+            // Delete all the client TLS certificate from SSM Parameter store
+            err = SsmMan.SsmDeleteParameter(1 * time.Minute, param)
+            if err != nil {
+                if logMan != nil {
+                    logMan.LogMessage("error", "Error deleting parameters from" +
+                                      " SSM Param Store:  %v", err)
+                } else {
+                    log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
+                }
             }
         }
 

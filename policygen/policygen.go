@@ -59,7 +59,7 @@ func bootstrapPolicyGen(accountId string, region string) string {
         "ssm:AddTagsToResource",
         "ssm:DescribeParameters"
       ],
-      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken/tls-cert*"
+      "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken*"
     },
 
     {
