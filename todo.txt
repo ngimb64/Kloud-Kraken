@@ -1,18 +1,12 @@
-- Fix AWS permissions policies to reflect changes with TLS certificate handling update
-    - Once complete ensure client and server policies are deleted from aws & state file
-    - Also make sure to remake binaries, regenerate with policygen binary, update in IAM
-
-- Add code to teardown to terminate VPC flow logs resources
-
 - Look into pricing system retrieving wrong prices
     - Try adding more filters to ensure correct prices are retrieved
 
-- Look into making sure VPC flow logs package is optimized
-
-- Build binary to build out state file with existing resources
+- Review VPC flow logs package for optimization
 
 - Try improving existing tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os
+
+- Build binary to build out state file with existing resources
 
 - Implement unit tests for packages that need them
 
@@ -23,9 +17,9 @@
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
 
-- Optimize wordlist merging and file shaving logic with custom rust programs
-
 - Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 
 - Look into using packer to create custom AMI tailored to the project with saved driver install code
     - When implemented adjust code to use kloud-kraken AMI if it is available other wise fall back to deep learning base AMI
+
+- Optimize wordlist merging and file shaving logic with custom rust programs

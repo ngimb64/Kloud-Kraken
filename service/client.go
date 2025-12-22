@@ -143,15 +143,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                          HashcatArgs.CharSet3, HashcatArgs.CharSet4}
     cmdOptions := []string{}
 
-    // Get the current working directory
-    cwd, err := os.Getwd()
-    if err != nil {
-        logMan.LogMessage("error", "Error getting current dir:  %v", err)
-        return
-    }
-
     // Format the path for temp & permanent cracked hashes files
-    crackedPath := path.Join(cwd, "cracked.txt")
+    crackedPath := path.Join(HashesPath, "cracked.txt")
     lootPath := filepath.Join(HashesPath, "loot.txt")
 
     // If GPU optimization is to be applied, append it to options slice
@@ -414,6 +407,9 @@ func processTransfer(connection net.Conn, buffer []byte,
                                                        "0.0.0.0", port, listener)
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
+        cancel()
+        closeListener()
+        return
     }
 
     // Wait for an incoming connection
@@ -522,20 +518,9 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     // Send signal to other routine that hash and ruleset file has been received
     hashcatOptChannel <- struct{}{}
 
-    var diskPath string
-    // If the program is being run in testing mode
-    if DataPath == "/tmp" {
-        // Query the root directory for total space
-        diskPath = "/"
-    // If the program is being run in full mode (not testing)
-    } else {
-        // Query instance store path for total space
-        diskPath = DataPath
-    }
-
     for {
         // Get the remaining available and total disk space
-        remainingSpace, total, err := disk.GetDiskSpace(diskPath)
+        remainingSpace, total, err := disk.GetDiskSpace(DataPath)
         if err != nil {
             logMan.LogMessage("error", "Error checking disk space on client:  %v", err)
             return
@@ -698,7 +683,7 @@ func main() {
     flag.StringVar(&HashcatArgs.CharSet3, "charSet3", "", "Custom character set 3 for masks")
     flag.StringVar(&HashcatArgs.CharSet4, "charSet4", "", "Custom character set 4 for masks")
     flag.StringVar(&HashcatArgs.CrackingMode, "crackingMode", "0", "Hashcat cracking mode")
-    flag.StringVar(&DataPath, "dataPath", "/tmp", "Path to directory where wordlist data is stored")
+    flag.StringVar(&DataPath, "dataPath", "", "Path to directory where program dirs are created")
     flag.StringVar(&Ec2SecurityGroupId, "ec2SecurityGroupId", "", "ID for Security Group for EC2 clients")
     flag.StringVar(&HashcatArgs.HashMask, "hashMask", "", "Mask to apply to hash cracking attempts")
     flag.BoolVar(&HasRuleset, "hasRuleset", false, "Toggle to specify if ruleset is in use")
@@ -707,9 +692,9 @@ func main() {
                    "The mode of logging, which support local, CloudWatch, or both")
     flag.Int64Var(&maxFileSizeInt64, "maxFileSizeInt64", 0,
                   "The max size for file to be transmitted at once")
-    flag.IntVar(&maxTransfers, "maxTransfers", 3, "Maximum number of files to transfer simultaniously")
+    flag.IntVar(&maxTransfers, "maxTransfers", 2, "Maximum number of files to transfer simultaniously")
     flag.IntVar(&port, "port", 7003, "TCP port to connect to on brain server")
-    flag.StringVar(&HashcatArgs.Workload, "workload", "3", "Workload profile number to apply")
+    flag.StringVar(&HashcatArgs.Workload, "workload", "4", "Workload profile number to apply")
 
     // Parse the command line flags
     flag.Parse()
@@ -762,8 +747,7 @@ func main() {
     // Push the servers certificate PEM into SSM parameter store
     _, err = ssmClient.SsmPutParameter(1 * time.Minute,
                                        "/kloud-kraken/" + instanceId + "/tls-cert",
-                                       string(TlsMan.CertPemBlock),
-                                       true, tags)
+                                       string(TlsMan.CertPemBlock), true, tags)
     if err != nil {
         log.Fatalf("Error putting TLS certificate in SSM Param Store:  %v", err)
     }

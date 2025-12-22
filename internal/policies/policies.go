@@ -16,6 +16,15 @@ func ClientPermPolicyGen(region string, accountId string) string {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "EC2InstanceInformation",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances"
+      ],
+      "Resource": "*"
+    },
+
+    {
       "Sid": "S3DownloadBinary",
       "Effect": "Allow",
       "Action": [
@@ -25,18 +34,10 @@ func ClientPermPolicyGen(region string, accountId string) string {
     },
 
     {
-      "Sid": "EC2InstanceInformation",
+      "Sid": "SSMPutClientCert",
       "Effect": "Allow",
       "Action": [
-        "ec2:DescribeInstances"
-      ]
-      "Resource": "*"
-    },
-
-    {
-      "Sid": "SSMPutParameters",
-      "Effect": "Allow",
-      "Action": [
+        "ssm:AddTagsToResource",
         "ssm:PutParameter"
       ],
       "Resource": "arn:aws:ssm:%s:%s:parameter/kloud-kraken*"
@@ -84,7 +85,9 @@ func ClientTrustPolicyGen() string {
   "Statement": [
     {
       "Effect":    "Allow",
-      "Principal": { "Service": "ec2.amazonaws.com" },
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
       "Action":    "sts:AssumeRole"
     }
   ]
@@ -106,29 +109,14 @@ func ServerPermPolicyGen(region string, accountId string) string {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "SSMUploadClientCert",
-      "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath",
-        "ssm:DeleteParameter",
-        "ssm:AddTagsToResource"
-      ],
-      "Resource": [
-        "arn:aws:ssm:%s:%s:parameter/kloud-kraken*"
-      ]
-    },
-
-    {
       "Sid": "S3Operations",
       "Effect": "Allow",
       "Action": [
-        "s3:PutObject",
-        "s3:PutObjectAcl",
-        "s3:ListBucket",
+        "s3:DeleteBucket",
         "s3:DeleteObject",
-        "s3:DeleteBucket"
+        "s3:ListBucket",
+        "s3:PutObject",
+        "s3:PutObjectAcl"
       ],
       "Resource": [
         "arn:aws:s3:::kloud-kraken-s3",
@@ -137,17 +125,31 @@ func ServerPermPolicyGen(region string, accountId string) string {
     },
 
     {
+      "Sid": "SSMGetClientCert",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:DeleteParameter",
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath"
+      ],
+      "Resource": [
+        "arn:aws:ssm:%s:%s:parameter/kloud-kraken*"
+      ]
+    },
+
+    {
       "Sid": "EC2LifecycleControl",
       "Effect": "Allow",
       "Action": [
-        "ec2:RunInstances",
-        "ec2:TerminateInstances",
-        "ec2:DescribeInstances",
-        "ec2:DescribeInstanceStatus",
-        "ec2:DescribeImages",
         "ec2:CreateTags",
         "ec2:DeleteVpcEndpoints",
-        "ec2:DescribeVpcEndpoints"
+        "ec2:DescribeImages",
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeVpcEndpoints",
+        "ec2:RunInstances",
+        "ec2:TerminateInstances"
       ],
       "Resource": "*"
     },
@@ -174,10 +176,10 @@ func ServerPermPolicyGen(region string, accountId string) string {
       "Sid": "ManageSecurityGroupIngressAndEgress",
       "Effect": "Allow",
       "Action": [
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:RevokeSecurityGroupIngress",
         "ec2:AuthorizeSecurityGroupEgress",
-        "ec2:RevokeSecurityGroupEgress"
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress"
       ],
       "Resource": "arn:aws:ec2:%s:%s:security-group/*"
     },
@@ -185,7 +187,9 @@ func ServerPermPolicyGen(region string, accountId string) string {
     {
       "Sid": "DescribeSecurityGroups",
       "Effect": "Allow",
-      "Action": ["ec2:DescribeSecurityGroups"],
+      "Action": [
+        "ec2:DescribeSecurityGroups"
+      ],
       "Resource": "*"
     }
   ]
@@ -297,8 +301,8 @@ func VpcS3EndpointPolicyGen(accountId string) string {
       "Principal": "*",
       "Action": [
         "s3:GetObject",
-        "s3:PutObject",
-        "s3:ListBucket"
+        "s3:ListBucket",
+        "s3:PutObject"
       ],
       "Resource": [
         "arn:aws:s3:::kloud-kraken-s3",
@@ -327,6 +331,7 @@ func VpcSsmEndpointPolicyGen(accountId string) string {
       "Effect": "Allow",
       "Principal": "*",
       "Action": [
+        "ssm:AddTagsToResource",
         "ssm:GetParameter",
         "ssm:GetParameters",
         "ssm:GetParametersByPath",
