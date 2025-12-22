@@ -83,7 +83,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
     var yamlUpdates = map[string]string{}
 
-    // Establish clients to various services
+    // Establish clients to EC2 & IAM services
     ec2Client := ec2utils.Ec2NewManager(awsConfig)
     iamClient := iamutils.IamNewManager(awsConfig)
 
@@ -166,8 +166,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the Internet Gateway
     igwId, err := SetupInternetGatewayHandler(ec2Client, &stateConfig,
-                                              appConfig, yamlUpdates,
-                                              vpcId)
+                                              yamlUpdates, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up Internet Gateway - %w", err)
@@ -182,7 +181,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the route table
-    routeId, err := SetupRouteTableHandler(ec2Client, &stateConfig, appConfig,
+    routeId, err := SetupRouteTableHandler(ec2Client, &stateConfig,
                                            yamlUpdates, vpcId, igwId)
     if err != nil {
         return outStruct, costMan, costErr,
@@ -190,7 +189,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup route table associations
-    err = SetupRouteTableAssociationHandler(ec2Client, &stateConfig, appConfig,
+    err = SetupRouteTableAssociationHandler(ec2Client, &stateConfig,
                                             yamlUpdates, routeId, subnetId)
     if err != nil {
         return outStruct, costMan, costErr,
@@ -199,8 +198,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the EC2 security group
     ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, &stateConfig,
-                                                 appConfig, yamlUpdates,
-                                                 outStruct, vpcId)
+                                                 yamlUpdates, outStruct, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up EC2 security group - %w", err)
@@ -216,8 +214,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the SSM security group
     ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, &stateConfig,
-                                                 appConfig, yamlUpdates,
-                                                 vpcId)
+                                                 yamlUpdates, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up SSM security group - %w", err)
@@ -231,9 +228,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the S3 bucket
-    err = SetupS3BucketHandler(ec2Client, &stateConfig, appConfig,
-                               yamlUpdates, outStruct, awsConfig.Region,
-                               &costErr, costMan, awsConfig)
+    err = SetupS3BucketHandler(&stateConfig, yamlUpdates, outStruct, awsConfig)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up S3 bucket - %w", err)
@@ -259,18 +254,17 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup VPC Flow Logs IAM role
-    vpcFlowLogArn, err := SetupVpcFlowLogsIamRoleHandler(iamClient, stsClient,
-                                                         &stateConfig, appConfig,
-                                                         yamlUpdates, outStruct)
+    vpcFlowLogArn, err := SetupVpcFlowLogsIamRoleHandler(iamClient, &stateConfig,
+                                                         appConfig, yamlUpdates,
+                                                         outStruct)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up VPC Flow Logs IAM role - %w", err)
     }
 
     // Setup the VPC Flow Logs
-    err = SetupVpcFlowLogsHandler(ec2Client, &stateConfig, appConfig,
-                                  yamlUpdates, awsConfig, vpcId,
-                                  vpcFlowLogArn)
+    err = SetupVpcFlowLogsHandler(ec2Client, &stateConfig, yamlUpdates,
+                                  awsConfig, vpcId, vpcFlowLogArn)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up VPC Flow Logs - %w", err)

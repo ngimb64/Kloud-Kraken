@@ -17,7 +17,6 @@ import (
 // @Parameters
 //  - ec2Client:  Pointer to EC2 service client management struct
 //  - stateConfig:  Pointer to config struct for state file
-//  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - awsConfig:  The AWS configuration instance
 //  - vpcId:  The ID of the VPC where flow logs will be applied
@@ -28,7 +27,6 @@ import (
 //
 func SetupVpcFlowLogsHandler(ec2Client *ec2utils.Ec2Manger,
                              stateConfig *AwsEnv,
-                             appConfig *conf.AppConfig,
                              yamlUpdates map[string]string,
                              awsConfig aws.Config, vpcId string,
                              vpcFlowLogArn string) error {
@@ -100,7 +98,7 @@ func SetupVpcHandler(ec2Client *ec2utils.Ec2Manger,
                                    color.NeonAzure, "Launching VPC provisioner"))
 
     // Check to see if the VPC exists, otherwise create one
-    vpcId, err := ec2Client.VpcProvision(10*time.Minute,
+    vpcId, err := ec2Client.VpcProvision(10 * time.Minute,
                                          stateConfig.AwsEnv.VpcId,
                                          appConfig.LocalConfig.CidrBlock,
                                          tags)

@@ -21,9 +21,6 @@ import (
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - vpcId:  The VPC ID where the endpoint will be deployed
 //  - routeId:  The ID of the route table associated with the endpoint
-//  - location:  The human readable version of region
-//  - costErr:  Pointer to error instance for cost manager
-//  - costMan:  Pointer to AWS cost manager instance
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -146,7 +143,10 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     outStruct.SsmVpcEndpointId = ssmVpcEndpointId
 
     filterMap := map[string]string{
-        "location": location,
+        "endpointType":  "PrivateLink",
+        "location":      location,
+        "productFamily": "VpcEndpoint",
+        "usagetype":     "USE1-VpcEndpoint-Hours",
     }
 
     // Add the elastic IP to cost manager

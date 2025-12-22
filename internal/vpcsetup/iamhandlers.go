@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/policies"
@@ -21,7 +20,6 @@ import (
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - outStruct:  Pointer to struct used for managing vcpsetup outputs
-//  - bucketName:  Name of the S3 bucket used
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -146,7 +144,6 @@ func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
 //
 // @Parameters
 //  - iamClient:  Pointer to IAM service client management struct
-//  - stsClient:  The STS service client management struct
 //  - stateConfig:  Pointer to config struct for state file
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
@@ -157,7 +154,6 @@ func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
 //  - Error if it occurs, otherwise nil on success
 //
 func SetupVpcFlowLogsIamRoleHandler(iamClient *iamutils.IamManager,
-                                    stsClient sts.Client,
                                     stateConfig *AwsEnv,
                                     appConfig *conf.AppConfig,
                                     yamlUpdates map[string]string,

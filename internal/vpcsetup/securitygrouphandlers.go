@@ -15,7 +15,6 @@ import (
 // @Parameters
 //  - ec2Client:  Pointer to EC2 service client management struct
 //  - stateConfig:  Pointer to config struct for state file
-//  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - outStruct:  Pointer to struct used for managing vcpsetup outputs
 //  - vpcId:  The ID of the VPC wthere the security group will apply
@@ -26,7 +25,6 @@ import (
 //
 func SetupEc2SecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
                                   stateConfig *AwsEnv,
-                                  appConfig *conf.AppConfig,
                                   yamlUpdates map[string]string,
                                   outStruct *VpcBootstrapOutput,
                                   vpcId string) (string, error) {
@@ -147,7 +145,6 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
 // @Parameters
 //  - ec2Client:  Pointer to EC2 service client management struct
 //  - stateConfig:  Pointer to config struct for state file
-//  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - vpcId:  The ID of the VPC wthere the security group will apply
 //
@@ -157,7 +154,6 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
 //
 func SetupSsmSecurityGroupHandler(ec2Client *ec2utils.Ec2Manger,
                                   stateConfig *AwsEnv,
-                                  appConfig *conf.AppConfig,
                                   yamlUpdates map[string]string,
                                   vpcId string) (string, error) {
     tags := map[string]string{

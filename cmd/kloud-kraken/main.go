@@ -676,17 +676,6 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
                                    color.NeonAzure, "Uploaded client binary to S3 bucket ",
                                    color.RadiantAmethyst, bootstrapOut.S3BucketName))
 
-    filterMap := map[string]string{
-        "location": location,
-    }
-
-    // Add the S3 put request to the cost manager
-    s3Cost := costMan.AddCostResourceToManager("s3_put_requests", filterMap,
-                                               false, &costErr)
-    if s3Cost != nil {
-        s3Cost.PutRequests += 1
-    }
-
     // Generate user data script to set up client program in EC2
     userData, err := ec2UserDataGen(appConfig, bootstrapOut.S3BucketName,
                                     keyName, bootstrapOut.Ec2SgId)
@@ -732,10 +721,13 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
         return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
-    filterMap = map[string]string{
-        "instanceType": appConfig.LocalConfig.InstanceType,
-        "location": location,
-        "operatingSystem":"Linux",
+    filterMap := map[string]string{
+        "capacitystatus":  "Used",
+        "instanceType":    appConfig.LocalConfig.InstanceType,
+        "location":        location,
+        "operatingSystem": "Linux",
+        "preInstalledSw":  "NA",
+        "tenancy":         "Shared",
     }
 
     // Add the Ec2 instances to the cost manager
