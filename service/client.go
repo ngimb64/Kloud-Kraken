@@ -737,22 +737,17 @@ func main() {
         log.Fatalf("Error getting instance ID from metadata:  %v", err)
     }
 
-    tags := map[string]string{
-        "kloud-kraken": "true",
-        "Name": "kloud-kraken-ssm-tls-cert",
-    }
-
     // Setup client to SSM
     ssmClient := ssmutils.SsmNewManager(awsConfig)
     // Push the servers certificate PEM into SSM parameter store
     _, err = ssmClient.SsmPutParameter(1 * time.Minute,
                                        "/kloud-kraken/" + instanceId + "/tls-cert",
-                                       string(TlsMan.CertPemBlock), true, tags)
+                                       string(TlsMan.CertPemBlock), true, nil)
     if err != nil {
         log.Fatalf("Error putting TLS certificate in SSM Param Store:  %v", err)
     }
 
-    tags = map[string]string{
+    tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-logs",
     }

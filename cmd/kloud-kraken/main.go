@@ -358,7 +358,7 @@ func startServer(appConfig *conf.AppConfig,
     }
 
     // Establish client to SSM
-    ssmMan := ssmutils.SsmNewManager(AssumedAwsConfig)
+    SsmMan = ssmutils.SsmNewManager(AssumedAwsConfig)
 
     // Setup TUI interface for and ensure it closes on local exit
     t := tui.NewTUI(100, "Connections", 500 * time.Millisecond, 3, "File Transfers")
@@ -385,7 +385,7 @@ func startServer(appConfig *conf.AppConfig,
         ParamsToDelete = append(ParamsToDelete, param)
 
         // Retrieve the server TLS cert from SSM param store
-        certPemString, err := ssmMan.SsmGetParameter(1 * time.Minute, param)
+        certPemString, err := SsmMan.SsmGetParameter(1 * time.Minute, param)
         if err != nil {
             logMan.LogMessage("error", "Error getting server TLS cert via SSM Param Store:  %v", err)
             continue
@@ -638,7 +638,7 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
     // Create a provider that will call STS AssumeRole under the covers
     assumeProvider := stscreds.NewAssumeRoleProvider(stsClient, bootstrapOut.ServerArn)
     // Make a shallow copy of base AWS config instance
-    AssumedAwsConfig := baseAwsConfig.Copy()
+    AssumedAwsConfig = baseAwsConfig.Copy()
     // Swap in credentials of assumed role
     AssumedAwsConfig.Credentials = aws.NewCredentialsCache(assumeProvider)
 

@@ -85,18 +85,20 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
                                           data string, willOverwrite bool,
                                           tags map[string]string) (
                                           string, error) {
+    var candidate string
     var existsErr *ssmtypes.ParameterAlreadyExists
 
     // Keep attemping parameters with number added until unused is found
-    for i := 1;; i++ {
-        // Add number to end of parameter name
-        candidate := parameter + "-" + strconv.Itoa(i)
-        // Ensure AWS API calls do not hang for longer specified timeout
-        ctx, cancel := context.WithTimeout(context.Background(), callTime)
-
-        if willOverwrite {
+    for i := 0;; i++ {
+        if i > 0 {
+            // Add number to end of parameter name
+            candidate = parameter + "-" + strconv.Itoa(i)
+        } else {
             candidate = parameter
         }
+
+        // Ensure AWS API calls do not hang for longer specified timeout
+        ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
         callInput := &ssm.PutParameterInput{
             Name:      aws.String(candidate),
@@ -174,9 +176,16 @@ func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
 //
 func (SsmMan SsmManager) SsmDeleteAllParams(callTime time.Duration,
                                             baseName string) error {
-    for i := 1;; i++ {
-        // Format the parameter name per iteration
-        paramName := baseName + "-" + strconv.Itoa(i)
+    var paramName string
+
+    for i := 0;; i++ {
+        if i > 0 {
+            // Format the parameter name per iteration
+            paramName = baseName + "-" + strconv.Itoa(i)
+        } else {
+            paramName = baseName
+        }
+
         // Attempt to delete the parameter
         err := SsmMan.SsmDeleteParameter(callTime, paramName)
         if err != nil {
