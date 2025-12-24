@@ -1,11 +1,11 @@
 - Try improving existing tests related to file io with potential memory-based io providers (read blog)
     - Also look into using testing lib for file related operations instead of os
 
-- Review VPC flow logs package for optimization
-
 - Build binary to build out state file with existing resources
 
 - Implement unit tests for packages that need them
+
+- Review VPC flow logs package for optimization
 
 - Review permissions to harden to max effect of least privilege
 

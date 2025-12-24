@@ -344,8 +344,8 @@ func TestReadHandler(t *testing.T) {
     defer listener.Close()
 
     isComplete := make(chan bool)
-    testMessage := []byte("This is a test message that is used for testing purposes")
-    testMessage2 := []byte("This is another test message that is used for testing")
+    testMessage := []byte("<This is a test message that is used for testing purposes>")
+    testMessage2 := []byte("<This is another test message that is used for testing>")
 
     go func() {
         // Wait for an incoming connection
@@ -354,16 +354,13 @@ func TestReadHandler(t *testing.T) {
         // Close connection on local exit
         defer clientConn.Close()
 
-        // Make buffer for receiving data
-        receiveBuffer := make([]byte, 64)
+        buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
         // Read the message from server and store into buffer
-        bytesRead, err := netio.ReadHandler(clientConn, &receiveBuffer)
+        receiveBuffer, err := netio.ReadHandler(clientConn, &buffer, []byte(">"))
         assert.Equal(nil, err)
 
-        // Ensure bytes read equals the expected message
-        assert.Equal(len(testMessage), bytesRead)
         // Ensure content in the buffer matches expected message
-        assert.Equal(testMessage, receiveBuffer[:len(testMessage)])
+        assert.Equal(testMessage, receiveBuffer)
 
         // Perform write operation via passed in connection
         bytesWrote, err := clientConn.Write(testMessage2)
@@ -390,16 +387,13 @@ func TestReadHandler(t *testing.T) {
     // Ensure bytes wrote equals the expected message
     assert.Equal(len(testMessage), bytesWrote)
 
-    // Make buffer to receive data
-    buffer := make([]byte, 64)
+    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Read the message from server and store into buffer
-    bytesRead, err := netio.ReadHandler(serverConn, &buffer)
+    receiveBuffer, err := netio.ReadHandler(serverConn, &buffer, []byte(">"))
     assert.Equal(nil, err)
 
-    // Ensure bytes read equals the expected message length
-    assert.Equal(len(testMessage2), bytesRead)
     // Ensure content in the buffer matches expected message
-    assert.Equal(testMessage2, buffer[:len(testMessage2)])
+    assert.Equal(testMessage2, receiveBuffer)
 
     // Wait for the channel to send complete signal
     <-isComplete

@@ -58,15 +58,15 @@ var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc
 // @Parameters
 //  - connection:  Network socket connection for handling messaging
 //  - buffer:  The buffer storing network messaging
-//  - bytesRead:  The number of bytes read into the passed in buffer
+//  - readBuffer:  The buffer storing read data from connection
 //  - waitGroup:  Used to synchronize the Goroutines running
 //  - appConfig:  The configuration struct with loaded yaml program data
 //  - logMan:  The kloudlogs logger manager for local logging
 //  - ipAddr:  The IP address of the remote client connected to the server
 //  - t:  The tui interface for displaying output
 //
-func handleTransfer(connection net.Conn, buffer []byte,
-                    bytesRead int, waitGroup *sync.WaitGroup,
+func handleTransfer(connection net.Conn, buffer *[]byte,
+                    readBuffer []byte, waitGroup *sync.WaitGroup,
                     appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
                     ipAddr string, t *tui.TUI) {
     // Select the next avaible file in the load dir from YAML data
@@ -90,14 +90,16 @@ func handleTransfer(connection net.Conn, buffer []byte,
     }
 
     // Parse the TCP port to connect to from the transfer request
-    port, err := netio.ParseTransferRequest(buffer, globals.TRANSFER_REQUEST_PREFIX, bytesRead)
+    port, err := netio.ParseTransferRequest(readBuffer,
+                                            globals.TRANSFER_REQUEST_PREFIX,
+                                            len(readBuffer))
     if err != nil {
         logMan.LogMessage("error", "Error parsing port from transfer request:  %v", err)
         return
     }
 
     // Format transfer reply to inform client of selected file name and size
-    sendLength, err := netio.FormatStartTransfer(filePath, fileSize, &buffer,
+    sendLength, err := netio.FormatStartTransfer(filePath, fileSize, buffer,
                                                  globals.START_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer reply:  %v", err)
@@ -105,7 +107,7 @@ func handleTransfer(connection net.Conn, buffer []byte,
     }
 
     // Send start transfer message with file name and size
-    _, err = netio.WriteHandler(connection, buffer, sendLength)
+    _, err = netio.WriteHandler(connection, *buffer, sendLength)
     if err != nil {
         logMan.LogMessage("error", "Error sending the transfer reply:  %v", err)
         return
@@ -298,14 +300,11 @@ func handleConnection(connection net.Conn,
 
     for {
         // Read data from connected client
-        bytesRead, err := netio.ReadHandler(connection, &buffer)
+        readBuffer, err := netio.ReadHandler(connection, &buffer, []byte(">"))
         if err != nil {
             logMan.LogMessage("error", "Error reading data from socket:  %v", err)
             return
         }
-
-        // Save read content into isolated buffer
-        readBuffer := buffer[:bytesRead]
 
         // If the read data contains the processing complete message
         if bytes.Contains(readBuffer, globals.PROCESSING_COMPLETE) {
@@ -315,7 +314,7 @@ func handleConnection(connection net.Conn,
         // If the read data contains transfer request message
         if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_PREFIX) {
             // Call method to handle file transfer based
-            handleTransfer(connection, buffer, bytesRead, waitGroup,
+            handleTransfer(connection, &buffer, readBuffer, waitGroup,
                            appConfig, logMan, remoteAddr, t)
         }
     }
@@ -401,12 +400,6 @@ func startServer(appConfig *conf.AppConfig,
         // Define the address of the server to connect to
         serverAddress := net.JoinHostPort(ipAddr, strconv.Itoa(appConfig.LocalConfig.ListenerPort))
 
-        // Display connection attempt in the left panel
-        t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                                color.LightCyan, "!"), "",
-                                            color.NeonAzure, "Connecting to ",
-                                            color.RadiantAmethyst, serverAddress)
-
         // Make a connection to the remote server
         connection, err := tls.Dial("tcp", serverAddress,
                                     tlsutils.NewClientTLSConfig(TlsMan.CertPool, ipAddr))
@@ -414,6 +407,12 @@ func startServer(appConfig *conf.AppConfig,
             logMan.LogMessage("error", "Error connecting to remote client:  %v", err)
             continue
         }
+
+        // Display connection attempt in the left panel
+        t.LeftPanelCh <- display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                color.LightCyan, "!"), "",
+                                            color.NeonAzure, "Connected to ",
+                                            color.RadiantAmethyst, serverAddress)
 
         logMan.LogMessage("info", "Connected to remote server",
                           zap.String("ip address", serverAddress),

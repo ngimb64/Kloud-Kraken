@@ -327,7 +327,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 //  - transferComplete:  Toggle to signify when all files have been transfered
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processTransfer(connection net.Conn, buffer []byte,
+func processTransfer(connection net.Conn, buffer *[]byte,
                      waitGroup *sync.WaitGroup,
                      transferManager *data.TransferManager,
                      transferComplete *bool,
@@ -347,7 +347,8 @@ func processTransfer(connection net.Conn, buffer []byte,
     }
 
     // Format the transfer request with listener port to connect to
-    sendLength, err := netio.FormatTransferRequest(port, &buffer, globals.TRANSFER_REQUEST_PREFIX)
+    sendLength, err := netio.FormatTransferRequest(port, buffer,
+                                                   globals.TRANSFER_REQUEST_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer request:  %v", err)
         closeListener()
@@ -355,23 +356,20 @@ func processTransfer(connection net.Conn, buffer []byte,
     }
 
     // Send the transfer request message to initiate file transfer
-    _, err = netio.WriteHandler(connection, buffer, sendLength)
+    _, err = netio.WriteHandler(connection, *buffer, sendLength)
     if err != nil {
-        logMan.LogMessage("error", "Error sending the transfer request to server:  %v", err)
+        logMan.LogMessage("error", "Error sending transfer request to server:  %v", err)
         closeListener()
         return
     }
 
     // Wait to receive the start transfer message from the server
-    bytesRead, err := netio.ReadHandler(connection, &buffer)
+    readBuffer, err := netio.ReadHandler(connection, buffer, []byte(">"))
     if err != nil {
         logMan.LogMessage("error", "Error start transfer message from server:  %v", err)
         closeListener()
         return
     }
-
-    // Slice off any unused bytes in buffer
-    readBuffer := buffer[:bytesRead]
 
     // If the server has completed transferring all data
     if bytes.Contains(readBuffer, globals.END_TRANSFER_MARKER) {
@@ -390,9 +388,9 @@ func processTransfer(connection net.Conn, buffer []byte,
     }
 
     // Extract the file name and size from the start transfer message
-    fileName, fileSize, err := netio.ParseStartTransfer(buffer,
+    fileName, fileSize, err := netio.ParseStartTransfer(readBuffer,
                                                         globals.START_TRANSFER_PREFIX,
-                                                        bytesRead)
+                                                        len(readBuffer))
     if err != nil {
         logMan.LogMessage("error", "Error extracting file name and " +
                           "size from start transfer message:  %v", err)
@@ -537,7 +535,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 &&
         MaxTransfers.Load() != MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
-            processTransfer(connection, buffer, waitGroup, transferManager,
+            processTransfer(connection, &buffer, waitGroup, transferManager,
                             &transferComplete, logMan)
             // If all the transfers are complete exit the data receiving loop
             if transferComplete {
