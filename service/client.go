@@ -113,12 +113,10 @@ func sendProcessingComplete(connection net.Conn,
 //  - transferChannel:  Channel to transmit filenames after transfer to initiate
 //                      data processing
 //  - waitGroup:  Acts as a barrier for the Goroutines running
-//  - transferManager:  Manages calculating the amount of data being transferred
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                        transferChannel chan struct{}, waitGroup *sync.WaitGroup,
-                       transferManager *data.TransferManager,
                        logMan *kloudlogs.LoggerManager) {
     completed := false
     var err error
@@ -168,7 +166,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
     for {
         // Attempt to get the next available wordlist
-        fileName, fileSize, err := disk.CheckDirFiles(WordlistPath)
+        fileName, _, err := disk.CheckDirFiles(WordlistPath)
         if err != nil {
             logMan.LogMessage("error", "Error retrieving wordlist from wordlist dir:  %v",
                               err, zap.String("wordlist directory", WordlistPath))
@@ -182,7 +180,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
             completed = true
 
             // Try again to get the next available wordlist to ensure no data is missed
-            fileName, fileSize, err = disk.CheckDirFiles(WordlistPath)
+            fileName, _, err = disk.CheckDirFiles(WordlistPath)
             if err != nil {
                 logMan.LogMessage("error", "Error retrieving wordlist from wordlist dir:  %v",
                                   err, zap.String("wordlist directory", WordlistPath))
@@ -275,11 +273,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
         // Log the hashcat output with kloudlogs
         logMan.LogMessage("info", "Hashcat processing results", logArgs...)
-
         // Delete the processed file
         os.Remove(filePath)
-        // Remove the file size from transfer manager after deletion
-        transferManager.RemoveTransferSize(fileSize)
     }
 
     // Check to see if final cracked hashes file exits before sending back to server
@@ -406,7 +401,6 @@ func processTransfer(connection net.Conn, buffer *[]byte,
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
         cancel()
-        closeListener()
         return
     }
 
@@ -434,33 +428,32 @@ func processTransfer(connection net.Conn, buffer *[]byte,
     go func() {
         defer func() {
             // Close the transfer connection
-            err = transferConn.Close()
-            if err != nil {
-                logMan.LogMessage("Error", "Error closing transfer connection:  %v", err)
+            cerr := transferConn.Close()
+            if cerr != nil {
+                logMan.LogMessage("Error", "Error closing transfer connection:  %v", cerr)
             }
 
             // Close the TLS listener
-            err = tlsListener.Close()
-            if err != nil {
-                logMan.LogMessage("Error", "Error closing the TLS listener:  %v", err)
+            cerr = tlsListener.Close()
+            if cerr != nil {
+                logMan.LogMessage("Error", "Error closing the TLS listener:  %v", cerr)
             }
 
             // Call cancel function to close raw TCP socket
             cancel()
-
-            // Decrement the waitgroup
+            // Decrement max transfers
+            MaxTransfers.Add(-1)
+            // Subtract the file size of the file transfer that is complete
+            transferManager.RemoveTransferSize(fileSize)
+            // Decrement the wait group
             waitGroup.Done()
         } ()
 
         // Receive the file from remote server
-        _, err = netio.HandleTransferRecv(transferConn, WordlistPath, fileName, fileSize)
+        _, err := netio.HandleTransferRecv(transferConn, WordlistPath, fileName, fileSize)
         if err != nil {
             logMan.LogMessage("error", "Error during file transfer:  %v", err)
         }
-
-        MaxTransfers.Add(-1)
-        // Subtract the file size of the file transfer that is complete
-        transferManager.RemoveTransferSize(fileSize)
     }()
 }
 
@@ -478,13 +471,11 @@ func processTransfer(connection net.Conn, buffer *[]byte,
 //  - transferChannel:  Channel to transmit file names after transfer to
 //                      initiate data processing
 //  - waitGroup:  Used to synchronize the Goroutines running
-//  - transferManager:  Manages calculating the amount of data being transferred
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
 func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                       transferChannel chan struct{}, waitGroup *sync.WaitGroup,
-                      transferManager *data.TransferManager,
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer waitGroup.Done()
@@ -493,6 +484,8 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
     // Make buffer to messaging size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
+    // Initialize transfer mananager to track size of active file transfers
+    transferManager := data.NewTransferManager()
 
     // Receive the hash file from the server
     HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
@@ -533,7 +526,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         // If the remaining space minus the ongoing file transfers is greater than or
         // equal to the max file size AND number of transfers is less than allowed max
         if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 &&
-        MaxTransfers.Load() != MaxTransfersInt32 {
+        MaxTransfers.Load() < MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
             processTransfer(connection, &buffer, waitGroup, transferManager,
                             &transferComplete, logMan)
@@ -566,9 +559,6 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 func handleConnection(connection net.Conn,
                       logMan *kloudlogs.LoggerManager,
                       maxFileSizeInt64 int64) {
-    // Initialize a transfer mananager used to track the size of active file transfers
-    transferManager := data.NewTransferManager()
-
     // Create channels for the goroutines to communicate
     hashcatOptChannel := make(chan struct{})
     transferChannel := make(chan struct{})
@@ -578,11 +568,11 @@ func handleConnection(connection net.Conn,
     waitGroup.Add(2)
 
     // Start the goroutine to write data to the file
-    go receivingHandler(connection, hashcatOptChannel, transferChannel, &waitGroup,
-                        transferManager, logMan, maxFileSizeInt64)
+    go receivingHandler(connection, hashcatOptChannel, transferChannel,
+                        &waitGroup, logMan, maxFileSizeInt64)
     // Start the goroutine to process the file
-    go processingHandler(connection, hashcatOptChannel, transferChannel, &waitGroup,
-                         transferManager, logMan)
+    go processingHandler(connection, hashcatOptChannel, transferChannel,
+                         &waitGroup, logMan)
 
     // Wait for both goroutines to finish
     waitGroup.Wait()

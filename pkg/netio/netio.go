@@ -314,8 +314,8 @@ func ParseTransferRequest(buffer []byte, prefix []byte, bytesRead int) (
 func ReadHandler(connection net.Conn, buffer *[]byte,
                  suffix []byte) ([]byte, error) {
     var message []byte
-    // Set the buffer pointer to beginning
-    *buffer = (*buffer)[:0]
+    // Use full capacity for reading
+    *buffer = (*buffer)[:cap(*buffer)]
 
     for {
         // Read data from connection into temp buffer

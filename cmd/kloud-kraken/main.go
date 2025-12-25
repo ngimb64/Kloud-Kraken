@@ -113,6 +113,8 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
         return
     }
 
+    // Reset buffer to its full capabilities
+    *buffer = (*buffer)[:cap(*buffer)]
     port32 := int32(port)
 
     // Add rule to security group to allow outbound port to connect to server
@@ -171,12 +173,14 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
     waitGroup.Add(1)
 
     go func() {
+        var err error
+
         defer func() {
             // Close the transfer connection
-            err = transferConn.Close()
-            if err != nil {
+            cerr := transferConn.Close()
+            if cerr != nil {
                 logMan.LogMessage("Error", "Error closing transfer connection %d:  %v",
-                                  port, err)
+                                  port, cerr)
             }
 
             // Remove rule from security group that allows
@@ -187,7 +191,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
                                                     "ingress", port32, port32)
             if err != nil {
                 logMan.LogMessage("Error", "Error revoking EC2 security group",
-                                    zap.Int32("Port", port32))
+                                  zap.Int32("Port", port32))
             }
 
             // Decrement waitgroup counter

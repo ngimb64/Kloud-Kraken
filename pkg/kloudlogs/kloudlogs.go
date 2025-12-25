@@ -126,7 +126,7 @@ func (manager *LoggerManager) LogMessage(level string, message string, args ...a
 
     // If there are any non-zap args to format into the message
     if len(argList) > 0 {
-        formattedMessage = fmt.Sprintf(message, argList)
+        formattedMessage = fmt.Sprintf(message, argList...)
     } else {
         formattedMessage = message
     }
