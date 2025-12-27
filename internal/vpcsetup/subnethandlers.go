@@ -38,8 +38,8 @@ func SetupSubnetHandler(ec2Client *ec2utils.Ec2Manger,
         return "", err
     }
 
-    // Pick random AZ from slice of AZ names
-    az := awsutils.PickAzRandom(azs)
+    // Pick AZ from slice of AZ names
+    az := awsutils.PickAzRoundRobin(azs)
 
     tags := map[string]string{
         "kloud-kraken": "true",

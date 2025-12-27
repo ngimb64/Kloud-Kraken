@@ -8,7 +8,71 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	cwltypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
+
+// Get CloudWatch log streams associated with passed in log group is none
+// are already present. Delete the log streams associated with log group,
+// then finally delete the log group.
+//
+// @Parameters
+//  - callTime:  The length of time the API call is allowed to execute
+//  - client:  Established client to CloudWatch services
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func CloudWatchLoggerTerminator(callTime time.Duration, cwlClient *cwl.Client,
+                                logGroupName string, streams []string) error {
+    // Ensure required args are present
+    if logGroupName == "" {
+        return errors.New("logGroupName is missing")
+    }
+
+    deleteStreams := false
+    var err error
+
+    // If there are no streams currently to be deleted
+    if len(streams) == 0 {
+        // Get log streams associated with log group name
+        streams, err = GetLogStreams(1 * time.Minute, cwlClient,
+                                     logGroupName)
+        if err != nil {
+            var resourceNotFound *cwltypes.ResourceNotFoundException
+
+            // If error is other than log group does not exist
+            if !errors.As(err, &resourceNotFound) {
+                return fmt.Errorf("GetLogStreams %s - %w", logGroupName, err)
+            }
+        }
+
+        // If log streams were retrieved
+        if len(streams) > 0 {
+            deleteStreams = true
+        }
+    } else {
+        deleteStreams = true
+    }
+
+    if deleteStreams {
+        // Delete the CloudWatch log stream
+        err = DeleteLogStreams(1 * time.Minute, cwlClient,
+                               logGroupName, streams)
+        if err != nil {
+            return fmt.Errorf("deleting stream associated with log group %s - %w",
+                            logGroupName, err)
+        }
+    }
+
+    // Delete the CloudWatch log group
+    err = DeleteLogGroup(1 * time.Minute, cwlClient, logGroupName)
+    if err != nil {
+        return fmt.Errorf("deleting log group %s - %w", logGroupName, err)
+    }
+
+    return nil
+}
+
 
 // Delete the CloudWatch log group.
 //
@@ -38,7 +102,12 @@ func DeleteLogGroup(callTime time.Duration, client *cwl.Client,
     // Delete the CloudWatch log group
     _, err := client.DeleteLogGroup(ctx, deleteLogGroupInput)
     if err != nil {
-        return fmt.Errorf("DeleteLogGroup %s - %w", logGroupName, err)
+        var resourceNotFound *cwltypes.ResourceNotFoundException
+
+        // If error is other than log group does not exist
+        if !errors.As(err, &resourceNotFound) {
+            return fmt.Errorf("DeleteLogGroup %s - %w", logGroupName, err)
+        }
     }
 
     return nil
@@ -77,8 +146,13 @@ func DeleteLogStreams(callTime time.Duration, client *cwl.Client,
         // Delete the current log stream in list
         _, err := client.DeleteLogStream(ctx, deleteLogStreamInput)
         if err != nil {
-            return fmt.Errorf("deleting the log stream %s/%s - %w",
-                               logGroupName, stream, err)
+            var resourceNotFound *cwltypes.ResourceNotFoundException
+
+            // If error is other than log group does not exist
+            if !errors.As(err, &resourceNotFound) {
+                return fmt.Errorf("deleting the log stream %s/%s - %w",
+                                  logGroupName, stream, err)
+            }
         }
     }
 
@@ -138,55 +212,4 @@ func GetLogStreams(callTime time.Duration, cwlClient *cwl.Client,
     }
 
     return toDelete, nil
-}
-
-
-// Get CloudWatch log streams associated with passed in log group is none
-// are already present. Delete the log streams associated with log group,
-// then finally delete the log group.
-//
-// @Parameters
-//  - callTime:  The length of time the API call is allowed to execute
-//  - client:  Established client to CloudWatch services
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func CloudWatchLoggerTerminator(callTime time.Duration, cwlClient *cwl.Client,
-                                logGroupName string, streams []string) error {
-    // Ensure required args are present
-    if logGroupName == "" {
-        return errors.New("logGroupName is missing")
-    }
-
-    var err error
-
-    // If there are no streams currently to be deleted
-    if len(streams) == 0 {
-        // Get log streams associated with log group name
-        streams, err = GetLogStreams(1 * time.Minute, cwlClient,
-                                      logGroupName)
-        // If no log streams were retrieved
-        if len(streams) == 0 {
-            return fmt.Errorf("no log streams found in log group %s", logGroupName)
-        }
-    } else {
-        streams = append(streams, streams...)
-    }
-
-    // Delete the CloudWatch log stream
-    err = DeleteLogStreams(1 * time.Minute, cwlClient,
-                           logGroupName, streams)
-    if err != nil {
-        return fmt.Errorf("deleting stream associated with log group %s - %w",
-                          logGroupName, err)
-    }
-
-    // Delete the CloudWatch log group
-    err = DeleteLogGroup(1 * time.Minute, cwlClient, logGroupName)
-    if err != nil {
-        return fmt.Errorf("deleting log group %s - %w", logGroupName, err)
-    }
-
-    return nil
 }

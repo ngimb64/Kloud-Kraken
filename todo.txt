@@ -16,7 +16,7 @@
 
 - Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 
+- Optimize wordlist merging and file shaving logic with custom rust programs
+
 - Look into using packer to create custom AMI tailored to the project with saved driver install code
     - When implemented adjust code to use kloud-kraken AMI if it is available other wise fall back to deep learning base AMI
-
-- Optimize wordlist merging and file shaving logic with custom rust programs

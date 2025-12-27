@@ -164,6 +164,30 @@ func main() {
         }
     }
 
+    if stateConfig.AwsEnv.Ec2SecurityGroupId != "" {
+        // Delete the EC2 security group
+        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
+                                                stateConfig.AwsEnv.Ec2SecurityGroupId)
+        if err != nil {
+            log.Printf("Error deleting EC2 seecurity group:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.ec2_security_group_id"] = ""
+        }
+    }
+
+    if stateConfig.AwsEnv.SsmSecurityGroupId != "" {
+        // Delete the SSM Parameter Store security group
+        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
+                                                stateConfig.AwsEnv.SsmSecurityGroupId)
+        if err != nil {
+            log.Printf("Error deleting SSM security group:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.ssm_security_group_id"] = ""
+        }
+    }
+
     if stateConfig.AwsEnv.RouteAssociationId != "" {
         // Disassociate private route table <-> subnet
         err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
@@ -210,30 +234,6 @@ func main() {
             hadError = true
         } else {
             yamlUpdates["aws_env.subnet_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.Ec2SecurityGroupId != "" {
-        // Delete the EC2 security group
-        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
-                                                stateConfig.AwsEnv.Ec2SecurityGroupId)
-        if err != nil {
-            log.Printf("Error deleting EC2 seecurity group:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.ec2_security_group_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.SsmSecurityGroupId != "" {
-        // Delete the SSM Parameter Store security group
-        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
-                                                stateConfig.AwsEnv.SsmSecurityGroupId)
-        if err != nil {
-            log.Printf("Error deleting SSM security group:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.ssm_security_group_id"] = ""
         }
     }
 

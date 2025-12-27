@@ -376,8 +376,7 @@ func startServer(appConfig *conf.AppConfig,
         }
 
         // Get instance ID based on its public IP
-        instanceId, err :=  Ec2Client.Ec2GetInstanceIdByPublicIp(1 * time.Minute,
-                                                                 ipAddr)
+        instanceId, err :=  Ec2Client.Ec2GetInstanceIdByPublicIp(1 * time.Minute, ipAddr)
         if err != nil {
             logMan.LogMessage("error", "Error getting EC2 instance ID by public IP:  %v", err)
             continue

@@ -91,27 +91,24 @@ func SetupEc2SecurityGroupRulesHandler(ec2Client *ec2utils.Ec2Manger,
                                    color.NeonAzure, "Launching EC2 security group rules provisioner"))
 
     // Configure TCP rule for initial connection to server
-    err := ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, "0.0.0.0/0", "tcp",
-                                                "ingress", int32(serverPort), int32(serverPort))
+    err := ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId,
+                                                "0.0.0.0/0", "tcp", "ingress",
+                                                int32(serverPort), int32(serverPort))
     if err != nil {
         return nil
     }
 
-    // Get the DNS address from the CIDR (Ex: 192.168.0.0/24 => 192.168.0.2/32)
-    dnsAddr, err := ec2Client.VpcResolverForCidr(appConfig.LocalConfig.CidrBlock)
-    if err != nil {
-        return err
-    }
-
-    // Configure UDP rule in security group for DNS
-    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, dnsAddr,
+    // Allow UDP Route53 DNS resolver at link-local address
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId,
+                                               "169.254.169.253/32",
                                                "udp", "egress", 53, 53)
     if err != nil {
         return err
     }
 
-    // Configure TCP rule in security group for DNS
-    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId, dnsAddr,
+    // Allow TCP Route53 DNS resolver at link-local address
+    err = ec2Client.SecurityGroupRuleProvision(1 * time.Minute, ec2SgId,
+                                               "169.254.169.253/32",
                                                "tcp", "egress", 53, 53)
     if err != nil {
         return err
