@@ -16,8 +16,51 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
+
+// Take the passed in PEM certificate bytes and writes them to a file.
+//
+// @Parameters
+//  - certBytes:  The PEM certificate to be written to a file
+//
+// @Returns
+//  - Error if it occurs, otherwise nil on success
+//
+func createPemCertFile(certBytes []byte) error {
+    if len(certBytes) == 0 {
+        return errors.New("no PEM certifcate bytes to write to file")
+    }
+
+    // Create a PEM file to encode for certificate
+    certFile, err := os.Create("tls-cert.pem")
+    if err != nil {
+        return err
+    }
+
+    defer func() {
+        // Close the generated PEM for certificate
+        cerr := certFile.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing created PEM file - %w", cerr))
+        }
+    }()
+
+    // Write the certificate to PEM file
+    bytesWrote, err := certFile.Write(certBytes)
+    if err != nil {
+        return err
+    }
+
+    // If no bytes were written to PEM file
+    if bytesWrote < 1 {
+        return errors.New("no bytes were written to TLS cert PEM file")
+    }
+
+    return nil
+}
+
 
 // Function for generating a new client TLS configuration.
 //
@@ -41,14 +84,10 @@ func NewClientTLSConfig(clientPool *x509.CertPool,
 
 // Data structure for managing TLS components
 type TlsManager struct {
-    addr            string
-    certPemBlocks   [][]byte
-    CertPool        *x509.CertPool
-    CertPemBlock    []byte
-    ctx   	        context.Context
-    keyPemBlock     []byte
-    TlsCertificate  tls.Certificate
-    tlsConfig       *tls.Config
+    certPemBlocks  [][]byte
+    CertPool       *x509.CertPool
+    mutex          sync.RWMutex
+    TlsCertificate tls.Certificate
 }
 
 // Adds the TLS cert pem block to management slice.
@@ -57,6 +96,9 @@ type TlsManager struct {
 //  - certPemBytes:  Certificate PEM block to add to slice
 //
 func (TlsMan *TlsManager) AddCertBytesToPemBlocks(certPemBytes []byte) {
+    TlsMan.mutex.Lock()
+    defer TlsMan.mutex.Unlock()
+
     TlsMan.certPemBlocks = append(TlsMan.certPemBlocks, certPemBytes)
 }
 
@@ -69,6 +111,9 @@ func (TlsMan *TlsManager) AddCertBytesToPemBlocks(certPemBytes []byte) {
 //  - Error if it occurs, otherwise nil on success
 //
 func (TlsMan *TlsManager) AddCertToPool(pemBlock []byte) error {
+    TlsMan.mutex.Lock()
+    defer TlsMan.mutex.Unlock()
+
     // If the TLS cert pool is not set, set it
     if TlsMan.CertPool == nil {
         TlsMan.CertPool = x509.NewCertPool()
@@ -93,6 +138,9 @@ func (TlsMan *TlsManager) AddCertToPool(pemBlock []byte) error {
 //  - Error if it occurs, otherwise nil on success
 //
 func (TlsMan *TlsManager) CertPoolGen(certsToAdd ...string) error {
+    TlsMan.mutex.Lock()
+    defer TlsMan.mutex.Unlock()
+
     // If there are PEM cert file passed in, iterate through them
     for _, pemFile := range certsToAdd {
         // Read the PEM encoded TLS certificate file
@@ -134,12 +182,14 @@ func (TlsMan *TlsManager) CertPoolGen(certsToAdd ...string) error {
 //  - hostnames:  Variadic length of ip address & hostnames to add to hosts CSV string
 //
 // @Returns
+//  - PEM certificate byte slice
 //  - Error if it occurs, otherwise nil on success
 //
 func (TlsMan *TlsManager) PemCertAndKeyGen(orgName string, generateFile bool,
-                                           hostnames ...string) error {
+                                           hostnames ...string) (
+                                           []byte, error) {
     if len(hostnames) < 1 {
-        return fmt.Errorf("no hostnames or IP addresses present")
+        return nil, fmt.Errorf("no hostnames or IP addresses present")
     }
 
     // Join slice of hostnames in comma,separated,format
@@ -148,7 +198,7 @@ func (TlsMan *TlsManager) PemCertAndKeyGen(orgName string, generateFile bool,
     // Create a cryptographically secure random 128 bit integer
     serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
     if err != nil {
-        return err
+        return nil, err
     }
 
     // Get the time for certifcate generation
@@ -181,20 +231,20 @@ func (TlsMan *TlsManager) PemCertAndKeyGen(orgName string, generateFile bool,
     }
 
     // Create the PEM certificate and key
-    err = TlsMan.createPemCertAndKey(&template)
+    certPemBlock, err := TlsMan.createX509Cert(&template)
     if err != nil {
-        return err
+        return nil, err
     }
 
-    // If the PEM certificate and key are to be written as files
+    // If the PEM certificate is to be written as files
     if generateFile {
-        err = TlsMan.createPemCertFile(TlsMan.CertPemBlock)
+        err = createPemCertFile(certPemBlock)
         if err != nil {
-            return err
+            return nil, err
         }
     }
 
-    return nil
+    return certPemBlock, nil
 }
 
 // Generate the PEM certificate and key in memory and returns the result.
@@ -203,92 +253,52 @@ func (TlsMan *TlsManager) PemCertAndKeyGen(orgName string, generateFile bool,
 //  - template:  The x509 certificate template
 //
 // @Returns
+//  - PEM certificate byte slice
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) createPemCertAndKey(template *x509.Certificate) (error) {
+func (TlsMan *TlsManager) createX509Cert(template *x509.Certificate) (
+                                         []byte, error) {
     // Generate ECDSA key for cert and key generation
     ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
     if err != nil {
-        return err
+        return nil, err
     }
 
     // Generate a x509 cerfiticate with ECDSA key
     cert, err := x509.CreateCertificate(rand.Reader, template, template,
                                         &ecdsaKey.PublicKey, ecdsaKey)
     if err != nil {
-        return err
+        return nil, err
     }
 
     // Convert private key to PKCS
     ecKeyBytes, err := x509.MarshalECPrivateKey(ecdsaKey)
     if err != nil {
-        return err
+        return nil, err
     }
 
     // Encode the TLS certificate into the PEM file
     certBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert})
     if certBytes == nil {
-        return errors.New("unable to encode the TLS certificate into PEM format")
+        return nil, errors.New("unable to encode the TLS certificate into PEM format")
     }
 
     // Encode the PKCS key into the PEM file
     keyBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecKeyBytes})
     if keyBytes == nil {
-        return errors.New("unable to encode the PKCS into PEM format")
+        return nil, errors.New("unable to encode the PKCS into PEM format")
     }
+
+    TlsMan.mutex.Lock()
+    defer TlsMan.mutex.Unlock()
 
     // Generate certificate base on certificate & key PEM blocks
-    x509Cert, err := tls.X509KeyPair(certBytes, keyBytes)
+    TlsMan.TlsCertificate, err = tls.X509KeyPair(certBytes, keyBytes)
     if err != nil {
-        return err
+        return nil, err
     }
 
-    TlsMan.CertPemBlock = certBytes
-    TlsMan.keyPemBlock = keyBytes
-    TlsMan.TlsCertificate = x509Cert
-
-    return nil
-}
-
-// Take the passed in PEM certificate bytes and writes them to a file.
-//
-// @Parameters
-//  - certBytes:  The PEM certificate to be written to a file
-//
-// @Returns
-//  - Error if it occurs, otherwise nil on success
-//
-func (TlsMan *TlsManager) createPemCertFile(certBytes []byte) error {
-    if len(certBytes) == 0 {
-        return errors.New("no PEM certifcate bytes to write to file")
-    }
-
-    // Create a PEM file to encode for certificate
-    certFile, err := os.Create("tls-cert.pem")
-    if err != nil {
-        return err
-    }
-
-    defer func() {
-        // Close the generated PEM for certificate
-        cerr := certFile.Close()
-        if cerr != nil {
-            err = errors.Join(err, fmt.Errorf("closing created PEM file - %w", cerr))
-        }
-    }()
-
-    // Write the certificate to PEM file
-    bytesWrote, err := certFile.Write(certBytes)
-    if err != nil {
-        return err
-    }
-
-    // If no bytes were written to PEM file
-    if bytesWrote < 1 {
-        return errors.New("no bytes were written to TLS cert PEM file")
-    }
-
-    return nil
+    return certBytes, nil
 }
 
 // Creates TLS x509 certificate and a cert pool which are used to setup the TLS
@@ -306,12 +316,10 @@ func (TlsMan *TlsManager) createPemCertFile(certBytes []byte) error {
 //  - The established TLS listener
 //  - Error if it occurs, otherwise nil on success
 //
-func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate,
-                                                  ctx context.Context,
-                                                  listenIp string,
-                                                  listenPort int,
-                                                  listener net.Listener) (
-                                                  net.Listener, error) {
+func SetupTlsListenerHandler(cert tls.Certificate, ctx context.Context,
+                             listenIp string, listenPort int,
+                             listener net.Listener) (
+                             net.Listener, error) {
     // Create a TLS configuration instance
     tlsConfig := &tls.Config{
         Certificates:     []tls.Certificate{cert},
@@ -320,32 +328,29 @@ func (TlsMan *TlsManager) SetupTlsListenerHandler(cert tls.Certificate,
         MinVersion:       tls.VersionTLS13,
     }
 
-    // Set needed struct members for setting up TLS listener
-    TlsMan.addr = net.JoinHostPort(listenIp, strconv.Itoa(listenPort))
-    TlsMan.ctx = ctx
-    TlsMan.tlsConfig = tlsConfig
-
+    // Format host address like <ip_address>:<port>
+    address := net.JoinHostPort(listenIp, strconv.Itoa(listenPort))
     var err error
 
     // If no active listener was passed in
     if listener == nil {
         // Establish raw TCP listener
-        listener, err = net.Listen("tcp", TlsMan.addr)
+        listener, err = net.Listen("tcp", address)
         if err != nil {
-            return nil, fmt.Errorf("binding to tcp %q - %w", TlsMan.addr, err)
+            return nil, fmt.Errorf("binding to tcp %q - %w", address, err)
         }
     }
 
     // If the servers context is set
-    if TlsMan.ctx != nil {
+    if ctx != nil {
         // Launch routine to close listener when signaled
         go func() {
-            <-TlsMan.ctx.Done()
+            <-ctx.Done()
             _ = listener.Close()
         }()
     }
 
     // Create new listener with TLS layer on top of raw TCP listner
-    tlsListener := tls.NewListener(listener, TlsMan.tlsConfig)
+    tlsListener := tls.NewListener(listener, tlsConfig)
     return tlsListener, nil
 }

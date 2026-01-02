@@ -59,14 +59,14 @@ var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc
 //  - connection:  Network socket connection for handling messaging
 //  - buffer:  The buffer storing network messaging
 //  - readBuffer:  The buffer storing read data from connection
-//  - waitGroup:  Used to synchronize the Goroutines running
+//  - transferWaitGroup:  Used to sync Goroutines running file transfers
 //  - appConfig:  The configuration struct with loaded yaml program data
 //  - logMan:  The kloudlogs logger manager for local logging
 //  - ipAddr:  The IP address of the remote client connected to the server
 //  - t:  The tui interface for displaying output
 //
 func handleTransfer(connection net.Conn, buffer *[]byte,
-                    readBuffer []byte, waitGroup *sync.WaitGroup,
+                    readBuffer []byte, transferWaitGroup *sync.WaitGroup,
                     appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
                     ipAddr string, t *tui.TUI) {
     // Select the next avaible file in the load dir from YAML data
@@ -170,7 +170,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
                       ipAddr, port, filePath)
 
     // Increment waitgroup counter
-    waitGroup.Add(1)
+    transferWaitGroup.Add(1)
 
     go func() {
         var err error
@@ -195,7 +195,7 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
             }
 
             // Decrement waitgroup counter
-            waitGroup.Done()
+            transferWaitGroup.Done()
         }()
 
         // Transfer the file to client
@@ -222,16 +222,16 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
 //
 // @Parameters
 //  - connection:  Network socket connection for handling messaging
-//  - waitGroup:  Used to synchronize the Goroutines running
 //  - appConfig:  The configuration struct with loaded yaml program data
 //  - logMan:  The kloudlogs logger manager for local logging
+//  - mainWaitGroup:  Wait group for main server goroutines
 //  - remoteAddr:  IP address to remote client that has connected
 //  - t:  The tui interface for displaying output
 //
 func handleConnection(connection net.Conn,
-                      waitGroup *sync.WaitGroup,
                       appConfig *conf.AppConfig,
                       logMan *kloudlogs.LoggerManager,
+                      mainWaitGroup *sync.WaitGroup,
                       remoteAddr string, t *tui.TUI) {
     var buffer []byte
     var err error
@@ -249,7 +249,7 @@ func handleConnection(connection net.Conn,
                                             color.NeonAzure, "Connection closed for ",
                                             color.RadiantAmethyst, remoteAddr)
         // Decrement waitGroup counter
-        waitGroup.Done()
+        mainWaitGroup.Done()
     } ()
 
     defer func () {
@@ -302,6 +302,8 @@ func handleConnection(connection net.Conn,
                                              color.RadiantAmethyst, remoteAddr)
     }
 
+    var transferWaitGroup sync.WaitGroup
+
     for {
         // Read data from connected client
         readBuffer, err := netio.ReadHandler(connection, &buffer, []byte(">"))
@@ -318,8 +320,9 @@ func handleConnection(connection net.Conn,
         // If the read data contains transfer request message
         if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_PREFIX) {
             // Call method to handle file transfer based
-            handleTransfer(connection, &buffer, readBuffer, waitGroup,
-                           appConfig, logMan, remoteAddr, t)
+            handleTransfer(connection, &buffer, readBuffer,
+                           &transferWaitGroup, appConfig,
+                           logMan, remoteAddr, t)
         }
     }
 
@@ -352,7 +355,7 @@ func handleConnection(connection net.Conn,
 func startServer(appConfig *conf.AppConfig,
                  logMan *kloudlogs.LoggerManager) {
     // Establish wait group for Goroutine synchronization
-    var waitGroup sync.WaitGroup
+    var mainWaitGroup sync.WaitGroup
 
     // Get the EC2 public IPs based on instance IDs from run output
     ec2Ips, err := Ec2Client.Ec2GetPublicIps(1 * time.Minute, nil)
@@ -422,15 +425,15 @@ func startServer(appConfig *conf.AppConfig,
                           zap.Int("port", appConfig.LocalConfig.ListenerPort))
 
         // Increment wait group and handle connection in separate Goroutine
-        waitGroup.Add(1)
-        go handleConnection(connection, &waitGroup, appConfig,
-                            logMan, ipAddr, t)
+        mainWaitGroup.Add(1)
+        go handleConnection(connection, appConfig, logMan,
+                            &mainWaitGroup, ipAddr, t)
     }
 
-    // Wait for all active Goroutines to finish before shutting down the server
-    waitGroup.Wait()
+    // Wait for all active Goroutines to finish before shutting down server
+    mainWaitGroup.Wait()
 
-    // Sleep for a few seconds so information can be displayed before tui is stopped
+    // Sleep a few seconds so information is displayed before tui is stopped
     time.Sleep(5 * time.Second)
 }
 
@@ -646,6 +649,12 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
 
     // Ensure STS token is refreshed per execution
     _, err = AssumedAwsConfig.Credentials.Retrieve(context.Background())
+    if err != nil {
+        // Sleep for a bit and try again
+        time.Sleep(5 * time.Second)
+        _, err = AssumedAwsConfig.Credentials.Retrieve(context.Background())
+    }
+
     if err != nil {
         return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }

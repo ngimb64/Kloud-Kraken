@@ -31,6 +31,7 @@ import (
 
 // Package level variables
 var BufferMutex = &sync.Mutex{}    // Mutex for message buffer synchronization
+var CurrentTransfers atomic.Int32  // Number of file transfers occuring simultaniously
 var DataPath string                // Path where data dirs will be stored
 var Ec2SecurityGroupId string      // ID for Security Group for EC2 clients
 var HashcatArgs = &hashcat.HashcatArgs{}  // Initialze where hashcat args are stored
@@ -38,12 +39,11 @@ var HashFilePath string  // Stores hash file path when received
 var HashesPath string    // Path where hash files are stored
 var HasRuleset bool      // Toggle for specifying whether ruleset is in use
 var LogPath = "/tmp/KloudKraken.log"  // Stores log file to be returned to client
-var MaxTransfers atomic.Int32         // Number of file transfers allowed simultaniously
 var MaxTransfersInt32 int32           // Stores converted int maxTransfers arg
 var RulesetFilePath string            // Stores ruleset file when received
 var RulesetPath string                // Path where ruleset files are stored
-var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc.
-var WordlistPath string              // Path where wordlists are stored
+var TlsMan = &tlsutils.TlsManager{}   // Struct for managing TLS certs, keys, etc.
+var WordlistPath string               // Path where wordlists are stored
 
 
 // Ensure the final cracked hashes file exists and has a message informing
@@ -112,18 +112,18 @@ func sendProcessingComplete(connection net.Conn,
 //  - hashcatOptChannel:  Channel to signal when hash and ruleset files are received
 //  - transferChannel:  Channel to transmit filenames after transfer to initiate
 //                      data processing
-//  - waitGroup:  Acts as a barrier for the Goroutines running
+//  - mainWaitGroup:  Acts as a barrier for the Goroutines running
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
-                       transferChannel chan struct{}, waitGroup *sync.WaitGroup,
+                       transferChannel chan struct{}, mainWaitGroup *sync.WaitGroup,
                        logMan *kloudlogs.LoggerManager) {
     completed := false
     var err error
     // Set the message buffer size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Decrements the wait group counter upon local exit
-    defer waitGroup.Done()
+    defer mainWaitGroup.Done()
 
     defer func() {
         // Lock the mutex and ensure it unlocks on defered function exit
@@ -317,19 +317,18 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 // @Parameters
 //  - connection:  Socket connection for reading data to be stored and processed
 //  - buffer:  The buffer used for processing socket messaging
-//  - waitGroup:  Used to synchronize the Goroutines running
+//  - transferWaitGroup:  Used to synchronize the Goroutines running
 //  - transferManager:  Manages calculating the amount of data being transferred
 //  - transferComplete:  Toggle to signify when all files have been transfered
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processTransfer(connection net.Conn, buffer *[]byte,
-                     waitGroup *sync.WaitGroup,
+                     transferWaitGroup *sync.WaitGroup,
                      transferManager *data.TransferManager,
                      transferComplete *bool,
                      logMan *kloudlogs.LoggerManager) {
-    // Lock the mutex and ensure it unlocks on local exit
+    // Lock the mutex for messaging system
     BufferMutex.Lock()
-    defer BufferMutex.Unlock()
 
     // Get random available port as a listener
     listener, port := netio.GetAvailableListener()
@@ -339,6 +338,9 @@ func processTransfer(connection net.Conn, buffer *[]byte,
         if cerr != nil {
             logMan.LogMessage("error", "Error closing raw TCP socket - %v", cerr)
         }
+
+        // Unlock the mutex for messaging system
+        BufferMutex.Unlock()
     }
 
     // Format the transfer request with listener port to connect to
@@ -393,11 +395,14 @@ func processTransfer(connection net.Conn, buffer *[]byte,
         return
     }
 
+    // Unlock the mutex for messaging system
+    BufferMutex.Unlock()
+
     // Set up context handler for TLS listener
     ctx, cancel := context.WithCancel(context.Background())
     // Setup up TLS listener from existing raw TCP listener
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate, ctx,
-                                                       "0.0.0.0", port, listener)
+    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate, ctx,
+                                                         "0.0.0.0", port, listener)
     if err != nil {
         logMan.LogMessage("error", "Error setting TLS listener on client:  %v", err)
         cancel()
@@ -420,10 +425,9 @@ func processTransfer(connection net.Conn, buffer *[]byte,
         return
     }
 
-    waitGroup.Add(1)
-    MaxTransfers.Add(1)
-    // Add the file size of the file to be transfered to transfer manager
+    CurrentTransfers.Add(1)
     transferManager.AddTransferSize(fileSize)
+    transferWaitGroup.Add(1)
 
     go func() {
         defer func() {
@@ -442,11 +446,11 @@ func processTransfer(connection net.Conn, buffer *[]byte,
             // Call cancel function to close raw TCP socket
             cancel()
             // Decrement max transfers
-            MaxTransfers.Add(-1)
+            CurrentTransfers.Add(-1)
             // Subtract the file size of the file transfer that is complete
             transferManager.RemoveTransferSize(fileSize)
             // Decrement the wait group
-            waitGroup.Done()
+            transferWaitGroup.Done()
         } ()
 
         // Receive the file from remote server
@@ -470,26 +474,23 @@ func processTransfer(connection net.Conn, buffer *[]byte,
 //  - hashcatOptChannel:  Channel to signal when hash and ruleset files are received
 //  - transferChannel:  Channel to transmit file names after transfer to
 //                      initiate data processing
-//  - waitGroup:  Used to synchronize the Goroutines running
+//  - transferWaitGroup:  Used to synchronize the Goroutines running
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
 func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
-                      transferChannel chan struct{}, waitGroup *sync.WaitGroup,
+                      transferChannel chan struct{}, mainWaitGroup *sync.WaitGroup,
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
-    defer waitGroup.Done()
-    var err error
-    transferComplete := false
+    defer mainWaitGroup.Done()
 
+    var err error
     // Make buffer to messaging size
     buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
-    // Initialize transfer mananager to track size of active file transfers
-    transferManager := data.NewTransferManager()
 
     // Receive the hash file from the server
     HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
-                                           globals.HASHES_TRANSFER_PREFIX)
+                                          globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error receiving hash file:  %v", err)
         return
@@ -506,8 +507,14 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         }
     }
 
-    // Send signal to other routine that hash and ruleset file has been received
+    // Send signal to other routine that needed hashcat files are received
     hashcatOptChannel <- struct{}{}
+
+    transferComplete := false
+    // Initialize transfer mananager to track size of active file transfers
+    transferManager := data.NewTransferManager()
+    // Setup separate wait group for file transfers
+    var transferWaitGroup sync.WaitGroup
 
     for {
         // Get the remaining available and total disk space
@@ -517,21 +524,29 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
             return
         }
 
+        // Get current transfers and ongoing transfer size from transfer manager
+        currentTransfers := CurrentTransfers.Load()
+        ongoingTransferSize := transferManager.GetOngoingTransfersSize()
+
         logMan.LogMessage("info", "Client disk statistics queried",
+                          zap.Int32("current transfers", currentTransfers),
+                          zap.Int64("max file size", maxFileSizeInt64),
+                          zap.Int32("max transfers", MaxTransfersInt32),
+                          zap.Int64("ongoing transfers", ongoingTransferSize),
                           zap.Int64("remaining space", remainingSpace),
                           zap.Int64("total space", total))
-        // Get the ongoing transfer size from transfer manager
-        ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
         // If the remaining space minus the ongoing file transfers is greater than or
         // equal to the max file size AND number of transfers is less than allowed max
         if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 &&
-        MaxTransfers.Load() < MaxTransfersInt32 {
+        currentTransfers < MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
-            processTransfer(connection, &buffer, waitGroup, transferManager,
-                            &transferComplete, logMan)
+            processTransfer(connection, &buffer, &transferWaitGroup,
+                            transferManager, &transferComplete, logMan)
             // If all the transfers are complete exit the data receiving loop
             if transferComplete {
+                // Wait until file transfer goroutines finish
+                transferWaitGroup.Wait()
                 // Sleep to ensure other routine has time to poll for wordlists
                 time.Sleep(5 * time.Second)
                 // Send finished inidicator to other goroutine processData()
@@ -563,19 +578,19 @@ func handleConnection(connection net.Conn,
     hashcatOptChannel := make(chan struct{})
     transferChannel := make(chan struct{})
     // Establish a wait group
-    var waitGroup sync.WaitGroup
+    var mainWaitGroup sync.WaitGroup
     // Add two goroutines to the wait group
-    waitGroup.Add(2)
+    mainWaitGroup.Add(2)
 
     // Start the goroutine to write data to the file
     go receivingHandler(connection, hashcatOptChannel, transferChannel,
-                        &waitGroup, logMan, maxFileSizeInt64)
+                        &mainWaitGroup, logMan, maxFileSizeInt64)
     // Start the goroutine to process the file
     go processingHandler(connection, hashcatOptChannel, transferChannel,
-                         &waitGroup, logMan)
+                         &mainWaitGroup, logMan)
 
     // Wait for both goroutines to finish
-    waitGroup.Wait()
+    mainWaitGroup.Wait()
 }
 
 
@@ -596,8 +611,8 @@ func connectRemote(port int, logMan *kloudlogs.LoggerManager,
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
     // Set up the TLS listener to accept incoming connections
-    tlsListener, err := TlsMan.SetupTlsListenerHandler(TlsMan.TlsCertificate,
-                                                       ctx, "0.0.0.0", port, nil)
+    tlsListener, err := tlsutils.SetupTlsListenerHandler(TlsMan.TlsCertificate,
+                                                         ctx, "0.0.0.0", port, nil)
     if err != nil {
         logMan.LogMessage("fatal", "Error setting up TLS listener:  %v", err)
     }
@@ -714,7 +729,7 @@ func main() {
     }
 
     // Generate clients TLS PEM certificate and key and save in TLS manager
-    err = TlsMan.PemCertAndKeyGen("Kloud Kraken", false, publicIp)
+    certPemBlock, err := TlsMan.PemCertAndKeyGen("Kloud Kraken", false, publicIp)
     if err != nil {
         log.Fatalf("Error creating TLS PEM certificate and key:  %v", err)
     }
@@ -730,7 +745,7 @@ func main() {
     // Push the servers certificate PEM into SSM parameter store
     _, err = ssmClient.SsmPutParameter(1 * time.Minute,
                                        "/kloud-kraken/" + instanceId + "/tls-cert",
-                                       string(TlsMan.CertPemBlock), true, nil)
+                                       string(certPemBlock), true, nil)
     if err != nil {
         log.Fatalf("Error putting TLS certificate in SSM Param Store:  %v", err)
     }
