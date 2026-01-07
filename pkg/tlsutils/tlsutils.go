@@ -192,9 +192,6 @@ func (TlsMan *TlsManager) PemCertAndKeyGen(orgName string, generateFile bool,
         return nil, fmt.Errorf("no hostnames or IP addresses present")
     }
 
-    // Join slice of hostnames in comma,separated,format
-    hostsCsv := strings.Join(hostnames, ",")
-
     // Create a cryptographically secure random 128 bit integer
     serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
     if err != nil {
@@ -218,7 +215,7 @@ func (TlsMan *TlsManager) PemCertAndKeyGen(orgName string, generateFile bool,
     }
 
     // Split the comma-separated host list and iterate through it
-    for host := range strings.SplitSeq(hostsCsv, ",") {
+    for _, host := range hostnames {
         // Parse string as IP address
         ip := net.ParseIP(host)
         // If the entry is an ip address
@@ -320,6 +317,10 @@ func SetupTlsListenerHandler(cert tls.Certificate, ctx context.Context,
                              listenIp string, listenPort int,
                              listener net.Listener) (
                              net.Listener, error) {
+    if ctx == nil {
+        return nil, fmt.Errorf("context deadline is missing")
+    }
+
     // Create a TLS configuration instance
     tlsConfig := &tls.Config{
         Certificates:     []tls.Certificate{cert},
@@ -341,14 +342,11 @@ func SetupTlsListenerHandler(cert tls.Certificate, ctx context.Context,
         }
     }
 
-    // If the servers context is set
-    if ctx != nil {
-        // Launch routine to close listener when signaled
-        go func() {
-            <-ctx.Done()
-            _ = listener.Close()
-        }()
-    }
+    // Launch routine to close listener when signaled
+    go func() {
+        <-ctx.Done()
+        _ = listener.Close()
+    }()
 
     // Create new listener with TLS layer on top of raw TCP listner
     tlsListener := tls.NewListener(listener, tlsConfig)

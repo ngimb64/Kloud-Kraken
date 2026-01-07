@@ -120,17 +120,17 @@ func TestFormatAndParseStartTransfer(t *testing.T) {
 
     filePath := "/test/path.txt"
     fileSize := int64(13 * globals.MB)
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Format start transfer message
-    sendLength, err := netio.FormatStartTransfer(filePath, fileSize, &buffer,
-                                                 globals.START_TRANSFER_PREFIX)
+    buffer, err := netio.FormatStartTransfer(filePath, fileSize,
+                                             globals.MESSAGE_BUFFER_SIZE,
+                                             globals.START_TRANSFER_PREFIX)
     assert.Equal(nil, err)
 
     // Parse the file name and size from start transfer message
     fileName, size, err := netio.ParseStartTransfer(buffer,
-                                                        globals.START_TRANSFER_PREFIX,
-                                                        sendLength)
+                                                    globals.START_TRANSFER_PREFIX,
+                                                    len(buffer))
     assert.Equal(nil, err)
 
     // Ensure the file name and size were properly parse
@@ -144,17 +144,16 @@ func TestFormatAndParseTransferRequest(t *testing.T) {
     assert := assert.New(t)
 
     port := 1234
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Format transfer request
-    sendLength, err := netio.FormatTransferRequest(port, &buffer,
-                                                   globals.TRANSFER_REQUEST_PREFIX)
+    buffer, err := netio.FormatTransferRequest(port, globals.MESSAGE_BUFFER_SIZE,
+                                               globals.TRANSFER_REQUEST_PREFIX)
     assert.Equal(nil, err)
 
     // Parse port from transfer request
     parsePort, err := netio.ParseTransferRequest(buffer,
                                                  globals.TRANSFER_REQUEST_PREFIX,
-                                                 sendLength)
+                                                 len(buffer))
     assert.Equal(nil, err)
 
     // Ensure the proper port was parsed
@@ -354,9 +353,10 @@ func TestReadHandler(t *testing.T) {
         // Close connection on local exit
         defer clientConn.Close()
 
-        buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
         // Read the message from server and store into buffer
-        receiveBuffer, err := netio.ReadHandler(clientConn, &buffer, []byte(">"))
+        receiveBuffer, err := netio.ReadHandler(clientConn,
+                                                globals.MESSAGE_BUFFER_SIZE,
+                                                []byte(">"))
         assert.Equal(nil, err)
 
         // Ensure content in the buffer matches expected message
@@ -387,9 +387,10 @@ func TestReadHandler(t *testing.T) {
     // Ensure bytes wrote equals the expected message
     assert.Equal(len(testMessage), bytesWrote)
 
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Read the message from server and store into buffer
-    receiveBuffer, err := netio.ReadHandler(serverConn, &buffer, []byte(">"))
+    receiveBuffer, err := netio.ReadHandler(serverConn,
+                                            globals.MESSAGE_BUFFER_SIZE,
+                                            []byte(">"))
     assert.Equal(nil, err)
 
     // Ensure content in the buffer matches expected message
@@ -680,10 +681,9 @@ func TestFileTransfer(t *testing.T) {
         // Close connection on local exit
         defer clientConn.Close()
 
-        messageBuffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
         // Read data from the socket and write to the file path
-        receivedPath, err = netio.ReceiveFile(clientConn, messageBuffer, ".",
-                                              globals.LOG_TRANSFER_PREFIX)
+        receivedPath, err = netio.ReceiveFile(clientConn, globals.MESSAGE_BUFFER_SIZE,
+                                              ".", globals.LOG_TRANSFER_PREFIX)
         assert.Equal(nil, err)
 
         // Send complete signal via channel
@@ -715,10 +715,9 @@ func TestFileTransfer(t *testing.T) {
     // Close input file after writing data
     inFile.Close()
 
-    messageBuffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Transfer the file to the client
-    err = netio.UploadFile(serverConn, messageBuffer, inFilePath,
-                           globals.LOG_TRANSFER_PREFIX)
+    err = netio.UploadFile(serverConn, globals.MESSAGE_BUFFER_SIZE,
+                           inFilePath, globals.LOG_TRANSFER_PREFIX)
     assert.Equal(nil, err)
 
     // Wait for the channel to send complete signal

@@ -120,8 +120,6 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
                        logMan *kloudlogs.LoggerManager) {
     completed := false
     var err error
-    // Set the message buffer size
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
     // Decrements the wait group counter upon local exit
     defer mainWaitGroup.Done()
 
@@ -131,7 +129,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         defer BufferMutex.Unlock()
 
         // Transfer the log file to server
-        err = netio.UploadFile(connection, buffer, LogPath, globals.LOG_TRANSFER_PREFIX)
+        err = netio.UploadFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                               LogPath, globals.LOG_TRANSFER_PREFIX)
         if err != nil {
             logMan.LogMessage("error", "Error occured sending the log file to server:  %v", err)
         }
@@ -301,7 +300,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     defer BufferMutex.Unlock()
 
     // Transfer the final cracked user hash file to server
-    err = netio.UploadFile(connection, buffer, lootPath, globals.LOOT_TRANSFER_PREFIX)
+    err = netio.UploadFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                           lootPath, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error occured sending the cracked hashes to server:  %v", err)
         return
@@ -316,13 +316,12 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 //
 // @Parameters
 //  - connection:  Socket connection for reading data to be stored and processed
-//  - buffer:  The buffer used for processing socket messaging
 //  - transferWaitGroup:  Used to synchronize the Goroutines running
 //  - transferManager:  Manages calculating the amount of data being transferred
 //  - transferComplete:  Toggle to signify when all files have been transfered
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
-func processTransfer(connection net.Conn, buffer *[]byte,
+func processTransfer(connection net.Conn,
                      transferWaitGroup *sync.WaitGroup,
                      transferManager *data.TransferManager,
                      transferComplete *bool,
@@ -344,8 +343,8 @@ func processTransfer(connection net.Conn, buffer *[]byte,
     }
 
     // Format the transfer request with listener port to connect to
-    sendLength, err := netio.FormatTransferRequest(port, buffer,
-                                                   globals.TRANSFER_REQUEST_PREFIX)
+    buffer, err := netio.FormatTransferRequest(port, globals.MESSAGE_BUFFER_SIZE,
+                                               globals.TRANSFER_REQUEST_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer request:  %v", err)
         closeListener()
@@ -353,7 +352,7 @@ func processTransfer(connection net.Conn, buffer *[]byte,
     }
 
     // Send the transfer request message to initiate file transfer
-    _, err = netio.WriteHandler(connection, *buffer, sendLength)
+    _, err = netio.WriteHandler(connection, buffer, len(buffer))
     if err != nil {
         logMan.LogMessage("error", "Error sending transfer request to server:  %v", err)
         closeListener()
@@ -361,7 +360,9 @@ func processTransfer(connection net.Conn, buffer *[]byte,
     }
 
     // Wait to receive the start transfer message from the server
-    readBuffer, err := netio.ReadHandler(connection, buffer, []byte(">"))
+    readBuffer, err := netio.ReadHandler(connection,
+                                         globals.MESSAGE_BUFFER_SIZE,
+                                         []byte(">"))
     if err != nil {
         logMan.LogMessage("error", "Error start transfer message from server:  %v", err)
         closeListener()
@@ -485,12 +486,10 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     defer mainWaitGroup.Done()
 
     var err error
-    // Make buffer to messaging size
-    buffer := make([]byte, globals.MESSAGE_BUFFER_SIZE)
 
     // Receive the hash file from the server
-    HashFilePath, err = netio.ReceiveFile(connection, buffer, HashesPath,
-                                          globals.HASHES_TRANSFER_PREFIX)
+    HashFilePath, err = netio.ReceiveFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                                          HashesPath, globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error receiving hash file:  %v", err)
         return
@@ -499,8 +498,8 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     // If a rule set was specified
     if HasRuleset {
         // Receive the ruleset from the server
-        RulesetFilePath, err = netio.ReceiveFile(connection, buffer, RulesetPath,
-                                                 globals.RULESET_TRANSFER_PREFIX)
+        RulesetFilePath, err = netio.ReceiveFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                                                 RulesetPath, globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
             logMan.LogMessage("error", "Error receiving ruleset file:  %v", err)
             return
@@ -541,8 +540,8 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         if (remainingSpace - ongoingTransferSize) >= maxFileSizeInt64 &&
         currentTransfers < MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
-            processTransfer(connection, &buffer, &transferWaitGroup,
-                            transferManager, &transferComplete, logMan)
+            processTransfer(connection, &transferWaitGroup, transferManager,
+                            &transferComplete, logMan)
             // If all the transfers are complete exit the data receiving loop
             if transferComplete {
                 // Wait until file transfer goroutines finish

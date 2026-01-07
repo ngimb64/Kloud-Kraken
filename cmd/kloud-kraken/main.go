@@ -57,7 +57,6 @@ var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc
 //
 // @Parameters
 //  - connection:  Network socket connection for handling messaging
-//  - buffer:  The buffer storing network messaging
 //  - readBuffer:  The buffer storing read data from connection
 //  - transferWaitGroup:  Used to sync Goroutines running file transfers
 //  - appConfig:  The configuration struct with loaded yaml program data
@@ -65,9 +64,10 @@ var TlsMan = &tlsutils.TlsManager{}  // Struct for managing TLS certs, keys, etc
 //  - ipAddr:  The IP address of the remote client connected to the server
 //  - t:  The tui interface for displaying output
 //
-func handleTransfer(connection net.Conn, buffer *[]byte,
-                    readBuffer []byte, transferWaitGroup *sync.WaitGroup,
-                    appConfig *conf.AppConfig, logMan *kloudlogs.LoggerManager,
+func handleTransfer(connection net.Conn, readBuffer []byte,
+                    transferWaitGroup *sync.WaitGroup,
+                    appConfig *conf.AppConfig,
+                    logMan *kloudlogs.LoggerManager,
                     ipAddr string, t *tui.TUI) {
     // Select the next avaible file in the load dir from YAML data
     filePath, fileSize, err := disk.SelectFile(appConfig.LocalConfig.LoadDir,
@@ -99,22 +99,21 @@ func handleTransfer(connection net.Conn, buffer *[]byte,
     }
 
     // Format transfer reply to inform client of selected file name and size
-    sendLength, err := netio.FormatStartTransfer(filePath, fileSize, buffer,
-                                                 globals.START_TRANSFER_PREFIX)
+    buffer, err := netio.FormatStartTransfer(filePath, fileSize,
+                                             globals.MESSAGE_BUFFER_SIZE,
+                                             globals.START_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error formatting transfer reply:  %v", err)
         return
     }
 
     // Send start transfer message with file name and size
-    _, err = netio.WriteHandler(connection, *buffer, sendLength)
+    _, err = netio.WriteHandler(connection, buffer, len(buffer))
     if err != nil {
         logMan.LogMessage("error", "Error sending the transfer reply:  %v", err)
         return
     }
 
-    // Reset buffer to its full capabilities
-    *buffer = (*buffer)[:cap(*buffer)]
     port32 := int32(port)
 
     // Add rule to security group to allow outbound port to connect to server
@@ -233,7 +232,6 @@ func handleConnection(connection net.Conn,
                       logMan *kloudlogs.LoggerManager,
                       mainWaitGroup *sync.WaitGroup,
                       remoteAddr string, t *tui.TUI) {
-    var buffer []byte
     var err error
 
     defer func() {
@@ -254,8 +252,8 @@ func handleConnection(connection net.Conn,
 
     defer func () {
         // Receive log file from client
-        _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
-                                   globals.LOG_TRANSFER_PREFIX)
+        _, err = netio.ReceiveFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                                   ReceivedDir, globals.LOG_TRANSFER_PREFIX)
         if err != nil {
             logMan.LogMessage("error", "Error receiving log file:  %v", err)
             return
@@ -268,11 +266,9 @@ func handleConnection(connection net.Conn,
                                              color.RadiantAmethyst, remoteAddr)
     } ()
 
-    // Reset buffer to messaging size
-    buffer = make([]byte, globals.MESSAGE_BUFFER_SIZE)
-
     // Upload the hash file to connection client
-    err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.HashFilePath,
+    err = netio.UploadFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                           appConfig.LocalConfig.HashFilePath,
                            globals.HASHES_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error sending the hash file to client:  %v", err)
@@ -288,7 +284,8 @@ func handleConnection(connection net.Conn,
     // If a ruleset path was specified
     if appConfig.LocalConfig.RulesetPath != "" {
         // Upload the ruleset file to connection client
-        err = netio.UploadFile(connection, buffer, appConfig.LocalConfig.RulesetPath,
+        err = netio.UploadFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                               appConfig.LocalConfig.RulesetPath,
                                globals.RULESET_TRANSFER_PREFIX)
         if err != nil {
             logMan.LogMessage("error", "Error sending the ruleset to server:  %v", err)
@@ -306,7 +303,9 @@ func handleConnection(connection net.Conn,
 
     for {
         // Read data from connected client
-        readBuffer, err := netio.ReadHandler(connection, &buffer, []byte(">"))
+        readBuffer, err := netio.ReadHandler(connection,
+                                             globals.MESSAGE_BUFFER_SIZE,
+                                             []byte(">"))
         if err != nil {
             logMan.LogMessage("error", "Error reading data from socket:  %v", err)
             return
@@ -320,15 +319,14 @@ func handleConnection(connection net.Conn,
         // If the read data contains transfer request message
         if bytes.Contains(readBuffer, globals.TRANSFER_REQUEST_PREFIX) {
             // Call method to handle file transfer based
-            handleTransfer(connection, &buffer, readBuffer,
-                           &transferWaitGroup, appConfig,
-                           logMan, remoteAddr, t)
+            handleTransfer(connection, readBuffer, &transferWaitGroup,
+                           appConfig, logMan, remoteAddr, t)
         }
     }
 
     // Receive cracked user hash file from client
-    _, err = netio.ReceiveFile(connection, buffer, ReceivedDir,
-                               globals.LOOT_TRANSFER_PREFIX)
+    _, err = netio.ReceiveFile(connection, globals.MESSAGE_BUFFER_SIZE,
+                               ReceivedDir, globals.LOOT_TRANSFER_PREFIX)
     if err != nil {
         logMan.LogMessage("error", "Error receiving cracked user hashes:  %v", err)
         return

@@ -26,16 +26,23 @@ import (
 //
 func FileToSocketCopy(connection net.Conn, file *os.File,
                       transferBuffer []byte) error {
+    var err error
+
     // Close the file on local exit
-    defer file.Close()
+    defer func() {
+        cerr := file.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing file after CopyBuffer - %w", cerr))
+        }
+    }()
 
     // Transfer data from open file to connection
-    _, err := io.CopyBuffer(connection, file, transferBuffer)
+    _, err = io.CopyBuffer(connection, file, transferBuffer)
     if err != nil {
         return err
     }
 
-    return nil
+    return err
 }
 
 
@@ -44,7 +51,7 @@ func FileToSocketCopy(connection net.Conn, file *os.File,
 // @Parameters
 //  - filePath:  The path to the file to be transfered
 //  - fileSize:  The size of the file to be transfered
-//  - buffer:  The buffer where the transfer reply is formatted
+//  - bufferSize:  Size of buffer where transfer reply is formatted
 //  - prefix:  The prefix used on the message
 //
 // @Returns
@@ -52,26 +59,26 @@ func FileToSocketCopy(connection net.Conn, file *os.File,
 //  - Error if it occurs, otherwise nil on success
 //
 func FormatStartTransfer(filePath string, fileSize int64,
-                         buffer *[]byte, prefix []byte) (
-                         int, error) {
+                         bufferSize int, prefix []byte) (
+                         []byte, error) {
     byteFilePath := []byte(filePath)
     byteFileSize := []byte(strconv.FormatInt(fileSize, 10))
     // Grab the file name from the end of the path
     fileName, err := data.TrimAfterLast(byteFilePath, []byte("/"))
     if err != nil {
-        return -1, err
+        return nil, err
     }
 
-    // Set the buffer pointer to beginning
-    *buffer = (*buffer)[:0]
+    // Make local buffer based on passed in size
+    buffer := make([]byte, 0, bufferSize)
     // Append the transfer request piece by piece in buffer
-    *buffer = append(*buffer, prefix...)
-    *buffer = append(*buffer, fileName...)
-    *buffer = append(*buffer, globals.COLON_DELIMITER...)
-    *buffer = append(*buffer, byteFileSize...)
-    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
+    buffer = append(buffer, prefix...)
+    buffer = append(buffer, fileName...)
+    buffer = append(buffer, globals.COLON_DELIMITER...)
+    buffer = append(buffer, byteFileSize...)
+    buffer = append(buffer, globals.TRANSFER_SUFFIX...)
     // Calculate the len of the transfer reply message
-    return len(*buffer), nil
+    return buffer, nil
 }
 
 
@@ -80,25 +87,25 @@ func FormatStartTransfer(filePath string, fileSize int64,
 // @Parameters
 //  - port:  port number to add to message, must be a
 //           non-negative integer above 1
-//  - buffer:  The buffer where the transfer reply is formatted
+//  - bufferSize:  Size of buffer where transfer reply is formatted
 //  - prefix:  The prefix used on the message
 //
 // @Returns
 //  - Return the length of the formatted transfer reply
 //  - Error if it occurs, otherwise nil on success
 //
-func FormatTransferRequest(port int, buffer *[]byte,
-                           prefix []byte) (int, error) {
+func FormatTransferRequest(port int, bufferSize int,
+                           prefix []byte) ([]byte, error) {
     bytePort := []byte(strconv.Itoa(port))
 
-    // Set the buffer pointer to beginning
-    *buffer = (*buffer)[:0]
+    // Make local buffer based on passed in size
+    buffer := make([]byte, 0, bufferSize)
     // Append the transfer request piece by piece in buffer
-    *buffer = append(*buffer, prefix...)
-    *buffer = append(*buffer, bytePort...)
-    *buffer = append(*buffer, globals.TRANSFER_SUFFIX...)
+    buffer = append(buffer, prefix...)
+    buffer = append(buffer, bytePort...)
+    buffer = append(buffer, globals.TRANSFER_SUFFIX...)
     // Calculate the len of the transfer reply message
-    return len(*buffer), nil
+    return buffer, nil
 }
 
 
@@ -304,28 +311,28 @@ func ParseTransferRequest(buffer []byte, prefix []byte, bytesRead int) (
 //
 // @Parameters
 //  - connection:  Network connection where data will be read from
-//  - buffer:  The buffer used for processing socket messaging
+//  - bufferSize:  Size of buffer used for processing socket messaging
 //  - suffix:  Pattern at end of meesage signaling its end
 //
 // @Returns
 //  - The number of bytes read into the buffer
 //  - Error if it occurs, otherwise nil on success
 //
-func ReadHandler(connection net.Conn, buffer *[]byte,
+func ReadHandler(connection net.Conn, bufferSize int,
                  suffix []byte) ([]byte, error) {
+    // Make local buffer based on passed in size
+    buffer := make([]byte, bufferSize)
     var message []byte
-    // Use full capacity for reading
-    *buffer = (*buffer)[:cap(*buffer)]
 
     for {
         // Read data from connection into temp buffer
-        bytesRead, err := connection.Read(*buffer)
+        bytesRead, err := connection.Read(buffer)
         if err != nil {
             return nil, err
         }
 
         // Add the read data in temp buffer to message buffer
-        message = append(message, (*buffer)[:bytesRead]...)
+        message = append(message, (buffer)[:bytesRead]...)
 
         // If the message of read(s) has end suffix
         if bytes.HasSuffix(message, suffix) {
@@ -342,7 +349,7 @@ func ReadHandler(connection net.Conn, buffer *[]byte,
 //
 // @Parameters
 //  - connection:  Active socket connection for receiving data
-//  - buffer:  The buffer used for processing socket messaging
+//  - bufferSize:  Size of buffer used for processing socket messaging
 //  - storePath:  The path where the received file will be stored
 //  - prefix:  The expected prefix for the transfer reply
 //
@@ -350,11 +357,11 @@ func ReadHandler(connection net.Conn, buffer *[]byte,
 //  - The formatted file path with the received file name
 //  - Error if it occurs, otherwise nil on success
 //
-func ReceiveFile(connection net.Conn, buffer []byte,
+func ReceiveFile(connection net.Conn, bufferSize int,
                  storePath string, prefix []byte) (
                  string, error) {
     // Wait for the transfer reply with file name and size
-    readBuffer, err := ReadHandler(connection, &buffer, []byte(">"))
+    readBuffer, err := ReadHandler(connection, bufferSize, []byte(">"))
     if err != nil {
         return "", err
     }
@@ -405,19 +412,26 @@ func ReceiveFile(connection net.Conn, buffer []byte,
 //
 func SocketToFileCopy(file *os.File, connection net.Conn,
                       transferBuffer []byte, fileSize int64) error {
-    // Close file on local exit
-    defer file.Close()
+    var err error
+
+    // Close the file on local exit
+    defer func() {
+        cerr := file.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing file after CopyBuffer - %w", cerr))
+        }
+    }()
 
     // Set up limited reader to prevent connection from hanging after copy
     limitedReader := &io.LimitedReader{R: connection, N: fileSize}
 
     // Transfer data from connection to open file
-    _, err := io.CopyBuffer(file, limitedReader, transferBuffer)
+    _, err = io.CopyBuffer(file, limitedReader, transferBuffer)
     if err != nil {
         return err
     }
 
-    return nil
+    return err
 }
 
 
@@ -458,14 +472,14 @@ func TransferFile(connection net.Conn, filePath string, fileSize int64) error {
 //
 // @Parameters
 //  - connection:  The network connection where the file will be sent
-//  - buffer:  The buffer used for processing socket messaging
+//  - bufferSize:  Size of buffer used for processing socket messaging
 //  - filePath:  The path to the file to be uploaded
 //  - prefix:  The prefix of the transfer reply
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func UploadFile(connection net.Conn, buffer []byte,
+func UploadFile(connection net.Conn, bufferSize int,
                 filePath string, prefix []byte) error {
     // Get the file size based on saved path in config
     fileInfo, err := os.Stat(filePath)
@@ -477,19 +491,20 @@ func UploadFile(connection net.Conn, buffer []byte,
     fileSize := fileInfo.Size()
 
     // Format the transfer reply
-    sendLength, err := FormatStartTransfer(filePath, fileSize, &buffer, prefix)
+    buffer, err := FormatStartTransfer(filePath, fileSize,
+                                       bufferSize, prefix)
     if err != nil {
         return err
     }
 
     // Send the file transfer reply with file name and size
-    _, err = WriteHandler(connection, buffer, sendLength)
+    _, err = WriteHandler(connection, buffer, len(buffer))
     if err != nil {
         return err
     }
 
-    // Receive transfer initiated message from client to ensure synchronization
-    readBuffer, err := ReadHandler(connection, &buffer, []byte(">"))
+    // Receive transfer initiated message ensuring synchronization
+    readBuffer, err := ReadHandler(connection, bufferSize, []byte(">"))
     if err != nil {
         return err
     }
