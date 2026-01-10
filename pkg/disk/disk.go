@@ -514,11 +514,6 @@ func SelectFile(loadDir string, maxFileSizeInt64 int64) (string, int64, error) {
             continue
         }
 
-        // Lock selection process to ensure a single goroutine selects the file
-        FileSelectionLock.Lock()
-        // Unlock selection process on local exit
-        defer FileSelectionLock.Unlock()
-
         // Format the current file path
         itemPath := loadDir + "/" + item.Name()
 

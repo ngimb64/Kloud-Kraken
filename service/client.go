@@ -546,8 +546,6 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
             if transferComplete {
                 // Wait until file transfer goroutines finish
                 transferWaitGroup.Wait()
-                // Sleep to ensure other routine has time to poll for wordlists
-                time.Sleep(5 * time.Second)
                 // Send finished inidicator to other goroutine processData()
                 transferChannel <- struct{}{}
                 break

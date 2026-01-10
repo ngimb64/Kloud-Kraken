@@ -116,6 +116,19 @@ func handleTransfer(connection net.Conn, readBuffer []byte,
 
     port32 := int32(port)
 
+    revokeSecurityGroup := func() {
+        // Remove rule from security group that allows
+        // outbound port to connect to server
+        err = Ec2Client.RevokeSecurityGroupRule(1 * time.Minute,
+                                                Ec2SecurityGroupId,
+                                                "tcp", "0.0.0.0/0",
+                                                "ingress", port32, port32)
+        if err != nil {
+            logMan.LogMessage("Error", "Error revoking EC2 security group",
+                              zap.Int32("Port", port32))
+        }
+    }
+
     // Add rule to security group to allow outbound port to connect to server
     err = Ec2Client.SecurityGroupRuleProvision(1 * time.Minute, Ec2SecurityGroupId, "0.0.0.0/0",
                                                 "tcp", "ingress", port32, port32)
@@ -147,6 +160,8 @@ func handleTransfer(connection net.Conn, readBuffer []byte,
 
     if maxRetries == 0 {
         logMan.LogMessage("error", "Max connection attempt failures exhausted")
+        // Remove added security group rule
+        revokeSecurityGroup()
         return
     }
 
@@ -165,9 +180,6 @@ func handleTransfer(connection net.Conn, readBuffer []byte,
                                          color.NeonAzure, " transfering to ",
                                          color.RadiantAmethyst, ipAddr)
 
-    logMan.LogMessage("info", "Connected remote client %s on port %d, %s to be transfered",
-                      ipAddr, port, filePath)
-
     // Increment waitgroup counter
     transferWaitGroup.Add(1)
 
@@ -182,17 +194,8 @@ func handleTransfer(connection net.Conn, readBuffer []byte,
                                   port, cerr)
             }
 
-            // Remove rule from security group that allows
-            // outbound port to connect to server
-            err = Ec2Client.RevokeSecurityGroupRule(1 * time.Minute,
-                                                    Ec2SecurityGroupId,
-                                                    "tcp", "0.0.0.0/0",
-                                                    "ingress", port32, port32)
-            if err != nil {
-                logMan.LogMessage("Error", "Error revoking EC2 security group",
-                                  zap.Int32("Port", port32))
-            }
-
+            // Remove added security group rule
+            revokeSecurityGroup()
             // Decrement waitgroup counter
             transferWaitGroup.Done()
         }()
@@ -324,6 +327,9 @@ func handleConnection(connection net.Conn,
         }
     }
 
+    // Wait for any file transfer goroutines to complete
+    transferWaitGroup.Wait()
+
     // Receive cracked user hash file from client
     _, err = netio.ReceiveFile(connection, globals.MESSAGE_BUFFER_SIZE,
                                ReceivedDir, globals.LOOT_TRANSFER_PREFIX)
@@ -418,10 +424,6 @@ func startServer(appConfig *conf.AppConfig,
                                             color.NeonAzure, "Connected to ",
                                             color.RadiantAmethyst, serverAddress)
 
-        logMan.LogMessage("info", "Connected to remote server",
-                          zap.String("ip address", serverAddress),
-                          zap.Int("port", appConfig.LocalConfig.ListenerPort))
-
         // Increment wait group and handle connection in separate Goroutine
         mainWaitGroup.Add(1)
         go handleConnection(connection, appConfig, logMan,
@@ -430,7 +432,6 @@ func startServer(appConfig *conf.AppConfig,
 
     // Wait for all active Goroutines to finish before shutting down server
     mainWaitGroup.Wait()
-
     // Sleep a few seconds so information is displayed before tui is stopped
     time.Sleep(5 * time.Second)
 }
@@ -983,31 +984,31 @@ func main() {
             }
         }()
 
-        // // Terminate the EC2 instances
-        // termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
-        // if err != nil {
-        //     log.Printf("Error terminating EC2 instances:  %v", err)
-        // }
+        // Terminate the EC2 instances
+        termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
+        if err != nil {
+            log.Printf("Error terminating EC2 instances:  %v", err)
+        }
 
-        // // Iterate through list of terminated instance ids and log them
-        // for _, instance := range termOutput.TerminatingInstances {
-        //     if logMan != nil {
-        //         logMan.LogMessage("Instance state for %s: %s -> %s\n",
-        //                           aws.ToString(instance.InstanceId),
-        //                           instance.PreviousState.Name,
-        //                           instance.CurrentState.Name)
-        //     } else {
-        //         fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-        //                                                            color.LightCyan, "+"), "",
-        //                                        color.NeonAzure, "Instance state for ",
-        //                                        color.RadiantAmethyst,
-        //                                        aws.ToString(instance.InstanceId),
-        //                                        color.NeonAzure, ": ", color.KrakenGlowGreen,
-        //                                        string(instance.PreviousState.Name),
-        //                                        color.NeonAzure, " -> ", color.KrakenGlowGreen,
-        //                                        string(instance.CurrentState.Name)))
-        //     }
-        // }
+        // Iterate through list of terminated instance ids and log them
+        for _, instance := range termOutput.TerminatingInstances {
+            if logMan != nil {
+                logMan.LogMessage("Instance state for %s: %s -> %s\n",
+                                  aws.ToString(instance.InstanceId),
+                                  instance.PreviousState.Name,
+                                  instance.CurrentState.Name)
+            } else {
+                fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                                   color.LightCyan, "+"), "",
+                                               color.NeonAzure, "Instance state for ",
+                                               color.RadiantAmethyst,
+                                               aws.ToString(instance.InstanceId),
+                                               color.NeonAzure, ": ", color.KrakenGlowGreen,
+                                               string(instance.PreviousState.Name),
+                                               color.NeonAzure, " -> ", color.KrakenGlowGreen,
+                                               string(instance.CurrentState.Name)))
+            }
+        }
 
         // Revoke the security group rule for listener port set by client
         err = bootstrapOut.Ec2Client.RevokeSecurityGroupRule(1 * time.Minute, bootstrapOut.Ec2SgId,

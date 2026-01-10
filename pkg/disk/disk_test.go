@@ -248,6 +248,7 @@ func TestSelectFile(t *testing.T) {
     testFiles := []string{"test1.txt", "test2.txt", "test3.txt",
                           "test4.txt", "test5.txt"}
     bufferSizes := []int{256, 512, 1024, 2046, 4096}
+    selectedNames := make(map[string]bool)
 
     // Iterate through slice of test file names
     for index, testFile := range testFiles {
@@ -270,13 +271,24 @@ func TestSelectFile(t *testing.T) {
         assert.Equal(bytesWrote, bufferSizes[index])
     }
 
-    // Attempt to select a file with proper max size
-    filePath, fileSize, err := disk.SelectFile(realDirPath, int64(100 * globals.MB))
-    assert.Equal(nil, err)
-    // Ensure a file path was selected
-    assert.NotEqual("", filePath)
-    // Ensure the file size is greater than zero
-    assert.Less(int64(0), fileSize)
+    for range testFiles {
+        // Attempt to select a file with proper max size
+        filePath, fileSize, err := disk.SelectFile(realDirPath,
+                                                   int64(100*globals.MB))
+        assert.Equal(nil, err)
+
+        // Ensure a file was selected
+        assert.NotEqual("", filePath)
+        assert.Less(int64(0), fileSize)
+
+        // Extract just the filename
+        name := filepath.Base(filePath)
+        // Ensure filename has NOT already been returned
+        _, exists := selectedNames[name]
+        assert.False(exists, "duplicate filename selected - %s", name)
+        // If the file name is not in map, add it
+        selectedNames[name] = true
+    }
 
     // Delete the testdir and its contents
     err = os.RemoveAll(realDirPath)
