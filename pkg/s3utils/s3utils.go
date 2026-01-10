@@ -270,10 +270,17 @@ func (S3Man *S3Manager) S3PutObject(callTime time.Duration,
                                     bucketName string,
                                     key string, data []byte) (
                                     string, error) {
+    var candidate string
+
     // Keep attemping key with number added until unused is found
-    for i := 1; ; i++ {
-        // Add number to end of key name
-        candidate := key + "-" + strconv.Itoa(i)
+    for i := 0; ; i++ {
+        if i > 0 {
+            // Add number to end of key name
+            candidate = key + "-" + strconv.Itoa(i)
+        } else {
+            candidate = key
+        }
+
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 

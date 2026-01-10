@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	pricing "github.com/aws/aws-sdk-go-v2/service/pricing"
 	pricetypes "github.com/aws/aws-sdk-go-v2/service/pricing/types"
 )
@@ -17,22 +17,21 @@ import (
 // Returns the first OnDemand USD price it can parse (best-effort).
 //
 type AWSPricingProvider struct {
-    region              string
+    client              *pricing.Client
     serviceNameToSkuMap map[string]string
 }
 
-// Constructs a provider, defaults to "us-east-1" if blank.
+// Constructs a pricing provider and returns its address.
 //
 // @Parameters
-//  - region:  The region to use for querying pricing API
+//  - awsConfig:  The AWS configuration instance
 //
 // @Returns
 //  - Pointer to AWS pricing provider
 //
-func NewAWSPricingProvider(region string) *AWSPricingProvider {
-    if region == "" {
-        region = "us-east-1"
-    }
+func NewAWSPricingProvider(awsConfig aws.Config) *AWSPricingProvider {
+    // Establish client to pricing API
+    pricingClient := pricing.NewFromConfig(awsConfig)
 
     // Maps friendly names to AWS SKU service codes
     serviceNameToSkuMap := map[string]string{
@@ -48,7 +47,7 @@ func NewAWSPricingProvider(region string) *AWSPricingProvider {
     }
 
     return &AWSPricingProvider{
-        region: region,
+        client:              pricingClient,
         serviceNameToSkuMap: serviceNameToSkuMap,
     }
 }
@@ -69,7 +68,6 @@ func (pricingProvider *AWSPricingProvider) GetPrice(ctx context.Context,
                                                     serviceOrCode string,
                                                     filters map[string]string) (
                                                     Price, error) {
-    region := pricingProvider.region
     serviceCode := serviceOrCode
 
     // Attempt to get SKU code from map by service name
@@ -78,22 +76,7 @@ func (pricingProvider *AWSPricingProvider) GetPrice(ctx context.Context,
         serviceCode = code
     }
 
-    // Load AWS config (use pricing endpoint region)
-    cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
-    if err != nil {
-        return Price{}, fmt.Errorf("loading aws config - %w", err)
-    }
-
-    // Establish client to pricing API
-    client := pricing.NewFromConfig(cfg)
     var sdkFilters []pricetypes.Filter
-
-    // ensure service code is set for safety
-    sdkFilters = append(sdkFilters, pricetypes.Filter{
-        Field: aws.String("servicecode"),
-        Type:  pricetypes.FilterTypeTermMatch,
-        Value: aws.String(serviceCode),
-    })
 
     // Iterate through the map of filters
     for key, value := range filters {
@@ -117,7 +100,7 @@ func (pricingProvider *AWSPricingProvider) GetPrice(ctx context.Context,
     }
 
     // Get full pricing list in paginator fashion
-    paginator := pricing.NewGetProductsPaginator(client, input)
+    paginator := pricing.NewGetProductsPaginator(pricingProvider.client, input)
 
     // While there are more pages in paginator
     for paginator.HasMorePages() {
@@ -186,10 +169,8 @@ func (pricingProvider *AWSPricingProvider) GetPrice(ctx context.Context,
                                             // Type assert on dollar value
                                             usdStr, ok := ppu["USD"].(string)
                                             if ok && usdStr != "" {
-                                                var vfloat float64
-
-                                                // Convert dollar string to float
-                                                _, err := fmt.Sscan(usdStr, &vfloat)
+                                                // Parse the float in string as floating point
+                                                vfloat, err := strconv.ParseFloat(usdStr, 64)
                                                 if err != nil || vfloat <= 0 {
                                                     continue
                                                 }

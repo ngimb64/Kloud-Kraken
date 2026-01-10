@@ -2,12 +2,9 @@ package awsutils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"os"
-	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,11 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -29,45 +24,45 @@ var AzIndex = 0
 // Maps AWS region codes to the human-friendly
 // "location" strings used by the Pricing API
 var RegionCodeToLocation = map[string]string{
-	// US
-	"us-east-1":      "US East (N. Virginia)",
-	"us-east-2":      "US East (Ohio)",
-	"us-west-1":      "US West (N. California)",
-	"us-west-2":      "US West (Oregon)",
+    // US
+    "us-east-1":      "US East (N. Virginia)",
+    "us-east-2":      "US East (Ohio)",
+    "us-west-1":      "US West (N. California)",
+    "us-west-2":      "US West (Oregon)",
 
-	// Canada
-	"ca-central-1":   "Canada (Central)",
+    // Canada
+    "ca-central-1":   "Canada (Central)",
 
-	// South America
-	"sa-east-1":      "South America (Sao Paulo)",
+    // South America
+    "sa-east-1":      "South America (Sao Paulo)",
 
-	// Europe
-	"eu-central-1":   "EU (Frankfurt)",
-	"eu-west-1":      "EU (Ireland)",
-	"eu-west-2":      "EU (London)",
-	"eu-west-3":      "EU (Paris)",
-	"eu-north-1":     "EU (Stockholm)",
-	"eu-south-1":     "EU (Milan)",
+    // Europe
+    "eu-central-1":   "EU (Frankfurt)",
+    "eu-west-1":      "EU (Ireland)",
+    "eu-west-2":      "EU (London)",
+    "eu-west-3":      "EU (Paris)",
+    "eu-north-1":     "EU (Stockholm)",
+    "eu-south-1":     "EU (Milan)",
 
-	// Middle East / Africa
-	"me-south-1":     "Middle East (Bahrain)",
-	"af-south-1":     "Africa (Cape Town)",
+    // Middle East / Africa
+    "me-south-1":     "Middle East (Bahrain)",
+    "af-south-1":     "Africa (Cape Town)",
 
-	// Asia Pacific
-	"ap-northeast-1": "Asia Pacific (Tokyo)",
-	"ap-northeast-2": "Asia Pacific (Seoul)",
-	"ap-northeast-3": "Asia Pacific (Osaka-Local)",
-	"ap-southeast-1": "Asia Pacific (Singapore)",
-	"ap-southeast-2": "Asia Pacific (Sydney)",
-	"ap-south-1":     "Asia Pacific (Mumbai)",
+    // Asia Pacific
+    "ap-northeast-1": "Asia Pacific (Tokyo)",
+    "ap-northeast-2": "Asia Pacific (Seoul)",
+    "ap-northeast-3": "Asia Pacific (Osaka-Local)",
+    "ap-southeast-1": "Asia Pacific (Singapore)",
+    "ap-southeast-2": "Asia Pacific (Sydney)",
+    "ap-south-1":     "Asia Pacific (Mumbai)",
 
-	// China
-	"cn-north-1":     "China (Beijing)",
-	"cn-northwest-1": "China (Ningxia)",
+    // China
+    "cn-north-1":     "China (Beijing)",
+    "cn-northwest-1": "China (Ningxia)",
 
-	// GovCloud
-	"us-gov-west-1":  "AWS GovCloud (US-West)",
-	"us-gov-east-1":  "AWS GovCloud (US-East)",
+    // GovCloud
+    "us-gov-west-1":  "AWS GovCloud (US-West)",
+    "us-gov-east-1":  "AWS GovCloud (US-East)",
 }
 
 
@@ -185,18 +180,18 @@ func BuildEc2Tags(tagMap map[string]string) []ec2types.Tag {
 //  - The populated IAM tag slice
 //
 func BuildIamTags(tagMap map[string]string) []iamtypes.Tag {
-	tags := make([]iamtypes.Tag, 0, len(tagMap))
+    tags := make([]iamtypes.Tag, 0, len(tagMap))
 
     // Iterate through the tags map
-	for k, v := range tagMap {
+    for key, value := range tagMap {
         // Add the key-value in map to tags slice
-		tags = append(tags, iamtypes.Tag{
-			Key:   aws.String(k),
-			Value: aws.String(v),
-		})
-	}
+        tags = append(tags, iamtypes.Tag{
+            Key:   aws.String(key),
+            Value: aws.String(value),
+        })
+    }
 
-	return tags
+    return tags
 }
 
 
@@ -248,76 +243,6 @@ func BuildSsmTags(tagMap map[string]string) []ssmtypes.Tag {
 }
 
 
-// Gets the AMI ID's by specified filters and gets the most recently created.
-//
-// @Parameters
-//  - ctx:  Context handler for AWS API call duration
-//  - ec2Client:  Established client to EC2 service
-//  - namePattern:  The name pattern to filter in DescribeImages
-//
-// @Returns
-//  - The retrieved AMI ID if successful
-//  - Error if it occurs, otherwise nil on success
-//
-func findImageByName(ctx context.Context, ec2Client *ec2.Client,
-                     namePattern string) (string, error) {
-    describeImagesInput := &ec2.DescribeImagesInput{
-        Owners: []string{"amazon"},
-        Filters: []ec2types.Filter{
-            {Name: aws.String("name"), Values: []string{namePattern}},
-            {Name: aws.String("state"), Values: []string{"available"}},
-        },
-    }
-
-    // Get the AMI images by specified filters
-    out, err := ec2Client.DescribeImages(ctx, describeImagesInput)
-    if err != nil {
-        return "", err
-    }
-
-    if len(out.Images) == 0 {
-        return "", fmt.Errorf("no images matched pattern %q", namePattern)
-    }
-
-    // Sort list of AMIs by descending order by creation date
-    sort.Slice(out.Images, func(i int, j int) bool {
-        ai := out.Images[i].CreationDate
-        aj := out.Images[j].CreationDate
-
-        // If both nil -> consider equal (stable)
-        if ai == nil && aj == nil {
-            return false
-        }
-
-        // Push nils to the end (so non-nil come first)
-        if ai == nil {
-            return false
-        }
-
-        if aj == nil {
-            return true
-        }
-
-        // CreationDate uses ISO-8601 so lexicographic comparison is valid
-        return *ai > *aj
-    })
-
-    // Ensure top element has non-nil ImageId
-    if out.Images[0].ImageId == nil {
-        // search for first non-nil ImageId
-        for _, img := range out.Images {
-            if img.ImageId != nil {
-                return aws.ToString(img.ImageId), nil
-            }
-        }
-
-        return "", errors.New("no image with valid ImageId found")
-    }
-
-    return aws.ToString(out.Images[0].ImageId), nil
-}
-
-
 // Gets the account ID from STS client.
 //
 // @Parameters
@@ -339,126 +264,6 @@ func GetAccountID(callTime time.Duration, stsClient sts.Client) (string, error) 
     }
 
     return *out.Account, nil
-}
-
-
-// Handles retrieving the AMI ID by first attempting via SSM Parameter
-// Store then resorts to using DescribeImages call as a backup.
-//
-// @Parameters
-//  - callTime:  The length of time the API call is allowed to execute
-//  - ssmClient:  Established client to SSM service
-//  - ec2Client:  Established client to EC2 service
-//  - arch:  System architecture of AMI
-//  - amiType:  The type of AMI to format in SSM parameter
-//  - amiNamePattern:  The text pattern of AMI to search for
-//
-// @Returns
-//  - The retrieved AMI ID if successfull
-//  - Error if it occurs, otherwise nil on success
-//
-func GetAmiId(callTime time.Duration, ssmClient *ssm.Client,
-              ec2Client *ec2.Client, arch string, amiType string,
-              amiNamePattern string) (string, error) {
-    var err error
-    // Ensure AWS API calls do not hang for longer specified timeout
-    ctx, cancel := context.WithTimeout(context.Background(), callTime)
-    defer cancel()
-
-    // Attempt to retrieve AMI via SSM parameter store
-    amiID, err := getImageFromSSM(ctx, ssmClient, arch, amiType)
-    if err == nil && amiID != "" {
-        return amiID, nil
-    }
-
-    // Backup method using DescribeImages if SSM method fails
-    amiID, ferr := findImageByName(ctx, ec2Client, amiNamePattern)
-    if ferr != nil {
-        err = errors.Join(err, fmt.Errorf("fallback DescribeImages failed - %w", ferr))
-        return "", err
-    }
-
-    return amiID, nil
-}
-
-
-// Returns the correct AMI based on instance type and its supported drivers.
-//
-// @Parameters
-//  - instanceType:  The instance type that the AMI will be used with
-//
-// @Returns
-//  - The text pattern of AMI to search for
-//  - The AMI type
-//  - Error if it occurs, otherwise nil on success
-//
-func GetDeepLearningAmiName(instanceType string) (string, string, error) {
-    baseInstanceTypes := []string{
-        "g6f", "gr6f",
-    }
-
-    ossInstanceTypes := []string{
-        "g3", "g4dn", "g5", "g5g",
-        "g6", "g6e", "gr6", "p2",
-        "p3", "p4d", "p4de", "p5",
-        "p5e", "p5en", "p6-b200",
-        "p6e-gb200",
-    }
-
-    // Get the index of period separator in instance type
-    trimIndex := strings.Index(instanceType, ".")
-    if trimIndex == -1 {
-        return "", "", errors.New("unable to get period index in instance type")
-    }
-
-    // Get the famlily prefix of the passed in instance type
-    instanceType = instanceType[:trimIndex]
-
-    // If the passed in instance type only supported GRID/L4 drivers
-    if slices.Contains(baseInstanceTypes, instanceType) {
-        return "Deep Learning Base AMI with Single CUDA*", "ubuntu22.04", nil
-    }
-
-    // If the passed in instance type support Telsa drivers
-    if slices.Contains(ossInstanceTypes, instanceType) {
-        return "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow*",
-               "ubuntu22.04/tensorflow", nil
-    }
-
-    return "", "", errors.New("unable to find supported AMI name based on instance type")
-}
-
-
-// Attempts to retrieve the most recent AMI ID from SSM Parameter Store.
-//
-// @Parameters
-//  - ctx:  Context handler for AWS API call duration
-//  - client:  Established client to SSM service
-//  - arch:  System architecture of AMI
-//  - amiType:  The type of AMI to format in SSM parameter
-//
-// @Returns
-//  - Retrieved AMI ID from SSM if successful
-//  - Error if it occurs, otherwise nil on success
-//
-func getImageFromSSM(ctx context.Context, client *ssm.Client, arch string,
-                     amiType string) (string, error) {
-    paramName := "/aws/service/deeplearning/ami/" + arch +
-                 "/" + amiType + "/latest/ami-id"
-
-    // Attempt to retrieve the AMI ID via SSM parameter store
-    out, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-        Name: aws.String(paramName),
-    })
-    if err != nil {
-        return "", fmt.Errorf("ssm get-parameter %q - %w", paramName, err)
-    }
-
-    if out.Parameter == nil || out.Parameter.Value == nil {
-        return "", errors.New("ssm parameter value missing")
-    }
-
-    return *out.Parameter.Value, nil
 }
 
 
@@ -504,15 +309,15 @@ func PickAzRandom(azs []string) string {
 //  - Toggle for whether region exists in map or not
 //
 func RegionToLocation(region string) (string, bool) {
-	if region == "" {
-		return "", false
-	}
+    if region == "" {
+        return "", false
+    }
 
     // Ensure the region is lowercase format
-	lowerRegion := strings.ToLower(strings.TrimSpace(region))
+    lowerRegion := strings.ToLower(strings.TrimSpace(region))
     // Retrieve human readable location from region key
-	loc, ok := RegionCodeToLocation[lowerRegion]
-	return loc, ok
+    loc, ok := RegionCodeToLocation[lowerRegion]
+    return loc, ok
 }
 
 
@@ -562,6 +367,6 @@ func SetRetentionForLogGroup(callTime time.Duration, client *cwl.Client,
 //  - Toggle for whether the region exists in map or not
 //
 func ValidateRegion(region string) bool {
-	_, ok := RegionToLocation(region)
-	return ok
+    _, ok := RegionToLocation(region)
+    return ok
 }

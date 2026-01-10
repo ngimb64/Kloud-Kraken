@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/conf"
 	"github.com/ngimb64/Kloud-Kraken/internal/policies"
-	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 )
@@ -22,7 +20,6 @@ import (
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - outStruct:  Pointer to struct used for managing vcpsetup outputs
-//  - bucketName:  Name of the S3 bucket used
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -43,7 +40,7 @@ func SetupClientIamRoleHander(iamClient *iamutils.IamManager,
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := policies.ClientTrustPolicyGen()
-    permissionsPolicy := policies.ClientPermPolicyGen(appConfig.ClientConfig.Region,
+    permissionsPolicy := policies.ClientPermPolicyGen(appConfig.LocalConfig.Region,
                                                       outStruct.AccountId)
     // Create and apply the EC2 client role
     clientArn, err := iamClient.IamRoleProvision(5 * time.Minute,
@@ -147,7 +144,6 @@ func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
 //
 // @Parameters
 //  - iamClient:  Pointer to IAM service client management struct
-//  - stsClient:  The STS service client management struct
 //  - stateConfig:  Pointer to config struct for state file
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - yamlUpdates:  The map used for updating output YAML data
@@ -158,7 +154,6 @@ func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
 //  - Error if it occurs, otherwise nil on success
 //
 func SetupVpcFlowLogsIamRoleHandler(iamClient *iamutils.IamManager,
-                                    stsClient sts.Client,
                                     stateConfig *AwsEnv,
                                     appConfig *conf.AppConfig,
                                     yamlUpdates map[string]string,
@@ -168,12 +163,6 @@ func SetupVpcFlowLogsIamRoleHandler(iamClient *iamutils.IamManager,
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-iam-vpc-flow-logs",
-    }
-
-    // Get the account ID associated with API credentials
-    outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
-    if err != nil {
-        return "", err
     }
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,

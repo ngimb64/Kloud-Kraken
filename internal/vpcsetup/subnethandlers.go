@@ -33,13 +33,13 @@ func SetupSubnetHandler(ec2Client *ec2utils.Ec2Manger,
                         vpcId string) (
                         string, error) {
     // Get the slice of availability zones based on region
-    azs, err := ec2Client.FetchAvailableAZs(1 * time.Minute)
+    azs, err := ec2Client.Ec2FetchAvailableAZs(1 * time.Minute)
     if err != nil {
         return "", err
     }
 
-    // Pick random AZ from slice of AZ names
-    az := awsutils.PickAzRandom(azs)
+    // Pick AZ from slice of AZ names
+    az := awsutils.PickAzRoundRobin(azs)
 
     tags := map[string]string{
         "kloud-kraken": "true",

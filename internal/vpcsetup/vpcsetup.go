@@ -16,7 +16,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
-	"github.com/ngimb64/Kloud-Kraken/pkg/ssmutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"gopkg.in/yaml.v2"
 )
@@ -47,12 +46,11 @@ type VpcBootstrapOutput struct {
     AccountId        string
     Ec2Client        *ec2utils.Ec2Manger
     Ec2SgId	         string
-    SubnetId         string
     S3BucketName     string
     S3Client         *s3utils.S3Manager
-    SsmClient        *ssmutils.SsmManager
     ServerArn        string
     SsmVpcEndpointId string
+    SubnetId         string
 }
 
 
@@ -63,8 +61,7 @@ type VpcBootstrapOutput struct {
 // @Parameters
 //  - appConfig:  Pointer to program config instance from YAML data
 //  - awsConfig:  The configuration to access AWS environment
-//  - ec2Client:  Pointer to EC2 service client management struct
-//  - iamClient:  Pointer to IAM service client management struct
+//  - location:  The human readable location version of region
 //  - stsClient:  The STS service client management struct
 //
 // @Returns
@@ -75,8 +72,7 @@ type VpcBootstrapOutput struct {
 //
 func VpcBootstrap(appConfig *conf.AppConfig,
                   awsConfig aws.Config,
-                  ec2Client *ec2utils.Ec2Manger,
-                  iamClient *iamutils.IamManager,
+                  location string,
                   stsClient sts.Client) (
                   *VpcBootstrapOutput,
                   *awscost.AwsCostManager,
@@ -86,6 +82,10 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     var stateData []byte
     stateFilePath := globals.ROOT_DIR + "/.kraken-state.yml"
     var yamlUpdates = map[string]string{}
+
+    // Establish clients to EC2 & IAM services
+    ec2Client := ec2utils.Ec2NewManager(awsConfig)
+    iamClient := iamutils.IamNewManager(awsConfig)
 
     // Check to see if the yaml state file exists
     exists, isDir, hasData, err := disk.PathExists(stateFilePath)
@@ -145,15 +145,15 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     var costErr error
     // Create a PriceManager with a 1 hour cache TTL
 	priceMan := awscost.NewPriceManager(1 * time.Hour)
-	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(awsConfig.Region))
+	priceMan.RegisterProvider(awscost.NewAWSPricingProvider(awsConfig))
 	// Create the AwsCostManager using live-only PriceManager
 	costMan := awscost.NewAwsCostManager(priceMan, nil)
 
-    // Get human readable location string based off region for cost calculation
-    location, exists := awsutils.RegionToLocation(awsConfig.Region)
-    if !exists {
+    // Get the account ID associated with API credentials
+    outStruct.AccountId, err = awsutils.GetAccountID(1 * time.Minute, stsClient)
+    if err != nil {
         return outStruct, costMan, costErr,
-               errors.New("region does not exist in region map in awsutils")
+               fmt.Errorf("getting accound ID - %w", err)
     }
 
     // Setup the VPC
@@ -166,8 +166,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the Internet Gateway
     igwId, err := SetupInternetGatewayHandler(ec2Client, &stateConfig,
-                                              appConfig, yamlUpdates,
-                                              vpcId)
+                                              yamlUpdates, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up Internet Gateway - %w", err)
@@ -182,7 +181,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the route table
-    routeId, err := SetupRouteTableHandler(ec2Client, &stateConfig, appConfig,
+    routeId, err := SetupRouteTableHandler(ec2Client, &stateConfig,
                                            yamlUpdates, vpcId, igwId)
     if err != nil {
         return outStruct, costMan, costErr,
@@ -190,7 +189,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup route table associations
-    err = SetupRouteTableAssociationHandler(ec2Client, &stateConfig, appConfig,
+    err = SetupRouteTableAssociationHandler(ec2Client, &stateConfig,
                                             yamlUpdates, routeId, subnetId)
     if err != nil {
         return outStruct, costMan, costErr,
@@ -199,17 +198,15 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the EC2 security group
     ec2SgId, err := SetupEc2SecurityGroupHandler(ec2Client, &stateConfig,
-                                                 appConfig, yamlUpdates,
-                                                 outStruct, vpcId)
+                                                 yamlUpdates, outStruct, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up EC2 security group - %w", err)
     }
 
     // Setup EC2 security group Rules
-    err = SetupEc2SecurityGroupRulesHandler(ec2Client, &stateConfig,
-                                            appConfig, yamlUpdates,
-                                            ec2SgId)
+    err = SetupEc2SecurityGroupRulesHandler(ec2Client, appConfig, ec2SgId,
+                                            appConfig.LocalConfig.ListenerPort)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up EC2 security group rules - %w", err)
@@ -217,8 +214,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
 
     // Setup the SSM security group
     ssmSgId, err := SetupSsmSecurityGroupHandler(ec2Client, &stateConfig,
-                                                 appConfig, yamlUpdates,
-                                                 vpcId)
+                                                 yamlUpdates, vpcId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up SSM security group - %w", err)
@@ -232,9 +228,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup the S3 bucket
-    err = SetupS3BucketHandler(ec2Client, &stateConfig, appConfig,
-                               yamlUpdates, outStruct, awsConfig.Region,
-                               &costErr, costMan, awsConfig)
+    err = SetupS3BucketHandler(&stateConfig, yamlUpdates, outStruct, awsConfig)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up S3 bucket - %w", err)
@@ -243,7 +237,7 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     // Setup the S3 VPC Gateway Endpoint
     err = SetupS3VpcGatewayEndpointHandler(ec2Client, &stateConfig, appConfig,
                                            yamlUpdates, vpcId, routeId,
-                                           location, &costErr, costMan)
+                                           outStruct.AccountId)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up S3 VPC Gateway Endpoint - %w", err)
@@ -260,18 +254,17 @@ func VpcBootstrap(appConfig *conf.AppConfig,
     }
 
     // Setup VPC Flow Logs IAM role
-    vpcFlowLogArn, err := SetupVpcFlowLogsIamRoleHandler(iamClient, stsClient,
-                                                         &stateConfig, appConfig,
-                                                         yamlUpdates, outStruct)
+    vpcFlowLogArn, err := SetupVpcFlowLogsIamRoleHandler(iamClient, &stateConfig,
+                                                         appConfig, yamlUpdates,
+                                                         outStruct)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up VPC Flow Logs IAM role - %w", err)
     }
 
     // Setup the VPC Flow Logs
-    err = SetupVpcFlowLogsHandler(ec2Client, &stateConfig, appConfig,
-                                  yamlUpdates, awsConfig, vpcId,
-                                  vpcFlowLogArn)
+    err = SetupVpcFlowLogsHandler(ec2Client, &stateConfig, yamlUpdates,
+                                  awsConfig, vpcId, vpcFlowLogArn)
     if err != nil {
         return outStruct, costMan, costErr,
                fmt.Errorf("setting up VPC Flow Logs - %w", err)

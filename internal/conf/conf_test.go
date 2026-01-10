@@ -63,7 +63,6 @@ client_config:
   log_mode: "local"
   max_file_size: "100MB"
   max_transfers: 2
-  region: "us-west-1"
   workload: "4"
 
 local_config:
@@ -73,7 +72,6 @@ local_config:
   instance_type: "p4d.24xlarge"
   listener_port: 6969
   load_dir: "%s"
-  local_testing: true
   max_merging_size: "50MB"
   max_size_range: 25.0
   number_instances: 3
@@ -101,7 +99,6 @@ local_config:
     assert.Equal("100MB", config.ClientConfig.MaxFileSize)
     assert.Equal(int64(100 * globals.MB), config.ClientConfig.MaxFileSizeInt64)
     assert.Equal(int32(2), config.ClientConfig.MaxTransfers)
-    assert.Equal("us-west-1", config.ClientConfig.Region)
     assert.Equal("4", config.ClientConfig.Workload)
 
     // Validate local config fields to original data
@@ -111,7 +108,6 @@ local_config:
     assert.Equal("p4d.24xlarge", config.LocalConfig.InstanceType)
     assert.Equal(6969, config.LocalConfig.ListenerPort)
     assert.Equal(testDir, config.LocalConfig.LoadDir)
-    assert.True(config.LocalConfig.LocalTesting)
     assert.Equal("50MB", config.LocalConfig.MaxMergingSize)
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)

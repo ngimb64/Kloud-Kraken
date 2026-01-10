@@ -21,9 +21,6 @@ import (
 //  - yamlUpdates:  The map used for updating output YAML data
 //  - vpcId:  The VPC ID where the endpoint will be deployed
 //  - routeId:  The ID of the route table associated with the endpoint
-//  - location:  The human readable version of region
-//  - costErr:  Pointer to error instance for cost manager
-//  - costMan:  Pointer to AWS cost manager instance
 //
 // @Returns
 //  - Error if it occurs, otherwise nil on success
@@ -33,15 +30,14 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
                                       appConfig *conf.AppConfig,
                                       yamlUpdates map[string]string,
                                       vpcId string, routeId string,
-                                      location string, costErr *error,
-                                      costMan *awscost.AwsCostManager) error {
+                                      accountId string) error {
     tags := map[string]string{
         "kloud-kraken": "true",
         "Name": "kloud-kraken-s3-vpc-endpoint",
     }
 
     // Generate policy document for S3 VPC Endpoint
-    policyDocument := policies.VpcS3EndpointPolicyGen(vpcId)
+    policyDocument := policies.VpcS3EndpointPolicyGen(accountId)
 
     fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
                                                        color.LightCyan, "!"), "",
@@ -147,7 +143,9 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     outStruct.SsmVpcEndpointId = ssmVpcEndpointId
 
     filterMap := map[string]string{
-        "location": location,
+        "endpointType":  "PrivateLink",
+        "location":      location,
+        "productFamily": "VpcEndpoint",
     }
 
     // Add the elastic IP to cost manager

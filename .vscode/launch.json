@@ -8,6 +8,7 @@
             "mode": "debug",
             "program": "${workspaceFolder}/cmd/kloud-kraken/main.go",
             "args": ["../../config/config.yml"],
+            "debugAdapter": "dlv-dap",
             "stopOnEntry": false,
         },
         {
@@ -17,18 +18,17 @@
             "mode": "debug",
             "program": "${workspaceFolder}/service/client.go",
             "args": [
-                "-ipAddrs=10.0.0.17",
-                "-port=7003",
-                "-awsRegion=us-east-1",
-                "-maxFileSizeInt64=17179869184",
-                "-crackingMode=0",
-                "-hashType=1700",
                 "-applyOptimization=false",
-                "-workload=3",
-                "-maxTransfers=2",
+                "-awsRegion=us-east-1",
+                "-crackingMode=0",
+                "-dataPath=/tmp",
+                "-hashType=1700",
+                "-ipAddrs=10.0.0.17",
                 "-logMode=local",
-                "-isTesting=true",
-                "-testPemCert=/tmp/tls-cert.pem"
+                "-maxFileSizeInt64=17179869184",
+                "-maxTransfers=2",
+                "-port=7003",
+                "-workload=3"
             ],
             "stopOnEntry": false
         }

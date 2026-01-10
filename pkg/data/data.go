@@ -139,7 +139,7 @@ func SliceToCsv(fields []string) (string, error) {
         return "", err
     }
 
-    return buf.String(), nil
+    return strings.TrimSpace(buf.String()), nil
 }
 
 

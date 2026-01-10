@@ -358,13 +358,11 @@ func ValidateIamUsername(iamUsername string) error {
 func ValidateInstanceType(instanceType string) bool {
     // Support GPU families with NVMe drives
     allowedPrefixes := []string{
-        "g4ad.",
         "g4dn.",
         "g5.",
-        "g5g.",
         "g6.",
         "g6e.",
-        "g6f.",
+        "gr6.",
         "p3.",
         "p3dn.",
         "p4d.",

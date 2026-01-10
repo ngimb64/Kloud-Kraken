@@ -75,13 +75,11 @@ func ParseHashcatOutput(output []byte, delimiter []byte) ([]any, error) {
         return logArgs, fmt.Errorf("pre-trimming output - %v", err)
     }
 
-    // Split the byte slice into lines base on newlines
-    lines := bytes.Split(parsedOutput, []byte("\n"))
     // Compile regular expression to match a period at end variable length
     rePeriodTrim := regexp.MustCompile(`\.*$`)
 
     // Iterate through slice of byte slice lines
-    for _, line := range lines {
+    for line := range bytes.SplitSeq(parsedOutput, []byte("\n")) {
         // Find the first occurance of the colon separator
         index := bytes.Index(line, []byte(":"))
         // If the line does not contain the index, skip it

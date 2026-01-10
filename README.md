@@ -2,8 +2,6 @@
 
 # Kloud Kraken
 
-**NOTE:** This project is still a work in progress but at least 99% finished so expect it to be completed in the next few weeks
-
 > AWS based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenTextLogo.jpeg?raw=true)
@@ -31,7 +29,6 @@
 - Easy setup with automated script
 - Easy configuration with YAML templates
 - Supports hash cracking distributed workloads among multiple EC2 instances
-- EC2 clients utilize multiple NVMe drives combined in a RAID 0 configuration for optimized performance of disk operations
 - Built-in wordlist merging with flexibility to skip larger files
     - Merging process using `cat` -> `deduplicut` until within percentage range of max file size (15% by default)
     - If the file goes over max file size, excess data is shaved with `cut` into a new file
@@ -108,6 +105,7 @@
 - Generate and store access keys for the newly created user
 - By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for on-demand EC2 G-series based on the number of desired vCPUs to use (add them up if using multiple instances)
     - Keep in mind if your account does not have extensive history the request will be automatically denied initially
+        - It is better to start with a single instance and gradually ramp up quota over a few billing cycles, they will limit excessive requests anyway
         - After it is denied explain the purpose of using Kloud Kraken so they can confirm you are legit and not intending to abuse the GPU instances for things like crypto mining, feel free to provide them with a link to the projects GitHub page
         - While writing the information in the message area is a good idea, they **must** be called to get the request process going
     - Supported instance families can be found at [Instance Types](#Instance-Types)
@@ -205,13 +203,11 @@ To delete the project from AWS environment:
 
 **Note**: Pricing can be found in the Instance Types tab in the Instances subsection of EC2 service (search g4, g5, etc.)
 
-- g4ad.*
 - g4dn.*
 - g5.*
-- g5g.*
 - g6.*
 - g6e.*
-- g6f.*
+- gr6.*
 - p3.*
 - p3dn.*
 - p4d.*
@@ -220,7 +216,7 @@ To delete the project from AWS environment:
 - p5en.*
 - p6-b200.*
 
-My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g6f.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar if not better results than one expensive instance.
+My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g4dn.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar results than one very expensive instance.
 <br>
 
 

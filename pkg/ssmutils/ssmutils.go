@@ -72,6 +72,8 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //  - callTime:  The length of time the API call is allowed to execute
 //  - parameter:  name of the parameter to retrieve
 //  - data:  The data to store with associated parameter
+//  - willOverwrite:  Toggle to set whether parameter will overwrite or
+//                    add numbers incrementally until unique is found
 //  - tags:  String map of tag key-values to configure
 //
 // @Returns
@@ -80,15 +82,21 @@ func (SsmMan *SsmManager) SsmGetParameter(callTime time.Duration,
 //
 func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
                                           parameter string,
-                                          data string,
+                                          data string, willOverwrite bool,
                                           tags map[string]string) (
                                           string, error) {
+    var candidate string
     var existsErr *ssmtypes.ParameterAlreadyExists
 
     // Keep attemping parameters with number added until unused is found
-    for i := 1;; i++ {
-        // Add number to end of parameter name
-        candidate := parameter + "-" + strconv.Itoa(i)
+    for i := 0;; i++ {
+        if i > 0 {
+            // Add number to end of parameter name
+            candidate = parameter + "-" + strconv.Itoa(i)
+        } else {
+            candidate = parameter
+        }
+
         // Ensure AWS API calls do not hang for longer specified timeout
         ctx, cancel := context.WithTimeout(context.Background(), callTime)
 
@@ -96,7 +104,7 @@ func (SsmMan *SsmManager) SsmPutParameter(callTime time.Duration,
             Name:      aws.String(candidate),
             Value:     aws.String(data),
             Type:      ssmtypes.ParameterTypeSecureString,
-            Overwrite: aws.Bool(false),
+            Overwrite: aws.Bool(willOverwrite),
         }
 
         // If tag was specified, add it to input
@@ -168,9 +176,16 @@ func (SsmMan *SsmManager) SsmDeleteParameter(callTime time.Duration,
 //
 func (SsmMan SsmManager) SsmDeleteAllParams(callTime time.Duration,
                                             baseName string) error {
-    for i := 1;; i++ {
-        // Format the parameter name per iteration
-        paramName := baseName + "-" + strconv.Itoa(i)
+    var paramName string
+
+    for i := 0;; i++ {
+        if i > 0 {
+            // Format the parameter name per iteration
+            paramName = baseName + "-" + strconv.Itoa(i)
+        } else {
+            paramName = baseName
+        }
+
         // Attempt to delete the parameter
         err := SsmMan.SsmDeleteParameter(callTime, paramName)
         if err != nil {

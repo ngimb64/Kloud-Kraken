@@ -15,7 +15,6 @@ import (
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
-	"github.com/ngimb64/Kloud-Kraken/pkg/ssmutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/yamlutils"
 	"gopkg.in/yaml.v2"
 )
@@ -102,7 +101,6 @@ func main() {
     ec2Client := ec2utils.Ec2NewManager(awsConfig)
     iamClient := iamutils.IamNewManager(awsConfig)
     s3Client := s3utils.S3NewManager(awsConfig)
-    ssmClient := ssmutils.SsmNewManager(awsConfig)
 
     if stateConfig.AwsEnv.S3BucketName != "" {
         // Delete the S3 bucket and its contents
@@ -114,14 +112,6 @@ func main() {
         } else {
             yamlUpdates["aws_env.s3_bucket_name"] = ""
         }
-    }
-
-    // Delete all the client TLS certificate from SSM Parameter store
-    err = ssmClient.SsmDeleteAllParams(1 * time.Minute,
-                                       "/kloud-kraken/tls-cert")
-    if err != nil {
-        log.Printf("Error deleting parameters from SSM Param Store:  %v", err)
-        hadError = true
     }
 
     if stateConfig.AwsEnv.FlowLogId != "" {
@@ -174,6 +164,30 @@ func main() {
         }
     }
 
+    if stateConfig.AwsEnv.Ec2SecurityGroupId != "" {
+        // Delete the EC2 security group
+        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
+                                                stateConfig.AwsEnv.Ec2SecurityGroupId)
+        if err != nil {
+            log.Printf("Error deleting EC2 seecurity group:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.ec2_security_group_id"] = ""
+        }
+    }
+
+    if stateConfig.AwsEnv.SsmSecurityGroupId != "" {
+        // Delete the SSM Parameter Store security group
+        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
+                                                stateConfig.AwsEnv.SsmSecurityGroupId)
+        if err != nil {
+            log.Printf("Error deleting SSM security group:  %v", err)
+            hadError = true
+        } else {
+            yamlUpdates["aws_env.ssm_security_group_id"] = ""
+        }
+    }
+
     if stateConfig.AwsEnv.RouteAssociationId != "" {
         // Disassociate private route table <-> subnet
         err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
@@ -220,30 +234,6 @@ func main() {
             hadError = true
         } else {
             yamlUpdates["aws_env.subnet_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.Ec2SecurityGroupId != "" {
-        // Delete the EC2 security group
-        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
-                                                stateConfig.AwsEnv.Ec2SecurityGroupId)
-        if err != nil {
-            log.Printf("Error deleting EC2 seecurity group:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.ec2_security_group_id"] = ""
-        }
-    }
-
-    if stateConfig.AwsEnv.SsmSecurityGroupId != "" {
-        // Delete the SSM Parameter Store security group
-        err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
-                                                stateConfig.AwsEnv.SsmSecurityGroupId)
-        if err != nil {
-            log.Printf("Error deleting SSM security group:  %v", err)
-            hadError = true
-        } else {
-            yamlUpdates["aws_env.ssm_security_group_id"] = ""
         }
     }
 

@@ -48,8 +48,8 @@ func NewAwsCostManager(priceMan *PriceManager,
     }
 
     return &AwsCostManager{
-        Formulas:     formulas,
         CostTable:    make(map[string]float64),
+        Formulas:     formulas,
         priceManager: priceMan,
     }
 }
@@ -154,8 +154,6 @@ func (costMan *AwsCostManager) AddCostResourceToManager(serviceName string,
 //  - Error if it occurs, otherwise nil on success
 //
 func (costMan *AwsCostManager) CalculateTotalCost() error {
-    costMan.TotalCost = 0
-    costMan.CostTable = make(map[string]float64)
     var err error
 
     // Iterate through resources in cost manageer list

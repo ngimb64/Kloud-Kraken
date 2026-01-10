@@ -1,21 +1,22 @@
-- Run system testing in AWS environment
+- Try improving existing tests related to file io with potential memory-based io providers (read blog)
+    - Also look into using testing lib for file related operations instead of os
 
-- Look into having a unified region in local section of config instead of for both local and client
+- Build binary to build out state file with existing resources
 
-- Figure out errors with GetPrice API call and fix pricing system while trying to fix it for cost prediction
+- Implement unit tests for packages that need them
+
+- Review VPC flow logs package for optimization
+
+- Review permissions to harden to max effect of least privilege
 
 - Optimize awscost and add cost prediction functionality
 
 - Look into using custom generated key for KMS encryption utilized with S3, SSM, and CloudWatch logging
     - Ensure to update permissions policies as needed
 
-- Look into removing sprintf usage in kloudlogs or replace it with simpler logging system
-
-- Re-run system testing in AWS environment
-
-- Try improving existing tests related to file io with potential memory-based io providers (read blog)
-    - Also look into using testing lib for file related operations instead of os
-
-- Implement unit tests for packages that need them
+- Look into removing sprintf usage in kloudlogs or replace it with simpler static logging functions
 
 - Optimize wordlist merging and file shaving logic with custom rust programs
+
+- Look into using packer to create custom AMI tailored to the project with saved driver install code
+    - When implemented adjust code to use kloud-kraken AMI if it is available other wise fall back to deep learning base AMI
