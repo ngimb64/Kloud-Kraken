@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -14,7 +15,6 @@ import (
 
 // Package level variables
 var (
-    FileSelectionLock sync.Mutex  // Mutex for synchronizing the file selection
     InitOnce          sync.Once   // Ensures function is only called one time
     ProjectRoot       string      // Path to project root dir
     SelectedFiles     sync.Map	  // Global map to track selected files
@@ -29,19 +29,24 @@ var (
 // @Returns
 //  - Error if it occurs, otherwise nil on success
 //
-func AppendFile(sourceFilePath string, destFilePath string) error {
+func AppendFile(sourceFilePath string, destFilePath string) (err error) {
     // Open the source file for reading
     sourceFile, err := os.Open(sourceFilePath)
     if err != nil {
-        return fmt.Errorf("error opening source file - %w", err)
+        return fmt.Errorf("opening source file - %w", err)
     }
     // Close source file on local exit
-    defer sourceFile.Close()
+    defer func() {
+        cerr := sourceFile.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("closing source file - %w", cerr))
+        }
+    }()
 
     // Check if the source file is empty
     fileInfo, err := sourceFile.Stat()
     if err != nil {
-        return fmt.Errorf("error retrieving file info - %w", err)
+        return fmt.Errorf("retrieving file info - %w", err)
     }
 
     // If the file is empty, ignore appending
@@ -52,24 +57,35 @@ func AppendFile(sourceFilePath string, destFilePath string) error {
     // Open the destination file for appending
     destFile, err := os.OpenFile(destFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
     if err != nil {
-        return fmt.Errorf("error opening destination file - %w", err)
+        return fmt.Errorf("opening destination file - %w", err)
     }
     // Close destination file on local exit
-    defer destFile.Close()
+    defer func() {
+        cerr := destFile.Close()
+        if cerr != nil {
+            err = errors.Join(err, fmt.Errorf("cloding destintation file - %w", cerr))
+        }
+    }()
 
     // Copy the contents of the source file to the destination file
     _, err = io.Copy(destFile, sourceFile)
     if err != nil {
-        return fmt.Errorf("error copying data - %w", err)
+        return fmt.Errorf("copying data - %w", err)
+    }
+
+    // Commit contents of file to disk
+    err = destFile.Sync()
+    if err != nil {
+        return fmt.Errorf("syncing data - %w", err)
     }
 
     // Delete the original file
     err = os.Remove(sourceFilePath)
     if err != nil {
-        return fmt.Errorf("error deleting souce file - %w", err)
+        return fmt.Errorf("deleting souce file - %w", err)
     }
 
-    return nil
+    return err
 }
 
 
@@ -214,7 +230,7 @@ func CreateRandFile(dirPath string, nameLen int, baseName string,
         }
 
         // Attempt to open the generated file path
-        file, err := os.OpenFile(randoPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
+        file, err := os.OpenFile(randoPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
         // If the file exists, close it and skip
         if os.IsExist(err) {
             err = file.Close()

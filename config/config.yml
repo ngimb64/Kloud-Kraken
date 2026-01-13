@@ -9,7 +9,7 @@ client_config:
   hash_type: "1700"
   log_mode: "both"
   max_file_size: "1GB"
-  max_transfers: 2
+  max_transfers: 3
   workload: "4"
 
 local_config:

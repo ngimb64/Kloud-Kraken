@@ -993,7 +993,7 @@ func main() {
         // Iterate through list of terminated instance ids and log them
         for _, instance := range termOutput.TerminatingInstances {
             if logMan != nil {
-                logMan.LogMessage("Instance state for %s: %s -> %s\n",
+                logMan.LogMessage("info", "Instance state for %s: %s -> %s\n",
                                   aws.ToString(instance.InstanceId),
                                   instance.PreviousState.Name,
                                   instance.CurrentState.Name)
@@ -1077,32 +1077,44 @@ func main() {
             }
         }
 
-        // Display total and individual AWS resource cost when program exits
-        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
-                                                            color.LightCyan, "$"), "",
-                                        color.NeonAzure, "Total AWS resource cost:  ",
-                                        color.KrakenGlowGreen,
-                                        strconv.FormatFloat(costMan.TotalCost, 'f', -1, 64)))
+        // Visible column widths
+        const serviceColWidth = 24
+        const costColWidth = 10
 
-        fmt.Println(display.CtextMulti(color.LightCyan, "\n        AWS Cost Table\n",
-                                        color.KrakenPurple,
-                                        "-----------------------------------\n|      ",
-                                        color.NeonAzure, "Service Name      ",
-                                        color.KrakenPurple, "|", color.NeonAzure,
-                                        "  Cost  ", color.KrakenPurple, "|"))
+        // Print table header
+        header := display.Ctext(color.LightCyan, "\n        AWS Cost Table\n")
+        fmt.Print(header)
+        // Dynamic separator width (| + service + | + cost + |)
+        totalWidth := 1 + serviceColWidth + 1 + costColWidth + 1
+        fmt.Println(strings.Repeat("-", totalWidth))
+
+        // column titles
+        leftSep := display.Ctext(color.KrakenPurple, "|")
+        serviceTitle := display.PadRightColored(display.Ctext(color.NeonAzure, "Service Name"),
+                                                serviceColWidth)
+        costTitle := display.PadLeftColored(display.Ctext(color.BrightLime, "Cost"), costColWidth)
+
+        fmt.Printf("%s%s%s%s%s\n", leftSep, serviceTitle, display.Ctext(color.KrakenPurple, "|"),
+                   costTitle, display.Ctext(color.KrakenPurple, "|"))
+        fmt.Println(strings.Repeat("-", totalWidth))
 
         // Iterate through contents of the service table
         for service, price := range costMan.CostTable {
-            fmt.Printf("%s%-24s%s%-8s%s\n",
-                        display.Ctext(color.KrakenPurple, "|"),
-                        display.Ctext(color.KrakenGlowGreen, service),
-                        display.Ctext(color.KrakenPurple, "|"),
-                        display.Ctext(color.BrightLime,
-                                      strconv.FormatFloat(price, 'f', -1, 64)),
-                        display.Ctext(color.KrakenPurple, "|"))
-        }
+            serviceColored := display.Ctext(color.NeonAzure, service)
 
-        fmt.Println(display.Ctext(color.KrakenPurple, "-----------------------------------"))
+            // Format price as decimal with 4 digits after decimal
+            priceStr := fmt.Sprintf("%.4f", price)
+            priceColored := display.Ctext(color.BrightLime, priceStr)
+
+            serviceField := display.PadRightColored(serviceColored, serviceColWidth)
+            costField := display.PadLeftColored(priceColored, costColWidth)
+
+            fmt.Printf("%s%s%s%s%s\n", display.Ctext(color.KrakenPurple, "|"),
+                       serviceField, display.Ctext(color.KrakenPurple, "|"),
+                       costField, display.Ctext(color.KrakenPurple, "|"))
+            }
+
+            fmt.Println(strings.Repeat("-", totalWidth))
     } ()
 
     // Initialize the LoggerManager based on the flags

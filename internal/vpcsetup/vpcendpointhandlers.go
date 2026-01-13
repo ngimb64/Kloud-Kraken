@@ -146,6 +146,7 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
         "endpointType":  "PrivateLink",
         "location":      location,
         "productFamily": "VpcEndpoint",
+        "usagetype":     "USE1-VpcEndpoint-Hours",
     }
 
     // Add the elastic IP to cost manager
