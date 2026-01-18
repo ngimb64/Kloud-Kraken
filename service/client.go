@@ -110,15 +110,14 @@ func sendProcessingComplete(connection net.Conn,
 // @Parameters
 //  - connection:  Socket connection for reading data to be stored and processed
 //  - hashcatOptChannel:  Channel to signal when hash and ruleset files are received
-//  - transferChannel:  Channel to transmit filenames after transfer to initiate
-//                      data processing
+//  - fileChannel:  Channel to transmit filenames after transfer to initiate
+//                  data processing
 //  - mainWaitGroup:  Acts as a barrier for the Goroutines running
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
-                       transferChannel chan struct{}, mainWaitGroup *sync.WaitGroup,
+                       fileChannel chan string, mainWaitGroup *sync.WaitGroup,
                        logMan *kloudlogs.LoggerManager) {
-    completed := false
     var err error
     // Decrements the wait group counter upon local exit
     defer mainWaitGroup.Done()
@@ -141,7 +140,7 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
     cmdOptions := []string{}
 
     // Format the path for temp & permanent cracked hashes files
-    crackedPath := path.Join(HashesPath, "cracked.txt")
+    crackedPath := filepath.Join(HashesPath, "cracked.txt")
     lootPath := filepath.Join(HashesPath, "loot.txt")
 
     // If GPU optimization is to be applied, append it to options slice
@@ -163,45 +162,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         cmdOptions = append(cmdOptions, "-r", RulesetFilePath, "--loopback")
     }
 
-    for {
-        // Attempt to get the next available wordlist
-        fileName, _, err := disk.CheckDirFiles(WordlistPath)
-        if err != nil {
-            logMan.LogMessage("error", "Error retrieving wordlist from wordlist dir:  %v",
-                              err, zap.String("wordlist directory", WordlistPath))
-            return
-        }
-
-        select {
-        // Poll channel for complete signal
-        case <-transferChannel:
-            // Set outer boolean toggle
-            completed = true
-
-            // Try again to get the next available wordlist to ensure no data is missed
-            fileName, _, err = disk.CheckDirFiles(WordlistPath)
-            if err != nil {
-                logMan.LogMessage("error", "Error retrieving wordlist from wordlist dir:  %v",
-                                  err, zap.String("wordlist directory", WordlistPath))
-                return
-            }
-        default:
-            // If there was no wordlist available in designated directory
-            if fileName == "" {
-                // Sleep a bit and re-iterate to see if wordlist is available
-                time.Sleep(3 * time.Second)
-                continue
-            }
-        }
-
-        // If the receiving handler routine is complete and
-        // there are no more files to be processed
-        if completed && fileName == "" {
-            // Send the processing complete message to server
-            sendProcessingComplete(connection, logMan)
-            break
-        }
-
+    // Iterate through file names received via channel
+    for fileName := range fileChannel {
         // Format the path to the wordlist
         filePath := filepath.Join(WordlistPath, fileName)
 
@@ -251,8 +213,19 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
             return
         }
 
+
+        logMan.LogMessage("info", "Path exists from disk package result",
+                          zap.Bool("exists", exists), zap.Bool("is dir", isDir),
+                          zap.Bool("has data", hasData))
+
+
         // If cracked hashes file exists and has data
         if exists && !isDir && hasData {
+
+
+            logMan.LogMessage("info", "Appending result data", zap.String("file path", filePath))
+
+
             // If there is data in cracked user hash file prior to processing,
             // append it to the final loot file
             err = disk.AppendFile(crackedPath, lootPath)
@@ -275,6 +248,9 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         // Delete the processed file
         os.Remove(filePath)
     }
+
+    // Send the processing complete message to server
+    sendProcessingComplete(connection, logMan)
 
     // Check to see if final cracked hashes file exits before sending back to server
     exists, _, hasData, err := disk.PathExists(lootPath)
@@ -319,12 +295,15 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 //  - transferWaitGroup:  Used to synchronize the Goroutines running
 //  - transferManager:  Manages calculating the amount of data being transferred
 //  - transferComplete:  Toggle to signify when all files have been transfered
+//  - fileChannel:  Channel to transmit file names after transfer to
+//                  initiate data processing
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //
 func processTransfer(connection net.Conn,
                      transferWaitGroup *sync.WaitGroup,
                      transferManager *data.TransferManager,
                      transferComplete *bool,
+                     fileChannel chan string,
                      logMan *kloudlogs.LoggerManager) {
     // Lock the mutex for messaging system
     BufferMutex.Lock()
@@ -459,6 +438,9 @@ func processTransfer(connection net.Conn,
         if err != nil {
             logMan.LogMessage("error", "Error during file transfer:  %v", err)
         }
+
+        // Send name of file via channel after transfer to start processing
+        fileChannel <- fileName
     }()
 }
 
@@ -473,14 +455,14 @@ func processTransfer(connection net.Conn,
 // @Parameters
 //  - connection:  Socket connection for reading data to be stored and processed
 //  - hashcatOptChannel:  Channel to signal when hash and ruleset files are received
-//  - transferChannel:  Channel to transmit file names after transfer to
-//                      initiate data processing
+//  - fileChannel:  Channel to transmit file names after transfer to
+//                  initiate data processing
 //  - transferWaitGroup:  Used to synchronize the Goroutines running
 //  - logMan:  The kloudlogs logger manager for local and Cloudwatch logging
 //  - maxFileSize:  The maximum allowed size for a file to be transferred
 //
 func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
-                      transferChannel chan struct{}, mainWaitGroup *sync.WaitGroup,
+                      fileChannel chan string, mainWaitGroup *sync.WaitGroup,
                       logMan *kloudlogs.LoggerManager, maxFileSizeInt64 int64) {
     // Decrements wait group counter upon local exit
     defer mainWaitGroup.Done()
@@ -517,7 +499,7 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
 
     for {
         // Get the remaining available and total disk space
-        remainingSpace, total, err := disk.GetDiskSpace(DataPath)
+        remainingSpace, _, err := disk.GetDiskSpace(DataPath)
         if err != nil {
             logMan.LogMessage("error", "Error checking disk space on client:  %v", err)
             return
@@ -527,13 +509,13 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         currentTransfers := CurrentTransfers.Load()
         ongoingTransferSize := transferManager.GetOngoingTransfersSize()
 
-        logMan.LogMessage("info", "Client disk statistics queried",
-                          zap.Int32("current transfers", currentTransfers),
-                          zap.Int64("max file size", maxFileSizeInt64),
-                          zap.Int32("max transfers", MaxTransfersInt32),
-                          zap.Int64("ongoing transfers", ongoingTransferSize),
-                          zap.Int64("remaining space", remainingSpace),
-                          zap.Int64("total space", total))
+        // logMan.LogMessage("info", "Client disk statistics queried",
+        //                   zap.Int32("current transfers", currentTransfers),
+        //                   zap.Int64("max file size", maxFileSizeInt64),
+        //                   zap.Int32("max transfers", MaxTransfersInt32),
+        //                   zap.Int64("ongoing transfers", ongoingTransferSize),
+        //                   zap.Int64("remaining space", remainingSpace),
+        //                   zap.Int64("total space", total))
 
         // If the remaining space minus the ongoing file transfers is greater than or
         // equal to the max file size AND number of transfers is less than allowed max
@@ -541,13 +523,12 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         currentTransfers < MaxTransfersInt32 {
             // Process the transfer of a file and return file size for the next
             processTransfer(connection, &transferWaitGroup, transferManager,
-                            &transferComplete, logMan)
+                            &transferComplete, fileChannel, logMan)
             // If all the transfers are complete exit the data receiving loop
             if transferComplete {
                 // Wait until file transfer goroutines finish
                 transferWaitGroup.Wait()
-                // Send finished inidicator to other goroutine processData()
-                transferChannel <- struct{}{}
+                close(fileChannel)
                 break
             }
 
@@ -573,17 +554,17 @@ func handleConnection(connection net.Conn,
                       maxFileSizeInt64 int64) {
     // Create channels for the goroutines to communicate
     hashcatOptChannel := make(chan struct{})
-    transferChannel := make(chan struct{})
+    fileChannel := make(chan string)
     // Establish a wait group
     var mainWaitGroup sync.WaitGroup
     // Add two goroutines to the wait group
     mainWaitGroup.Add(2)
 
     // Start the goroutine to write data to the file
-    go receivingHandler(connection, hashcatOptChannel, transferChannel,
+    go receivingHandler(connection, hashcatOptChannel, fileChannel,
                         &mainWaitGroup, logMan, maxFileSizeInt64)
     // Start the goroutine to process the file
-    go processingHandler(connection, hashcatOptChannel, transferChannel,
+    go processingHandler(connection, hashcatOptChannel, fileChannel,
                          &mainWaitGroup, logMan)
 
     // Wait for both goroutines to finish

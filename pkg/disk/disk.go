@@ -35,28 +35,31 @@ func AppendFile(sourceFilePath string, destFilePath string) (err error) {
     if err != nil {
         return fmt.Errorf("opening source file - %w", err)
     }
-    // Close source file on local exit
-    defer func() {
+
+    closeSourceFile := func() {
         cerr := sourceFile.Close()
         if cerr != nil {
             err = errors.Join(err, fmt.Errorf("closing source file - %w", cerr))
         }
-    }()
+    }
 
     // Check if the source file is empty
     fileInfo, err := sourceFile.Stat()
     if err != nil {
+        closeSourceFile()
         return fmt.Errorf("retrieving file info - %w", err)
     }
 
     // If the file is empty, ignore appending
     if fileInfo.Size() == 0 {
+        closeSourceFile()
         return nil
     }
 
     // Open the destination file for appending
     destFile, err := os.OpenFile(destFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
     if err != nil {
+        closeSourceFile()
         return fmt.Errorf("opening destination file - %w", err)
     }
     // Close destination file on local exit
@@ -70,14 +73,18 @@ func AppendFile(sourceFilePath string, destFilePath string) (err error) {
     // Copy the contents of the source file to the destination file
     _, err = io.Copy(destFile, sourceFile)
     if err != nil {
+        closeSourceFile()
         return fmt.Errorf("copying data - %w", err)
     }
 
     // Commit contents of file to disk
     err = destFile.Sync()
     if err != nil {
+        closeSourceFile()
         return fmt.Errorf("syncing data - %w", err)
     }
+
+    closeSourceFile()
 
     // Delete the original file
     err = os.Remove(sourceFilePath)
@@ -464,43 +471,43 @@ func MakeDirs(programDirs []string) error {
 //  - Error if it occurs, otherwise nil on success
 //
 func PathExists(filePath string) (bool, bool, bool, error) {
-    // Get item info on passed in path
-    itemInfo, err := os.Stat(filePath)
+    info, err := os.Stat(filePath)
     if err != nil {
-        // If the file does not exist
         if os.IsNotExist(err) {
             return false, false, false, nil
         }
 
-        // If unexpected error getting item info
-        return false, false, false, fmt.Errorf("error checking file existence - %w", err)
+        return false, false, false, fmt.Errorf("checking file existence - %w", err)
     }
 
-    // If the path is a file and has data
-    if !itemInfo.IsDir() && itemInfo.Size() > 0 {
-        return true, false, true, nil
-    // If the path is a empty file
-    } else if !itemInfo.IsDir() && itemInfo.Size() == 0 {
-        return true, false, false, nil
+    if !info.IsDir() {
+        return true, false, info.Size() > 0, nil
     }
 
-    // Open the directory
+    // If directory, check whether it contains an entry
     dir, err := os.Open(filePath)
     if err != nil {
-        return true, true, false, fmt.Errorf("error opening directory - %w", err)
+        return true, true, false, fmt.Errorf("opening directory - %w", err)
     }
-    // Close the directory on local exit
     defer dir.Close()
 
-    // Attempt to read the first entry in the dir
-    _, err = dir.ReadDir(1)
+    // Try read a single entry name in dir
+    names, err := dir.Readdirnames(1)
     if err != nil {
-        return true, true, false, fmt.Errorf("error reading directory - %w", err)
+        if err == io.EOF {
+            return true, true, false, nil
+        }
+
+        return true, true, false, fmt.Errorf("reading directory - %w", err)
     }
 
-    // If there is an entry, the dir is not empty
+    if len(names) == 0 {
+        return true, true, false, nil
+    }
+
     return true, true, true, nil
 }
+
 
 
 // Function for each goroutine to walk the directory and select a unique file.
