@@ -213,19 +213,8 @@ func processingHandler(connection net.Conn, hashcatOptChannel chan struct{},
             return
         }
 
-
-        logMan.LogMessage("info", "Path exists from disk package result",
-                          zap.Bool("exists", exists), zap.Bool("is dir", isDir),
-                          zap.Bool("has data", hasData))
-
-
         // If cracked hashes file exists and has data
         if exists && !isDir && hasData {
-
-
-            logMan.LogMessage("info", "Appending result data", zap.String("file path", filePath))
-
-
             // If there is data in cracked user hash file prior to processing,
             // append it to the final loot file
             err = disk.AppendFile(crackedPath, lootPath)
@@ -508,14 +497,6 @@ func receivingHandler(connection net.Conn, hashcatOptChannel chan struct{},
         // Get current transfers and ongoing transfer size from transfer manager
         currentTransfers := CurrentTransfers.Load()
         ongoingTransferSize := transferManager.GetOngoingTransfersSize()
-
-        // logMan.LogMessage("info", "Client disk statistics queried",
-        //                   zap.Int32("current transfers", currentTransfers),
-        //                   zap.Int64("max file size", maxFileSizeInt64),
-        //                   zap.Int32("max transfers", MaxTransfersInt32),
-        //                   zap.Int64("ongoing transfers", ongoingTransferSize),
-        //                   zap.Int64("remaining space", remainingSpace),
-        //                   zap.Int64("total space", total))
 
         // If the remaining space minus the ongoing file transfers is greater than or
         // equal to the max file size AND number of transfers is less than allowed max
