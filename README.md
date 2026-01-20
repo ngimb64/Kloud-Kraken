@@ -144,7 +144,7 @@ Run the project:
 ./bin/kloud-kraken-server ./config/<yaml_config>
 ```
 
-**Note**:  If an error occurs during the AWS environment setup about STS credential cache failing to reset, it is not an error to worry about and the program simply needs to be rerun to refresh it. I tried adding additional code to do this but the issue seems to be on the AWS end of things and out of my control to fix at this point in time.
+**Note**:  If an error occurs during the AWS environment setup about STS credential cache failing to reset, it is not an error to worry about and the program simply needs to be rerun to refresh it. I tried adding additional code to do this but the issue seems to be on the AWS end of things and out of my control to fix at this point in time. If the program fails to connect, exits early, and the log mentions not being able to find the parameter; this issue is caused by SSM Parameter Store VPC Endpoints and is fixed by running the teardown program & rerun to build the AWS resources again.
 
 If at any point the project needs to be rebuilt:
 ```
