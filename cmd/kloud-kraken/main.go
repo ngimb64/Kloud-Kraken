@@ -580,12 +580,11 @@ __EOF__
 # Set up the client service to execute
 systemctl daemon-reload
 systemctl enable --now client.service
-`, bucketName, keyName, appConf.LocalConfig.Region,
-   true, appConf.LocalConfig.Region, appConf.ClientConfig.CharSet1,
-   appConf.ClientConfig.CharSet2, appConf.ClientConfig.CharSet3,
-   appConf.ClientConfig.CharSet4, appConf.ClientConfig.CrackingMode,
-   ec2SgId, appConf.ClientConfig.HashMask, hasRuleset,
-   appConf.ClientConfig.HashType, appConf.ClientConfig.LogMode,
+`, bucketName, keyName, "us-east-1", true, "us-east-1",
+   appConf.ClientConfig.CharSet1, appConf.ClientConfig.CharSet2,
+   appConf.ClientConfig.CharSet3, appConf.ClientConfig.CharSet4,
+   appConf.ClientConfig.CrackingMode, ec2SgId, appConf.ClientConfig.HashMask,
+   hasRuleset, appConf.ClientConfig.HashType, appConf.ClientConfig.LogMode,
    appConf.ClientConfig.MaxFileSizeInt64, appConf.ClientConfig.MaxTransfers,
    appConf.LocalConfig.ListenerPort, appConf.ClientConfig.Workload)
 
@@ -614,8 +613,7 @@ systemctl enable --now client.service
 func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutput,
                                           *awscost.AwsCostManager, error, error) {
     // Set up AWS credentials based on local chain or environment variables
-    baseAwsConfig, err := awsutils.AwsConfigSetup(1 * time.Minute,
-                                                  appConfig.LocalConfig.Region,
+    baseAwsConfig, err := awsutils.AwsConfigSetup(1 * time.Minute, "us-east-1",
                                                   "kloud-kraken")
     if err != nil {
         return baseAwsConfig, nil, nil, nil, err
@@ -984,6 +982,10 @@ func main() {
             }
         }()
 
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting EC2 instances"))
+
         // Terminate the EC2 instances
         termOutput, err := bootstrapOut.Ec2Client.Ec2TerminateInstances(10 * time.Minute)
         if err != nil {
@@ -1010,6 +1012,10 @@ func main() {
             }
         }
 
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting messaging port security group rule"))
+
         // Revoke the security group rule for listener port set by client
         err = bootstrapOut.Ec2Client.RevokeSecurityGroupRule(1 * time.Minute, bootstrapOut.Ec2SgId,
                                                              "tcp", "0.0.0.0/0", "ingress",
@@ -1022,6 +1028,10 @@ func main() {
                 log.Printf("Error revoking security group rule:  %v", err)
             }
         }
+
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting VPC Endpoints"))
 
         // Terminate SSM Parameter Store VPC Interface Endpoint
         err = bootstrapOut.Ec2Client.VpcEndpointsTerminator(1 * time.Minute,
@@ -1038,6 +1048,10 @@ func main() {
             yamlUpdates["aws_env.ssm_vpc_endpoint_id"] = ""
         }
 
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Emptying and deleting S3 bucket"))
+
         // Delete the S3 bucket and its contents
         err = bootstrapOut.S3Client.S3BucketTerminator(5 * time.Minute,
                                                        bootstrapOut.S3BucketName)
@@ -1051,6 +1065,11 @@ func main() {
         } else {
             yamlUpdates["aws_env.s3_bucket_name"] = ""
         }
+
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting TLS certificates" +
+                                       " from SSM Param Store"))
 
         // Iterate through SSM parameters and delete them
         for _, param := range ParamsToDelete {

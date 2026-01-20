@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/ngimb64/Kloud-Kraken/internal/validate"
-	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,7 +43,6 @@ type LocalConfig struct {
     MaxMergingSizeInt64 int64    `yaml:"-"`
     MaxSizeRange        float64  `yaml:"max_size_range"`
     NumberInstances     int32    `yaml:"number_instances"`
-    Region              string   `yaml:"region"`
     RulesetPath         string   `yaml:"ruleset_path"`
 }
 
@@ -209,11 +207,6 @@ func validateLocalConfig(localConfig *LocalConfig) error {
     // If the number of instances is less than one
     if !validate.ValidateNumberInstances(localConfig.NumberInstances) {
         return fmt.Errorf("number_instances must be a positive integer")
-    }
-
-    // Ensure a proper region was specified in the local config
-    if !awsutils.ValidateRegion(localConfig.Region) {
-        return fmt.Errorf("improper region specified")
     }
 
     // Ensure the ruleset file path exists

@@ -46,8 +46,7 @@ func SetupS3VpcGatewayEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // Create VPC endpoint for S3 if it does not exist
     s3VpcEndPointId, err := ec2Client.S3EndpointProvision(10 * time.Minute,
                                                           stateConfig.AwsEnv.S3VpcEndpointId,
-                                                          appConfig.LocalConfig.Region,
-                                                          vpcId, policyDocument,
+                                                          "us-east-1", vpcId, policyDocument,
                                                           []string{routeId}, tags)
     if err != nil {
         return err
@@ -115,9 +114,8 @@ func SetupSsmVpcInterfaceEndpointHandler(ec2Client *ec2utils.Ec2Manger,
     // Create VPC endpoint for SSM if it does not exist
     ssmVpcEndpointId, err := ec2Client.SsmEndpointProvision(10 * time.Minute,
                                                             stateConfig.AwsEnv.SsmVpcEndpointId,
-                                                            appConfig.LocalConfig.Region, vpcId,
-                                                            policyDocument, []string{subnetId},
-                                                            []string{ssmSgId}, tags)
+                                                            "us-east-1", vpcId, policyDocument,
+                                                            []string{subnetId}, []string{ssmSgId}, tags)
     if err != nil {
         return err
     }

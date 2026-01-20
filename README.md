@@ -2,7 +2,7 @@
 
 # Kloud Kraken
 
-> AWS based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that supports multiple transfers per node simultaneously
+> AWS based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that handles multiple transfers per node simultaneously
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenTextLogo.jpeg?raw=true)
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenLogo.jpeg?raw=true)
@@ -17,7 +17,6 @@
 - [Flowcharts](#Flowcharts)
 - [Installation](#Installation)
 - [Usage](#Usage)
-- [Regions](#Regions)
 - [Instance Types](#Instance-Types)
 - [Contributing or Issues](#Contributing-or-Issues)
 - [License](#License)
@@ -29,7 +28,7 @@
 - Easy setup with automated script
 - Easy configuration with YAML templates
 - Supports hash cracking distributed workloads among multiple EC2 instances
-- Built-in wordlist merging with flexibility to skip larger files
+- Built-in wordlist merging with flexibility to skip files that exceed specified size
     - Merging process using `cat` -> `deduplicut` until within percentage range of max file size (15% by default)
     - If the file goes over max file size, excess data is shaved with `cut` into a new file
 <br>
@@ -44,7 +43,7 @@
 <br>
 
 - Designed to setup isolated VPC in AWS environment
-    - Features public subnet setup Internet Gateway for EC2 internet access
+    - Features public subnet setup with Internet Gateway for EC2 internet access
     - VPC Endpoints for S3 bucket & SSM Parameter Store operations
     - Security groups for ensuring only outbound traffic occurs on EC2
     - Minimalist IAM role utilization featuring bootstrap role for creating and destroying AWS resources
@@ -70,18 +69,18 @@
 <br>
 
 
-## Flowcharts
+## Demonstration Output
 
-#### Local Server
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Local-Server.svg?raw=true)
+####  AWS Setup
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/aws_setup.png?raw=true)
 <br><br>
 
-#### AWS Setup
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/AWS-Setup.svg?raw=true)
+#### Main Operation
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/main_operation.png?raw=true)
 <br><br>
 
-#### Client
-![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.svg?raw=true)
+#### Cleanup and Results
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/cleanup_results.png?raw=true)
 <br><br>
 
 
@@ -99,15 +98,17 @@
 - In the search bar, search `budgets` which will find the budgets feature in "Billing and Cost Management"
 - Create a budget an set a monetary limit based on the intended budget
 - Run the policy generator program to generate policy for bootstrap role
-    - `./bin/policygen <account_id> <region>`
+    - `./bin/policygen <account_id>`
 - Search `iam` to access the IAM services, create a user group with the permissions policy just generated in the policy editor
 - Create a user and assign them to the created user group with IAM permissions
 - Generate and store access keys for the newly created user
 - By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for on-demand EC2 G-series based on the number of desired vCPUs to use (add them up if using multiple instances)
+    - Search `service quota` to access the service for making requests
     - Keep in mind if your account does not have extensive history the request will be automatically denied initially
         - It is better to start with a single instance and gradually ramp up quota over a few billing cycles, they will limit excessive requests anyway
         - After it is denied explain the purpose of using Kloud Kraken so they can confirm you are legit and not intending to abuse the GPU instances for things like crypto mining, feel free to provide them with a link to the projects GitHub page
         - While writing the information in the message area is a good idea, they **must** be called to get the request process going
+    - The service quota request **needs** to be for the default us-east-1 region region as that is the only region the pricing API supports for cost calculation, the tool will likely work in other regions but expect cost calculation to fail
     - Supported instance families can be found at [Instance Types](#Instance-Types)
     - AWS Doc on recommended GPU instances - https://docs.aws.amazon.com/dlami/latest/devguide/gpu.html
     - AWS Doc on setting EC2 service quotas - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
@@ -134,7 +135,7 @@
 - Make a copy of the default `config.yml` file in the config folder
 - Ensure there is wordlist data in the `load_dir`, a `hash_file_path` for the hash file to crack, and any other needed components specified in your copy of `config.yml`
 - Ensure to use `instructions.yml` as a reference when configuring the recently made copy
-- For supported regions [Regions](#Regions) and instance families [Instance Types](#Instance-Types)
+- For supported instance families [Instance Types](#Instance-Types)
 - Despite the tool not supporting Hashcat combinator mode (1), it can be easily achieved locally and combined with other wordlist data using the usual straight mode (0)
   - `hashcat --stdout -a 1 <left_wordlist> <right_wordlist> > combinator_out.txt`
 
@@ -142,6 +143,8 @@ Run the project:
 ```
 ./bin/kloud-kraken-server ./config/<yaml_config>
 ```
+
+**Note**:  If an error occurs during the AWS environment setup about STS credential cache failing to reset, it is not an error to worry about and the program simply needs to be rerun to refresh it. I tried adding additional code to do this but the issue seems to be on the AWS end of things and out of my control to fix at this point in time.
 
 If at any point the project needs to be rebuilt:
 ```
@@ -152,50 +155,6 @@ To delete the project from AWS environment:
 ```
 ./bin/kloud-kraken-teardown
 ```
-<br>
-
-
-## Regions
-
-#### US
-- us-east-1
-- us-east-2
-- us-west-1
-- us-west-2
-
-#### Canada
-- ca-central-1
-
-#### South America
-- sa-east-1
-
-#### Europe
-- eu-central-1
-- eu-west-1
-- eu-west-2
-- eu-west-3
-- eu-north-1
-- eu-south-1
-
-#### Middle East / Africa
-- me-south-1
-- af-south-1
-
-#### Asia Pacific
-- ap-northeast-1
-- ap-northeast-2
-- ap-northeast-3
-- ap-southeast-1
-- ap-southeast-2
-- ap-south-1
-
-#### China
-- cn-north-1
-- cn-northwest-1
-
-#### GovCloud
-- us-gov-west-1
-- us-gov-east-1
 <br>
 
 
@@ -216,8 +175,23 @@ To delete the project from AWS environment:
 - p5en.*
 - p6-b200.*
 
-My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g4dn.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the Telsa GPUs perform better the cost of G-series can be **substantially** less even with multiple instances which combined can achieve similar results than one very expensive instance.
+My personal recommendation for most powerful cost effective selection is to use multiple instances of an affordable type like g4dn.xlarge and let Kloud Kraken optimize by distributing data among multiple EC2 instances. P-series are incredible machines, but they also can be very **EXPENSIVE**. Keep in mind even if the machine is only used 5 minutes a full hour rate will still be charged. The instance type selection really depends on the amount of data as the P-series are intended for processing insane amounts of data for high power computing. Even if the GPUs perform better the cost of G-series is **substantially** less even with multiple instances which combined can achieve similar results than one very expensive instance.
 <br>
+
+
+## Flowcharts
+
+#### Local Server
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Local-Server.svg?raw=true)
+<br><br>
+
+#### AWS Setup
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/AWS-Setup.svg?raw=true)
+<br><br>
+
+#### Client
+![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/flowcharts/Client.svg?raw=true)
+<br><br>
 
 
 ## Contributing or Issues
