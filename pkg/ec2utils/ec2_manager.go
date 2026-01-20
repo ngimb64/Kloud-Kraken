@@ -641,6 +641,14 @@ func (Ec2Man *Ec2Manger) Ec2TerminateInstances(callTime time.Duration) (
         return nil, err
     }
 
+    // Wait for the instances to complete termination
+    waiter := ec2.NewInstanceTerminatedWaiter(Ec2Man.Client)
+    err = waiter.Wait(ctx,&ec2.DescribeInstancesInput{InstanceIds: ids},
+                      10 * time.Minute)
+    if err != nil {
+        return nil, fmt.Errorf("waiting for instance termination - %w", err)
+    }
+
     return termOutput, nil
 }
 

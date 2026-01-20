@@ -7,11 +7,13 @@ import (
 	"time"
 
 	cwl "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/ngimb64/Kloud-Kraken/internal/color"
 	"github.com/ngimb64/Kloud-Kraken/internal/globals"
 	"github.com/ngimb64/Kloud-Kraken/internal/vpcsetup"
 	"github.com/ngimb64/Kloud-Kraken/pkg/awsutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/cloudwatchutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/disk"
+	"github.com/ngimb64/Kloud-Kraken/pkg/display"
 	"github.com/ngimb64/Kloud-Kraken/pkg/ec2utils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/iamutils"
 	"github.com/ngimb64/Kloud-Kraken/pkg/s3utils"
@@ -39,6 +41,8 @@ func main() {
         fmt.Print("[*] Input to continue (yes) not detected .. exiting program")
         return
     }
+
+    fmt.Println()
 
     // Read the data from yaml state file
     stateData, err := os.ReadFile(stateFilePath)
@@ -103,6 +107,10 @@ func main() {
     s3Client := s3utils.S3NewManager(awsConfig)
 
     if stateConfig.AwsEnv.S3BucketName != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting S3 bucket"))
+
         // Delete the S3 bucket and its contents
         err = s3Client.S3BucketTerminator(5 * time.Minute,
                                           stateConfig.AwsEnv.S3BucketName)
@@ -115,6 +123,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.FlowLogId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting VPC flow logs"))
+
         // Delete the VPC Flow Logs
         err = ec2Client.VpcFlowLogTerminator(1 * time.Minute,
                                              []string{stateConfig.AwsEnv.FlowLogId})
@@ -133,6 +145,10 @@ func main() {
         }
     }
 
+    fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                        color.LightCyan, "!"), "",
+                                    color.NeonAzure, "Deleting CloudWatch loggers"))
+
     // Delete the CloudWatch logging stream and group for EC2 clients
     err = cloudwatchutils.CloudWatchLoggerTerminator(1 * time.Minute, cwlClient,
                                                      "kloud-kraken-logs", []string{})
@@ -141,6 +157,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.S3VpcEndpointId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting S3 VPC endpoint"))
+
         // Terminate S3 bucket VPC Endpoint
         err = ec2Client.VpcEndpointsTerminator(1 * time.Minute,
                                                []string{stateConfig.AwsEnv.S3VpcEndpointId})
@@ -153,6 +173,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.SsmVpcEndpointId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting SSM param store VPC endpoint"))
+
         // Terminate SSM Parameter Store VPC Endpoint
         err = ec2Client.VpcEndpointsTerminator(1 * time.Minute,
                                                []string{stateConfig.AwsEnv.SsmVpcEndpointId})
@@ -165,6 +189,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.Ec2SecurityGroupId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting EC2 security group"))
+
         // Delete the EC2 security group
         err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
                                                 stateConfig.AwsEnv.Ec2SecurityGroupId)
@@ -177,6 +205,11 @@ func main() {
     }
 
     if stateConfig.AwsEnv.SsmSecurityGroupId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting SSM param store VPC" +
+                                       "endpoint security group"))
+
         // Delete the SSM Parameter Store security group
         err = ec2Client.SecurityGroupTerminator(1 * time.Minute,
                                                 stateConfig.AwsEnv.SsmSecurityGroupId)
@@ -189,6 +222,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.RouteAssociationId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting route table association"))
+
         // Disassociate private route table <-> subnet
         err = ec2Client.RouteTableAssociateTerminator(1 * time.Minute,
                                                       stateConfig.AwsEnv.RouteAssociationId)
@@ -201,6 +238,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.RouteTableId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting route table"))
+
         // Delete the private route table
         err = ec2Client.RouteTableTerminator(1 * time.Minute,
                                              stateConfig.AwsEnv.RouteTableId)
@@ -213,6 +254,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.IgwId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting internet gateway"))
+
         // Detach and delete the Internet Gateway
         err = ec2Client.InternetGatewayTerminator(2 * time.Minute,
                                                   stateConfig.AwsEnv.IgwId,
@@ -226,6 +271,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.SubnetId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting subnet"))
+
         // Delete the public subnet
         err = ec2Client.SubnetTerminator(1 * time.Minute,
                                          stateConfig.AwsEnv.SubnetId)
@@ -238,6 +287,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.VpcId != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting VPC"))
+
         // Delete the VPC
         err = ec2Client.VpcTerminator(5 * time.Minute,
                                       stateConfig.AwsEnv.VpcId)
@@ -250,6 +303,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.IamArnVpcFlowLogs != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting IAM role for VPC flow logs"))
+
         // Delete the VPC Flow Logs IAM role
         err = iamClient.IamRoleTerminator(5 * time.Minute,
                                           stateConfig.AwsEnv.IamArnVpcFlowLogs,
@@ -263,6 +320,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.IamArnClient != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting IAM role for client"))
+
         // Delete the client IAM role
         err = iamClient.IamRoleTerminator(5 * time.Minute,
                                           stateConfig.AwsEnv.IamArnClient,
@@ -276,6 +337,10 @@ func main() {
     }
 
     if stateConfig.AwsEnv.IamArnServer != "" {
+        fmt.Println(display.CtextMulti(display.CtextPrefix(color.KrakenPurple,
+                                                           color.LightCyan, "!"), "",
+                                       color.NeonAzure, "Deleting IAM role for server"))
+
         // Delete the server IAM role
         err = iamClient.IamRoleTerminator(5 * time.Minute,
                                           stateConfig.AwsEnv.IamArnServer,

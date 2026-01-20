@@ -26,5 +26,4 @@ local_config:
   max_merging_size: "The maximum file size (or within max range) where wordlist merging process occurs" | "200KB", "50MB", "1GB"
   max_size_range: "Percentage range used to determine if value is in upper percentile of max file size or max merging" | 15.0
   number_instances: "The number of EC2 instances to use for cracking" | 1
-  region: "The AWS region used for local server operations" | "us-east-1" - See supported regions in README
   ruleset_path: "Path to the hashcat ruleset file to be utilized" | "/home/test/ruleset"

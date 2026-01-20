@@ -75,7 +75,6 @@ local_config:
   max_merging_size: "50MB"
   max_size_range: 25.0
   number_instances: 3
-  region: "us-east-1"
   ruleset_path: "%s"
 `, testFiles[0], testDir, testFiles[1])
     // Writing the YAML string to a file
@@ -112,7 +111,6 @@ local_config:
     assert.Equal(int64(50 * globals.MB), config.LocalConfig.MaxMergingSizeInt64)
     assert.Equal(25.0, config.LocalConfig.MaxSizeRange)
     assert.Equal(int32(3), config.LocalConfig.NumberInstances)
-    assert.Equal("us-east-1", config.LocalConfig.Region)
     assert.Equal(testFiles[1], config.LocalConfig.RulesetPath)
 
     // Append the yaml data file to test file for deletion

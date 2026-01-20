@@ -173,15 +173,14 @@ func bootstrapPolicyGen(accountId string, region string) string {
 //
 func main() {
     accountId := os.Args[1]
-    region := os.Args[2]
 
-    if accountId == "" || region == "" {
+    if accountId == "" {
         log.Fatal("Missing required args, usage example:  " +
-                  "\n\t./bin/policygen <account_id> <region>")
+                  "\n\t./bin/policygen <account_id>")
     }
 
     // Generate the bootstrap permissions policy
-    bootPol := bootstrapPolicyGen(accountId, region)
+    bootPol := bootstrapPolicyGen(accountId, "us-east-1")
 
     // Write the generated permissions policy to output file
     err := os.WriteFile("policy-out.json", []byte(bootPol), os.ModePerm)

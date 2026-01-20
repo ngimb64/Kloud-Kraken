@@ -40,8 +40,7 @@ func SetupClientIamRoleHander(iamClient *iamutils.IamManager,
 
     // Generate the EC2 clients trust and permissions policy templates
     trustPolicy := policies.ClientTrustPolicyGen()
-    permissionsPolicy := policies.ClientPermPolicyGen(appConfig.LocalConfig.Region,
-                                                      outStruct.AccountId)
+    permissionsPolicy := policies.ClientPermPolicyGen("us-east-1", outStruct.AccountId)
     // Create and apply the EC2 client role
     clientArn, err := iamClient.IamRoleProvision(5 * time.Minute,
                                                  stateConfig.AwsEnv.IamArnClient,
@@ -104,8 +103,7 @@ func SetupServerIamRoleHandler(iamClient *iamutils.IamManager,
     // Generate the servers trust and permissions policy templates
     trustPolicy := policies.ServerTrustPolicyGen(outStruct.AccountId,
                                                  appConfig.LocalConfig.IamUsername)
-    permissionsPolicy := policies.ServerPermPolicyGen(appConfig.LocalConfig.Region,
-                                                      outStruct.AccountId)
+    permissionsPolicy := policies.ServerPermPolicyGen("us-east-1", outStruct.AccountId)
     // Create and apply role for local server permissions
     outStruct.ServerArn, err = iamClient.IamRoleProvision(5 * time.Minute,
                                                           stateConfig.AwsEnv.IamArnServer,
@@ -171,8 +169,7 @@ func SetupVpcFlowLogsIamRoleHandler(iamClient *iamutils.IamManager,
 
     // Generate the VPC Flow Logs trust and permissions policy templates
     trustPolicy := policies.VpcFlowLogsTrustPolicyGen()
-    permissionsPolicy := policies.VpcFlowLogsPermPolicyGen(appConfig.LocalConfig.Region,
-                                                           outStruct.AccountId)
+    permissionsPolicy := policies.VpcFlowLogsPermPolicyGen("us-east-1", outStruct.AccountId)
     // Create and appy the VPC flow logs role
     vpcFlowLogArn, err := iamClient.IamRoleProvision(5 * time.Minute,
                                                      stateConfig.AwsEnv.IamArnVpcFlowLogs,

@@ -3,6 +3,8 @@
 
 - Build binary to build out state file with existing resources
 
+- Update flow charts for client and server interactions
+
 - Implement unit tests for packages that need them
 
 - Review VPC flow logs package for optimization
