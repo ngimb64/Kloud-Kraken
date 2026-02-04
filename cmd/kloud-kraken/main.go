@@ -707,6 +707,9 @@ func awsSetup(appConfig *conf.AppConfig) (aws.Config, *vpcsetup.VpcBootstrapOutp
         return AssumedAwsConfig, bootstrapOut, costMan, costErr, err
     }
 
+	// Always set number of instances to 1 until distributed is further tested
+	appConfig.LocalConfig.NumberInstances = 1
+
     ec2CreateInstancesInput := &ec2utils.Ec2CreateInstancesInput{
         AMI:              amiId,
         InstanceType:     appConfig.LocalConfig.InstanceType,
