@@ -2,11 +2,23 @@
 
 # Kloud Kraken
 
-> AWS based hash cracking machine that supports distributed workloads among multiple EC2 instances utilizing a built-in TLS protected file transfer service that handles multiple transfers per node simultaneously
+> Cost-optimized, cloud hash cracking — without the AWS headache.
+
+> Kloud Kraken automates secure AWS infrastructure, high-performance data transfer, and wordlist management so Hashcat never sits idle and you never pay for resources you don’t need.
 
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenTextLogo.jpeg?raw=true)
 ![alt text](https://github.com/ngimb64/Kloud-Kraken/blob/main/docs/images/KloudKrakenLogo.jpeg?raw=true)
 </div>
+<br>
+
+
+## Why Kloud Kraken
+
+Fast & efficient data flow — TLS-encrypted, direct transfers to EC2 instance-store with concurrent file streams to keep Hashcat working nonstop
+
+Minimal AWS cost & cleanup — isolated VPC, VPC endpoints, least-privilege IAM, and automatic teardown when cracking is complete
+
+Zero-friction setup — automated scripts, YAML configs, built-in wordlist merging, deduplication, and intelligent file splitting
 <br>
 
 
@@ -27,7 +39,6 @@
 
 - Easy setup with automated script
 - Easy configuration with YAML templates
-- Supports hash cracking distributed workloads among multiple EC2 instances
 - Built-in wordlist merging with flexibility to skip files that exceed specified size
     - Merging process using `cat` -> `deduplicut` until within percentage range of max file size (15% by default)
     - If the file goes over max file size, excess data is shaved with `cut` into a new file
