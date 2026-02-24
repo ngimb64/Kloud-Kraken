@@ -110,9 +110,14 @@ Zero-friction setup — automated scripts, YAML configs, built-in wordlist mergi
 - Create a budget an set a monetary limit based on the intended budget
 - Run the policy generator program to generate policy for bootstrap role
     - `./bin/policygen <account_id>`
-- Search `iam` to access the IAM services, create a user group with the permissions policy just generated in the policy editor
+- Search `iam` to access the IAM services, go to user groups sectionon the left and create a user group with no permissions
+	- Click on the created user group, go to the permissions, click add permissions and select "create inline policy"
+	- Switch from visual to JSON for policy editor and paste the permissions policy previously generated on command line
 - Create a user and assign them to the created user group with IAM permissions
-- Generate and store access keys for the newly created user
+- Generate and store access keys for the newly created user in their security credentials tab
+	- Select the "create access key" option in the tab and ensure to select "Command Line Interface" as the use case
+	- Configure API access credentials locally before running with `aws configure --profile kloud-kraken`
+    - It is critical to set the credentials under the kloud-kraken profile as the program searches for that specific one when loading the AWS config
 - By default, 0 vCPUs are allowed for for G and P-series EC2 instances meaning service a quota request must be made for on-demand EC2 G-series based on the number of desired vCPUs to use (add them up if using multiple instances)
     - Search `service quota` to access the service for making requests
     - Keep in mind if your account does not have extensive history the request will be automatically denied initially
@@ -125,11 +130,6 @@ Zero-friction setup — automated scripts, YAML configs, built-in wordlist mergi
     - AWS Doc on setting EC2 service quotas - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
 
 ### Local Setup
-
-- When running the program in full mode with AWS environment the AWS API keys must be configured for SDK calls to work
-    - Configure API access credentials locally before running with `aws configure --profile kloud-kraken`
-    - It is import to set the credentials under the kloud-kraken profile as the program searches for that specific one when loading the AWS config
-<br>
 
 - Before running the program it is also very helpful to prepare wordlist data ahead of time
     - Smaller wordlists easily merge but larger ones slow the process down **substantially**
